@@ -2115,29 +2115,30 @@ save_version_to_cache() {
     return $return_status
 }
 
+# 元ソースをベースに修正した download 関数
 download() {
     local file_name="$1"
     shift
 
-    # デフォルト設定
+    # デフォルト設定 (元ソースの変数を維持)
     local chmod_mode="false"
     local force_mode="false"
-    local hidden_mode="false"
-    local quiet_mode="false"
-    local silent_mode="false"
+    local hidden_mode="false" # 未使用だが元ソース尊重のため残す
+    local quiet_mode="false"  # 未使用だが元ソース尊重のため残す
+    local silent_mode="false" # このフラグで動作を切り替える
     local interpreter_name=""
-    local download_status="failed"
-    local final_version=""
-    local api_status="" # API情報格納用
+    local download_status="failed" # 最終的な内部ステータス
+    local final_version=""         # 最終的な内部バージョン
+    local api_status=""            # API情報格納用 (常に取得)
 
-    # オプション解析
+    # オプション解析 (元ソースのまま)
     while [ $# -gt 0 ]; do
         case "$1" in
             chmod)   chmod_mode="true" ;;
             force)   force_mode="true" ;;
             hidden)  hidden_mode="true" ;;
             quiet)   quiet_mode="true" ;;
-            silent)  silent_mode="true" ;;
+            silent)  silent_mode="true" ;; # silent フラグを認識
             bash|python3|node|perl)
                 interpreter_name="$1"
                 ;;
@@ -2149,32 +2150,43 @@ download() {
     done
     [ -z "$interpreter_name" ] && interpreter_name="ash"
 
+    # --- APIステータス取得 (常に実行) ---
+    api_status=$(check_api_rate_limit)
+    api_status=$(echo "$api_status" | sed 's/API: /API:/') # スペース削除
+    debug_log "DEBUG" "download: API status: $api_status"
+
     # ファイル名が空の場合は即失敗
     if [ -z "$file_name" ]; then
         debug_log "DEBUG" "download: filename is empty"
-        printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "" # 結果出力 (API情報も空)
+        # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
+        if [ "$silent_mode" = "true" ]; then
+            printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "$api_status"
+        else
+            # silent でない場合はユーザー向けエラーメッセージ (ここでは不要、呼び出し元で処理想定)
+            : # 何もしない
+        fi
+        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
         return 1
     fi
-
-    # --- APIステータス取得 ---
-    # ダウンロード処理の前にAPIステータスを取得しておく
-    # (失敗時でも取得を試みることで、ログには残せる)
-    api_status=$(check_api_rate_limit)
-    # API: と数値の間のスペースを削除
-    api_status=$(echo "$api_status" | sed 's/API: /API:/')
-    debug_log "DEBUG" "download: API status before version check: $api_status"
 
     # バージョン管理
     local remote_version_info remote_version auth_method local_version
     remote_version_info=$(get_commit_version "$file_name" "$force_mode")
     if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
         debug_log "DEBUG" "download: Failed to get remote version for $file_name"
-        printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "$api_status" # 結果出力 (API情報は取得済み)
+        # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
+        if [ "$silent_mode" = "true" ]; then
+            printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "$api_status"
+        else
+            # silent でない場合はユーザー向けエラーメッセージ (ここでは不要、呼び出し元で処理想定)
+            : # 何もしない
+        fi
+        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
         return 1
     fi
     remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
     auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
-    final_version="$remote_version"
+    final_version="$remote_version" # 成功時のバージョンとして保持
 
     # ローカルバージョン
     local script_file="${CACHE_DIR}/script.ch"
@@ -2194,41 +2206,80 @@ download() {
     if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
         debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
         download_status="latest"
+        final_version="$local_version" # 最新の場合はローカルバージョンを使う
         # chmod要求ありなら実行
         if [ "$chmod_mode" = "true" ]; then
-            chmod +x "$file_path"
+            chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
         fi
-        # 最新の場合、API情報は不要かもしれないが、念のため渡す
-        printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$local_version" "$api_status" # 結果出力
+        # --- ▼▼▼ 変更点: silent モードで動作分岐 ▼▼▼ ---
+        if [ "$silent_mode" = "true" ]; then
+            # silent モード: 結果行を出力
+            printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$final_version" "$api_status"
+        else
+            # 通常モード: ユーザー向けメッセージを表示
+            printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
+        fi
+        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
         return 0
     fi
 
     # DL実行
     if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
         debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
-        printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "$api_status" # 結果出力
+        download_status="failed" # ステータスを更新
+        # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
+        if [ "$silent_mode" = "true" ]; then
+            printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "" "$api_status"
+        else
+             # silent でない場合はユーザー向けエラーメッセージ (download_fetch_file内で表示想定)
+             :
+        fi
+        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
         return 1
     fi
-    download_status="updated"
+    download_status="updated" # 成功したのでステータスを更新
 
     # バージョンキャッシュ保存
     if [ -n "$remote_version" ]; then
         if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
             debug_log "DEBUG" "download: save_version_to_cache failed for $file_name"
             download_status="failed" # キャッシュ失敗はエラー扱い
-            printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$remote_version" "$api_status" # 結果出力
-            return 1
+             # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
+            if [ "$silent_mode" = "true" ]; then
+                printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$remote_version" "$api_status" # バージョンはリモートを使う
+            else
+                # silent でない場合はユーザー向けエラーメッセージ（ここでは特に表示しない）
+                :
+            fi
+            # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
+            return 1 # キャッシュ失敗はリターンコード 1
         fi
     fi
 
-    # chmod
+    # chmod (download_fetch_file 内でも実行されるが念のため)
     if [ "$chmod_mode" = "true" ]; then
-        chmod +x "$file_path"
+        chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed after download for $file_path"
     fi
 
-    # 最終結果を標準出力
-    printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$final_version" "$api_status"
-    return 0 # 成功
+    # --- ▼▼▼ 変更点: 最終的な動作分岐 ▼▼▼ ---
+    if [ "$silent_mode" = "true" ]; then
+        # silent モード: 最終結果行を出力
+        printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$final_version" "$api_status"
+    else
+        # 通常モード: ユーザー向け成功メッセージを表示
+        # download_status が updated であることを確認 (念のため)
+        if [ "$download_status" = "updated" ]; then
+             printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$final_version" "api=$api_status")"
+        fi
+    fi
+    # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
+
+    # 最終的なリターンコード (download_status が failed でなければ 0)
+    if [ "$download_status" = "failed" ]; then
+        return 1
+    else
+        return 0
+    fi
 }
 
 # download 関数の全文 
