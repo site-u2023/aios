@@ -304,10 +304,8 @@ into_memory_message() {
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed{:}"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f} {v} {api}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}{v} {api}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DOWNLOAD_FAILED=Download failed{:} {f}"$'\n'
-
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared"$'\n'
     
@@ -2115,175 +2113,8 @@ save_version_to_cache() {
     return $return_status
 }
 
-# 元ソースをベースに修正した download 関数
-download() {
-    local file_name="$1"
-    shift
-
-    # デフォルト設定 (元ソースの変数を維持)
-    local chmod_mode="false"
-    local force_mode="false"
-    local hidden_mode="false" # 未使用だが元ソース尊重のため残す
-    local quiet_mode="false"  # 未使用だが元ソース尊重のため残す
-    local silent_mode="false" # このフラグで動作を切り替える
-    local interpreter_name=""
-    local download_status="failed" # 最終的な内部ステータス
-    local final_version=""         # 最終的な内部バージョン
-    local api_status=""            # API情報格納用 (常に取得)
-
-    # オプション解析 (元ソースのまま)
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            chmod)   chmod_mode="true" ;;
-            force)   force_mode="true" ;;
-            hidden)  hidden_mode="true" ;;
-            quiet)   quiet_mode="true" ;;
-            silent)  silent_mode="true" ;; # silent フラグを認識
-            bash|python3|node|perl)
-                interpreter_name="$1"
-                ;;
-            load)    ;;
-            *)
-                ;;
-        esac
-        shift
-    done
-    [ -z "$interpreter_name" ] && interpreter_name="ash"
-
-    # --- APIステータス取得 (常に実行) ---
-    api_status=$(check_api_rate_limit)
-    api_status=$(echo "$api_status" | sed 's/API: /API:/') # スペース削除
-    debug_log "DEBUG" "download: API status: $api_status"
-
-    # ファイル名が空の場合は即失敗
-    if [ -z "$file_name" ]; then
-        debug_log "DEBUG" "download: filename is empty"
-        # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
-        if [ "$silent_mode" = "true" ]; then
-            printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "$api_status"
-        else
-            # silent でない場合はユーザー向けエラーメッセージ (ここでは不要、呼び出し元で処理想定)
-            : # 何もしない
-        fi
-        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
-        return 1
-    fi
-
-    # バージョン管理
-    local remote_version_info remote_version auth_method local_version
-    remote_version_info=$(get_commit_version "$file_name" "$force_mode")
-    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "DEBUG" "download: Failed to get remote version for $file_name"
-        # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
-        if [ "$silent_mode" = "true" ]; then
-            printf "%s|%s|%s|%s\n" "$file_name" "failed" "" "$api_status"
-        else
-            # silent でない場合はユーザー向けエラーメッセージ (ここでは不要、呼び出し元で処理想定)
-            : # 何もしない
-        fi
-        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
-        return 1
-    fi
-    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
-    final_version="$remote_version" # 成功時のバージョンとして保持
-
-    # ローカルバージョン
-    local script_file="${CACHE_DIR}/script.ch"
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version=""
-
-    local file_path="${BASE_DIR}/${file_name}"
-
-    # 強制DL判定
-    if [ "$force_mode" = "true" ]; then
-        debug_log "DEBUG" "download: force mode enabled for $file_name"
-    fi
-
-    # バージョン一致判定（force未指定時のみスキップ）
-    if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
-        debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
-        download_status="latest"
-        final_version="$local_version" # 最新の場合はローカルバージョンを使う
-        # chmod要求ありなら実行
-        if [ "$chmod_mode" = "true" ]; then
-            chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
-        fi
-        # --- ▼▼▼ 変更点: silent モードで動作分岐 ▼▼▼ ---
-        if [ "$silent_mode" = "true" ]; then
-            # silent モード: 結果行を出力
-            printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$final_version" "$api_status"
-        else
-            # 通常モード: ユーザー向けメッセージを表示
-            printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
-        fi
-        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
-        return 0
-    fi
-
-    # DL実行
-    if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
-        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
-        download_status="failed" # ステータスを更新
-        # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
-        if [ "$silent_mode" = "true" ]; then
-            printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "" "$api_status"
-        else
-             # silent でない場合はユーザー向けエラーメッセージ (download_fetch_file内で表示想定)
-             :
-        fi
-        # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
-        return 1
-    fi
-    download_status="updated" # 成功したのでステータスを更新
-
-    # バージョンキャッシュ保存
-    if [ -n "$remote_version" ]; then
-        if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
-            debug_log "DEBUG" "download: save_version_to_cache failed for $file_name"
-            download_status="failed" # キャッシュ失敗はエラー扱い
-             # --- ▼▼▼ 変更点: silent モードでのみ結果行出力 ▼▼▼ ---
-            if [ "$silent_mode" = "true" ]; then
-                printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$remote_version" "$api_status" # バージョンはリモートを使う
-            else
-                # silent でない場合はユーザー向けエラーメッセージ（ここでは特に表示しない）
-                :
-            fi
-            # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
-            return 1 # キャッシュ失敗はリターンコード 1
-        fi
-    fi
-
-    # chmod (download_fetch_file 内でも実行されるが念のため)
-    if [ "$chmod_mode" = "true" ]; then
-        chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed after download for $file_path"
-    fi
-
-    # --- ▼▼▼ 変更点: 最終的な動作分岐 ▼▼▼ ---
-    if [ "$silent_mode" = "true" ]; then
-        # silent モード: 最終結果行を出力
-        printf "%s|%s|%s|%s\n" "$file_name" "$download_status" "$final_version" "$api_status"
-    else
-        # 通常モード: ユーザー向け成功メッセージを表示
-        # download_status が updated であることを確認 (念のため)
-        if [ "$download_status" = "updated" ]; then
-             printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$final_version" "api=$api_status")"
-        fi
-    fi
-    # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
-
-    # 最終的なリターンコード (download_status が failed でなければ 0)
-    if [ "$download_status" = "failed" ]; then
-        return 1
-    else
-        return 0
-    fi
-}
-
 # download 関数の全文 
-OK_download() {
+download() {
     local file_name="$1"
     shift
 
@@ -2403,247 +2234,8 @@ OK_download() {
     return 0 # 成功時は 0 を返す
 }
 
-download_parallel() {
-    local total_lines
-    local lines_per_task
-    local task_count=0
-    local max_parallel
-    local pids=""
-    local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${DL_DIR}/dl_tmp" # DL_DIR利用
-    local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
-    local task_file_prefix="${tmp_dir}/dl_task_"
-    local load_targets_file="${tmp_dir}/load_targets.tmp" # ロード対象記録
-    local pid job_index=0 wait_pid proc_status task_file
-    local success_message failure_message spinner_message
-    local script_path="$0" # Store the script path
-    local task_base_name # For log file naming
-    local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_"
-    local fail_flag_file="${tmp_dir}/dl_failed_flag"
-    local results_log_file="${tmp_dir}/download_results.log" # 結果収集用ファイル
-    local results_lock_dir="${tmp_dir}/download_results.lock" # 結果ファイル用ロック
-    # Export necessary vars (ensure all needed by download and sub-functions are listed)
-    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL CACHE_BUST BASE_WGET GITHUB_TOKEN_FILE UPDATE_CACHE MSG_MEMORY MSG_MEMORY_INITIALIZED MSG_MEMORY_LANG GET_MESSAGE_FORMATTING_ENABLED FORMAT_TYPE_UPPER_ENABLED FORMAT_TYPE_CAPITALIZE_ENABLED API_REMAINING API_LIMIT API_RESET_TIME API_AUTH_METHOD API_LAST_CHECK API_CACHE_TTL COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE WGET_IPV_OPT"
-
-    # --- 準備 ---
-    max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
-    case "$max_parallel" in
-        *[!0-9]* | "") max_parallel=4; debug_log "DEBUG" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;;
-        *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "DEBUG" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;;
-    esac
-    if [ "$max_parallel" -gt 4 ]; then
-        debug_log "DEBUG" "MAX_PARALLEL_TASKS ($max_parallel) exceeds limit of 4. Setting to 4."
-        max_parallel=4
-    fi
-    debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
-
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi
-    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
-    debug_log "DEBUG" "Using task definition directory: $tmp_dir"
-    debug_log "DEBUG" "Using log directory: $LOG_DIR"
-    rm -f "$fail_flag_file" "$load_targets_file" "$results_log_file" 2>/dev/null
-    rmdir "$results_lock_dir" 2>/dev/null # Remove lock dir if exists
-
-    # --- スピナー ---
-    start_spinner "$(color blue "$(get_message 'DOWNLOAD_PARALLEL_START')")"
-
-    # --- download_files()のコマンド抽出 ---
-    debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
-    if ! awk '
-        BEGIN { in_func=0; }
-        /^download_files\(\) *\{/ { in_func=1; next }
-        /^}/ { if(in_func){in_func=0} }
-        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
-    ' "$script_path" > "$all_tasks_file"; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
-        debug_log "DEBUG" "Failed to extract download_files() commands"
-        return 1
-    fi
-    if ! [ -s "$all_tasks_file" ]; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success" # No tasks is success
-        debug_log "DEBUG" "No executable tasks found in download_files function"
-        return 0
-    fi
-
-    # --- コマンド分割＆ロード対象記録 ---
-    total_lines=$(wc -l < "$all_tasks_file")
-    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
-    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
-    debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
-    rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
-
-    task_index=0
-    line_index=0
-    while IFS= read -r task_line || [ -n "$task_line" ]; do
-        task_file="${task_file_prefix}$(printf "%03d" $((line_index / lines_per_task))).tmp"
-        echo "$task_line" >> "$task_file"
-        line_index=$((line_index + 1))
-    done < "$all_tasks_file"
-
-    > "$load_targets_file"
-    while IFS= read -r task_line || [ -n "$task_line" ]; do
-        trimmed_line=${task_line#"${task_line%%[![:space:]]*}"}
-        case "$trimmed_line" in
-            download*)
-                case "$trimmed_line" in
-                    *'"load"')
-                        set -- $trimmed_line
-                        load_fname=$2
-                        load_fname=${load_fname#\"}
-                        load_fname=${load_fname%\"}
-                        echo "$load_fname" >> "$load_targets_file"
-                        ;;
-                esac
-                ;;
-        esac
-    done < "$all_tasks_file"
-
-    rm -f "$all_tasks_file"
-    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
-    debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
-    if [ "$task_count" -eq 0 ]; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
-        debug_log "DEBUG" "Failed to create task files"
-        return 1
-    fi
-
-    # --- 並列実行 ---
-    pids=""
-    job_index=0
-    debug_log "DEBUG" "Exporting variables for subshells: (subset) $BASE_DIR $CACHE_DIR ..." # Avoid overly long log
-    export $exported_vars
-
-    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
-        task_base_name=$(basename "$task_file" .tmp)
-        stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
-        debug_log "DEBUG" "Starting task file: $task_file (stderr: $stderr_log)"
-
-        (
-            # Ensure functions are available (assuming inheritance or sourcing works)
-            # . "$script_path" # If needed, uncomment but be wary of side effects
-
-            while IFS= read -r command_line || [ -n "$command_line" ]; do
-                case "$command_line" in "" | \#*) continue ;; esac
-
-                local result_line
-                # --- ▼▼▼ 修正: silent オプションを強制的に追加 ▼▼▼ ---
-                # 元のコマンドから "load" を削除し、末尾に "silent" を追加
-                local modified_command_line=$(echo "$command_line" | sed 's/"load"//g')
-                result_line=$(eval "$modified_command_line silent")
-                # --- ▲▲▲ 修正 ここまで ▲▲▲ ---
-                local cmd_status=$?
-
-                # Append result line to shared log file with lock
-                if [ -n "$result_line" ]; then
-                    while ! mkdir "$results_lock_dir" 2>/dev/null; do
-                        sleep 0.1
-                    done
-                    echo "$result_line" >> "$results_log_file"
-                    rmdir "$results_lock_dir"
-                fi
-
-                if [ "$cmd_status" -ne 0 ]; then
-                    debug_log "DEBUG" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
-                    # Ensure failure is recorded even if result_line was empty
-                    local filename=$(echo "$command_line" | awk '{print $2}' | tr -d '"') # Basic extraction
-                    while ! mkdir "$results_lock_dir" 2>/dev/null; do sleep 0.1; done
-                    echo "${filename:-unknown}|failed||" >> "$results_log_file" # Add failure marker
-                    rmdir "$results_lock_dir"
-                    exit 1 # Exit subshell on failure
-                fi
-            done < "$task_file"
-            exit 0 # Success
-        ) 2> "$stderr_log" &
-        pid=$!
-        pids="$pids $pid"
-        job_index=$((job_index + 1))
-        debug_log "DEBUG" "Background PID $pid started for task file $task_file"
-
-        # --- Job control logic (unchanged) ---
-        if [ "$job_index" -ge "$max_parallel" ]; then
-             debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
-             first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
-             if [ -n "$first_pid_in_batch" ]; then
-                 if wait "$first_pid_in_batch"; then
-                     debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
-                 else
-                     proc_status=$?
-                     debug_log "DEBUG" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check stderr log." >&2
-                     touch "$fail_flag_file"
-                 fi
-                 pids=$(echo "$pids" | sed "s/^$first_pid_in_batch[[:space:]]*//; s/[[:space:]]$first_pid_in_batch[[:space:]]/ /; s/[[:space:]]$first_pid_in_batch$//")
-                 job_index=$((job_index - 1))
-             else
-                 debug_log "DEBUG" "Could not determine first PID to wait for."
-                 sleep 1
-             fi
-        fi
-    done
-
-    # --- 残ジョブ待機 (unchanged) ---
-    debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
-    for pid in $pids; do
-        case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
-        if wait "$pid"; then
-            debug_log "DEBUG" "PID $pid finished successfully."
-        else
-            proc_status=$?
-            debug_log "DEBUG" "Background task (PID $pid) failed with status $proc_status. Check stderr log." >&2
-            touch "$fail_flag_file"
-        fi
-    done
-
-    # --- 失敗判定 (unchanged) ---
-    if [ -f "$fail_flag_file" ]; then
-        debug_log "DEBUG" "Failure flag file '$fail_flag_file' detected. Setting overall status to failure."
-        overall_status=1
-        rm -f "$fail_flag_file"
-    fi
-
-    # --- DL完了後、ロード対象を親シェルでsource (unchanged) ---
-    if [ -f "$load_targets_file" ]; then
-        debug_log "DEBUG" "Sourcing load targets from $load_targets_file"
-        while IFS= read -r load_file; do
-            [ -z "$load_file" ] && continue
-            if [ -f "${BASE_DIR}/$load_file" ]; then
-                debug_log "DEBUG" "Sourcing ${BASE_DIR}/$load_file"
-                . "${BASE_DIR}/$load_file"
-            else
-                debug_log "DEBUG" "Load target file not found: ${BASE_DIR}/$load_file"
-                overall_status=1
-            fi
-        done < "$load_targets_file"
-    else
-        debug_log "DEBUG" "No load targets to source"
-    fi
-
-    # --- 結果表示 (unchanged) ---
-    stop_spinner "" # Stop spinner before displaying results list
-    if [ -f "$results_log_file" ]; then
-        display_detected_download "$results_log_file"
-        rm -f "$results_log_file" # Clean up results file
-    else
-        debug_log "DEBUG" "Download results file not found: $results_log_file"
-        if [ $overall_status -eq 0 ]; then
-             printf "%s\n" "$(color yellow "No download results to display.")"
-        fi
-    fi
-
-    # Final status message based on overall_status (unchanged)
-    if [ $overall_status -eq 0 ]; then
-        debug_log "DEBUG" "download_parallel finished successfully."
-        return 0
-    else
-        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED')"
-        printf "%s\n" "$(color red "$failure_message Check logs in $LOG_DIR")"
-        debug_log "DEBUG" "download_parallel finished with errors."
-        return 1
-    fi
-}
-
 # download_parallel
-OK_download_parallel() {
+download_parallel() {
     local total_lines
     local lines_per_task # Although calculated, not used for assignment anymore
     local task_count=0
@@ -2893,6 +2485,308 @@ OK_download_parallel() {
     fi
 }
 
+OK_download_parallel() {
+    local total_lines
+    local lines_per_task
+    local task_count=0
+    local max_parallel
+    local pids=""
+    local overall_status=0 # 0: success, 1: failure
+    local tmp_dir="${DL_DIR}"
+    local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
+    local task_file_prefix="${tmp_dir}/dl_task_"
+    local load_targets_file="${tmp_dir}/load_targets.tmp" # ロード対象記録
+    local pid job_index=0 wait_pid proc_status task_file
+    local success_message failure_message spinner_message
+    local script_path="$0" # Store the script path
+    local task_base_name # For log file naming
+    local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_"
+    local fail_flag_file="${tmp_dir}/dl_failed_flag"
+    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE DL_URL_BASE CHECKSUM_FILE GITHUB_TOKEN USE_API_TOKEN QUIET_MODE MAX_PARALLEL_TASKS MAX_RETRIES RETRY_DELAY CONNECT_TIMEOUT MAX_TIME"
+
+    # --- 準備 ---
+    max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
+    case "$max_parallel" in
+        *[!0-9]* | "") max_parallel=4; debug_log "DEBUG" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;;
+        *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "DEBUG" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;;
+    esac
+    debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
+
+    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi
+    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
+    debug_log "DEBUG" "Using task definition directory: $tmp_dir"
+    debug_log "DEBUG" "Using log directory: $LOG_DIR"
+    rm -f "$fail_flag_file" "$load_targets_file" 2>/dev/null
+
+    # --- スピナー ---
+    start_spinner "$(color blue "$(get_message 'DOWNLOAD_PARALLEL_START')")"
+
+    # --- download_files()のコマンド抽出 ---
+    debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
+    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
+    # download_files()の各行を抜き出す
+    if ! awk '
+        BEGIN { in_func=0; }
+        /^download_files\(\) *\{/ { in_func=1; next }
+        /^}/ { if(in_func){in_func=0} }
+        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
+    ' "$script_path" > "$all_tasks_file"; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
+        debug_log "DEBUG" "Failed to extract download_files() commands"
+        return 1
+    fi
+    if ! [ -s "$all_tasks_file" ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
+        debug_log "DEBUG" "No executable tasks found in download_files function"
+        return 0
+    fi
+
+    # --- コマンド分割＆ロード対象記録 ---
+    total_lines=$(wc -l < "$all_tasks_file")
+    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
+    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
+    debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
+    rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
+
+    # BusyBox互換split方式（awk→POSIXシェル）
+    # 1. タスク分割ファイルの生成
+    task_index=0
+    line_index=0
+    while IFS= read -r task_line || [ -n "$task_line" ]; do
+        task_file="${task_file_prefix}$(printf "%03d" $((line_index % max_parallel))).tmp"
+        echo "$task_line" >> "$task_file"
+        line_index=$((line_index + 1))
+    done < "$all_tasks_file"
+
+    # 2. ロード対象ファイル生成（インデント無視、POSIXシェル組み込みのみ）
+    > "$load_targets_file"
+    while IFS= read -r task_line || [ -n "$task_line" ]; do
+        # 行頭空白除去
+        trimmed_line=${task_line#"${task_line%%[![:space:]]*}"}
+        case "$trimmed_line" in
+            download*)
+                case "$trimmed_line" in
+                    *'"load"')
+                        set -- $trimmed_line
+                        load_fname=$2
+                        load_fname=${load_fname#\"}
+                        load_fname=${load_fname%\"}
+                        echo "$load_fname" >> "$load_targets_file"
+                        ;;
+                esac
+                ;;
+        esac
+    done < "$all_tasks_file"
+
+    rm -f "$all_tasks_file"
+    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
+    debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
+    if [ "$task_count" -eq 0 ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
+        debug_log "DEBUG" "Failed to create task files"
+        return 1
+    fi
+
+    # --- 並列実行 ---
+    pids=""
+    job_index=0
+    export $exported_vars
+    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
+        task_base_name=$(basename "$task_file" .tmp)
+        stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
+        stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
+        debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
+        (
+            while IFS= read -r command_line || [ -n "$command_line" ]; do
+                case "$command_line" in "" | \#*) continue ;; esac
+                # loadオプションはdownload_parallelでは無効化
+                eval "$(echo "$command_line" | sed 's/"load"//g')"
+                local cmd_status=$?
+                if [ "$cmd_status" -ne 0 ]; then
+                    debug_log "DEBUG" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
+                    exit 1
+                fi
+            done < "$task_file"
+            exit 0
+        ) > "$stdout_log" 2> "$stderr_log" &
+        pid=$!
+        pids="$pids $pid"
+        job_index=$((job_index + 1))
+        debug_log "DEBUG" "Background PID $pid started for task file $task_file"
+
+        if [ "$job_index" -ge "$max_parallel" ]; then
+             debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
+             first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
+             if [ -n "$first_pid_in_batch" ]; then
+                 if wait "$first_pid_in_batch"; then
+                     debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
+                 else
+                     proc_status=$?
+                     debug_log "DEBUG" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check logs." >&2
+                     touch "$fail_flag_file"
+                 fi
+                 pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
+                 job_index=$((job_index - 1))
+             else
+                 debug_log "DEBUG" "Could not determine first PID to wait for."
+                 sleep 1
+             fi
+        fi
+    done
+
+    # --- 残ジョブ待機 ---
+    debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
+    for pid in $pids; do
+        case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
+        if wait "$pid"; then
+            debug_log "DEBUG" "PID $pid finished successfully."
+        else
+            proc_status=$?
+            debug_log "DEBUG" "Background task (PID $pid) failed with status $proc_status. Check logs." >&2
+            touch "$fail_flag_file"
+        fi
+    done
+
+    # --- 失敗判定 ---
+    if [ -f "$fail_flag_file" ]; then
+        debug_log "DEBUG" "Failure flag file '$fail_flag_file' detected. Setting overall status to failure."
+        overall_status=1
+        rm -f "$fail_flag_file"
+    fi
+
+    # --- DL完了後、ロード対象を親シェルでsource ---
+    if [ -f "$load_targets_file" ]; then
+        debug_log "DEBUG" "Sourcing load targets from $load_targets_file"
+        while IFS= read -r load_file; do
+            [ -z "$load_file" ] && continue
+            if [ -f "${BASE_DIR}/$load_file" ]; then
+                debug_log "DEBUG" "Sourcing ${BASE_DIR}/$load_file"
+                . "${BASE_DIR}/$load_file"
+            else
+                debug_log "DEBUG" "Load target file not found: ${BASE_DIR}/$load_file"
+                overall_status=1
+            fi
+        done < "$load_targets_file"
+    else
+        debug_log "DEBUG" "No load targets to source"
+    fi
+
+    # --- 結果表示 ---
+    if [ $overall_status -eq 0 ]; then
+        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
+        stop_spinner "$success_message" "success"
+        return 0
+    else
+        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "Errors occurred during parallel download. Check logs in $LOG_DIR and task files in $tmp_dir")"
+        stop_spinner "$failure_message" "failure"
+        return 1
+    fi
+}
+
+OK_download() {
+    local file_name="$1"
+    shift
+
+    # デフォルト設定
+    local chmod_mode="false"
+    local force_mode="false"
+    local hidden_mode="false"
+    local quiet_mode="false"
+    local interpreter_name=""
+    # "load"は完全無視
+    # その他オプションが追加される場合、ここでパース
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            chmod)   chmod_mode="true" ;;
+            force)   force_mode="true" ;;
+            hidden)  hidden_mode="true" ;;
+            quiet)   quiet_mode="true" ;;
+            bash|python3|node|perl)
+                interpreter_name="$1"
+                ;;
+            # "load"などはここで無視
+            load)    ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    # ファイル名が空の場合は即失敗
+    if [ -z "$file_name" ]; then
+        debug_log "DEBUG" "download: filename is empty"
+        return 1
+    fi
+
+    # バージョン管理
+    local remote_version_info remote_version auth_method local_version
+    remote_version_info=$(get_commit_version "$file_name" "$force_mode")
+    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+        debug_log "DEBUG" "download: Failed to get remote version for $file_name"
+        return 1
+    fi
+    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+
+    # ローカルバージョン
+    local script_file="${CACHE_DIR}/script.ch"
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    [ -z "$local_version" ] && local_version=""
+
+    local file_path="${BASE_DIR}/${file_name}"
+
+    # 強制DL判定
+    if [ "$force_mode" = "true" ]; then
+        debug_log "DEBUG" "download: force mode enabled for $file_name"
+    fi
+
+    # バージョン一致判定（force未指定時のみスキップ）
+    if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
+        debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
+        # chmod要求ありなら実行
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$file_path"
+        fi
+        return 0
+    fi
+
+    # DL処理
+    local api_status
+    api_status=$(check_api_rate_limit)
+    debug_log "DEBUG" "download: API status: $api_status"
+
+    # DL実行
+    if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
+        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
+        return 1
+    fi
+
+    # バージョンキャッシュ保存
+    if [ -n "$remote_version" ]; then
+        if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
+            debug_log "DEBUG" "download: save_version_to_cache failed for $file_name"
+            return 1
+        fi
+    fi
+
+    # chmod
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$file_path"
+    fi
+
+    # サイレント/隠しモードでなければ、DL成功メッセージ
+    if [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
+    fi
+
+    return 0
+}
+
 download_check_version() {
     local file_name="$1"
     local script_file="${CACHE_DIR}/script.ch"
@@ -3015,75 +2909,6 @@ download_fetch_file() {
     # バージョン情報をキャッシュに保存
     save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
     
-    return 0
-}
-
-# ダウンロード結果表示関数
-display_detected_download() {
-    local results_file="$1"
-    local file_name status version api_info message color_code
-
-    debug_log "DEBUG" "display_detected_download: Reading results from $results_file"
-
-    if [ ! -f "$results_file" ]; then
-        debug_log "DEBUG" "display_detected_download: Results file not found: $results_file"
-        return 1
-    fi
-
-    # 結果ファイルを行ごとに読み込み、表示
-    while IFS='|' read -r file_name status version api_info || [ -n "$file_name" ]; do
-        # 空行や予期しない形式の行をスキップ (status は必須)
-        if [ -z "$file_name" ] || [ -z "$status" ]; then
-            debug_log "DEBUG" "display_detected_download: Skipping invalid line: file='$file_name', status='$status'"
-            continue
-        fi
-
-        # ステータスに応じてメッセージキーと色を設定
-        case "$status" in
-            updated)
-                message_key="CONFIG_DOWNLOAD_SUCCESS"
-                color_code="green"
-                # API情報はそのまま使用
-                ;;
-            latest)
-                message_key="CONFIG_DOWNLOAD_UNNECESSARY"
-                color_code="white"
-                version="" # このキーではバージョン不要
-                api_info="" # このキーではAPI情報不要
-                ;;
-            failed)
-                message_key="MSG_DOWNLOAD_FAILED"
-                color_code="red"
-                version="" # 失敗時はバージョン不要
-                api_info="" # 失敗時はAPI情報不要
-                ;;
-            *)
-                debug_log "DEBUG" "display_detected_download: Unknown status '$status' for file '$file_name'"
-                message_key="MSG_DOWNLOAD_FAILED"
-                color_code="red"
-                version=""
-                api_info=""
-                ;;
-        esac
-
-        # メッセージを取得して表示
-        # get_message に渡すパラメータを調整
-        if [ "$status" = "updated" ]; then
-            message=$(get_message "$message_key" "f=$file_name" "v=$version" "api=$api_info")
-        elif [ "$status" = "latest" ]; then
-             # {:} があるのでそのまま表示
-             message=$(get_message "$message_key")
-        elif [ "$status" = "failed" ]; then
-             message=$(get_message "$message_key" "f=$file_name")
-        else # Unknown status
-             message=$(get_message "$message_key" "f=$file_name")
-        fi
-
-        printf "%s\n" "$(color "$color_code" "$message")"
-
-    done < "$results_file"
-
-    debug_log "DEBUG" "display_detected_download: Finished displaying results."
     return 0
 }
 
@@ -3449,7 +3274,7 @@ make_directory() {
     return 0
 }
 
-# check_update 関数
+# オリジナルの check_update 関数
 check_update() {
     # デフォルトモードの設定（引数がなくても動作するように）
     local lang_code="$SELECTED_LANGUAGE"
