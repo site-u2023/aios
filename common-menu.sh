@@ -550,6 +550,9 @@ selector() {
 
     # --- Main loop for the current menu section ---
     while true; do
+        IN_PARALLEL_DOWNLOAD="false"
+        debug_log "DEBUG" "Reset IN_PARALLEL_DOWNLOAD=false at the start of the menu loop for section [$section_name]"
+        
         # --- Prepare and display menu at the start of each loop iteration ---
         printf "\n"
         CURRENT_MENU="$section_name"
