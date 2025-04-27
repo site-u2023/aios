@@ -3098,7 +3098,6 @@ check_common() {
             ;;
         full)
             download_parallel
-            # sleep 1
             print_banner
             print_information
             information_main
