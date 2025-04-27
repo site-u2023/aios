@@ -2024,104 +2024,12 @@ get_commit_version() {
     return 1
 }
 
-# save_version_to_cache 関数 (grep -v ステータス処理修正 + 第4引数受け取り)
-# 変更点:
-# 1. grep -v 実行後の終了ステータスチェックを修正。
-#    ステータス 0 (成功) または 1 (指定パターンにマッチする行を除外した結果、何も残らなかった) を成功とみなし、
-#    それ以外のステータス (2以上) をエラーとして扱うように変更。
-# 2. 第4引数 ($4) を受け取るように local auth_method="$4" を追加 (ただしキャッシュ保存はしない)。
-save_version_to_cache() {
-    local file_name="$1"
-    local version="$2"
-    local script_file="$3"
-    local auth_method="$4" # <<< 変更点: 第4引数を受け取る
-    local tmp_file="${script_file}.tmp.$$" # プロセス固有の一時ファイル名
-    local lock_dir="${script_file}.lock"  # ロック用ディレクトリパス
-    local lock_acquired=0                 # ロック取得フラグ (0: 未取得, 1: 取得済)
-
-    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file', auth_method='$auth_method', tmp_file='$tmp_file', lock_dir='$lock_dir'" # <<< 変更点: auth_method をログに追加
-
-    if [ -z "$version" ]; then
-        debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
-        return 1 # バージョンが空なら失敗
-    fi
-
-    # --- ロック取得試行 ---
-    if mkdir "$lock_dir" 2>/dev/null; then
-        lock_acquired=1
-        debug_log "DEBUG" "save_version_to_cache: Lock acquired: $lock_dir"
-    else
-        debug_log "DEBUG" "save_version_to_cache: Could not acquire lock '$lock_dir', another process might be updating. Skipping cache update for '$file_name'."
-        return 0 # ロック失敗は致命的エラーではないため成功として扱う (更新スキップ)
-    fi
-
-    # --- クリティカルセクション (ロック取得時のみ実行) ---
-    local return_status=0 # このセクション内での処理ステータス
-
-    # script_file が存在する場合の処理
-    if [ -f "$script_file" ]; then
-        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' exists. Filtering existing entry for '$file_name'."
-        grep -v "^${file_name}=" "$script_file" > "$tmp_file"
-        local grep_status=$?
-        # <<< 変更点: grep -v のステータスチェック修正 >>>
-        if [ "$grep_status" -eq 0 ] || [ "$grep_status" -eq 1 ]; then
-            # ステータス 0 (成功) または 1 (マッチなし) は正常
-            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully filtered '$script_file' to '$tmp_file' (grep status: $grep_status)."
-        else
-            # ステータス 2 以上は grep コマンド自体のエラー
-            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: grep command failed with status $grep_status for '$script_file'."
-            return_status=1 # 失敗ステータスを設定
-        fi
-        # <<< 変更点ここまで >>>
-
-        if [ "$return_status" -eq 0 ]; then
-            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Appending new version '$version' for '$file_name' to '$tmp_file'."
-            echo "${file_name}=${version}" >> "$tmp_file"
-
-            if mv "$tmp_file" "$script_file"; then
-                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully moved '$tmp_file' to '$script_file'."
-            else
-                local mv_status=$?
-                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: mv command failed with status $mv_status. Failed to update '$script_file'."
-                return_status=1 # 失敗ステータスを設定
-                # mv失敗時は一時ファイルが残る可能性があるため削除
-                rm -f "$tmp_file" 2>/dev/null
-            fi
-        else
-             # grep失敗時は一時ファイルを削除
-             rm -f "$tmp_file" 2>/dev/null
-        fi
-    else
-        # script_file が存在しない場合の処理
-        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' does not exist. Creating new file."
-        if echo "${file_name}=${version}" > "$script_file"; then
-             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully created '$script_file' with initial version."
-        else
-             local echo_status=$?
-             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: echo command failed with status $echo_status. Failed to create '$script_file'."
-             return_status=1 # 失敗ステータスを設定
-        fi
-    fi
-
-    # --- ロック解放 ---
-    if [ "$lock_acquired" -eq 1 ]; then
-        if rmdir "$lock_dir"; then
-            debug_log "DEBUG" "save_version_to_cache: Lock released: $lock_dir"
-        else
-            debug_log "DEBUG" "save_version_to_cache: Failed to release lock '$lock_dir'. Manual cleanup might be needed."
-            # ロック解除失敗は関数の成否には影響させない
-        fi
-    fi
-
-    return $return_status
-}
-
 # save_version_to_cache 関数 (grep -v ステータス処理修正)
 # 変更点:
 # 1. grep -v 実行後の終了ステータスチェックを修正。
 #    ステータス 0 (成功) または 1 (指定パターンにマッチする行を除外した結果、何も残らなかった) を成功とみなし、
 #    それ以外のステータス (2以上) をエラーとして扱うように変更。
-OK_save_version_to_cache() {
+save_version_to_cache() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
