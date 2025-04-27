@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.27-01-04"
+SCRIPT_VERSION="2025.04.27-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2248,27 +2248,40 @@ download_parallel() {
         return 0
     fi
 
-    # --- コマンド分割＆ロード対象記録（ここをsplit方式で修正） ---
+    # --- コマンド分割＆ロード対象記録（ここを改修） ---
     total_lines=$(wc -l < "$all_tasks_file")
     [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success" && debug_log "INFO" "download_files() is empty" && return 0
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
     rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
 
-    # BusyBox互換split方式
-    awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" -v loadfile="$load_targets_file" '
-        {
-            task_num = int((NR-1)/lpt)
-            filename = sprintf("%s%03d.tmp", prefix, task_num)
-            print $0 >> filename
-            # "download"で始まり"load"を含む行のみファイル名抽出
-            if ($0 ~ /^download/ && $0 ~ /"load"/) {
-                n = split($0, a, "\"")
-                if (n >= 2) print a[2] >> loadfile
-            }
-            close(filename)
-        }
-    ' "$all_tasks_file"
+    # BusyBox互換split方式（awk→POSIXシェル）
+    # 1. タスク分割ファイルの生成
+    task_index=0
+    line_index=0
+    while IFS= read -r task_line || [ -n "$task_line" ]; do
+        task_file="${task_file_prefix}$(printf "%03d" $((line_index / lines_per_task))).tmp"
+        echo "$task_line" >> "$task_file"
+        line_index=$((line_index + 1))
+    done < "$all_tasks_file"
+
+    # 2. ロード対象ファイル生成（awk/sedなし、シェル組み込みのみ）
+    > "$load_targets_file"
+    while IFS= read -r task_line || [ -n "$task_line" ]; do
+        case "$task_line" in
+            download*)
+                case "$task_line" in
+                    *'"load"')
+                        set -- $task_line
+                        load_fname=$2
+                        load_fname=${load_fname#\"}
+                        load_fname=${load_fname%\"}
+                        echo "$load_fname" >> "$load_targets_file"
+                        ;;
+                esac
+                ;;
+        esac
+    done < "$all_tasks_file"
 
     rm -f "$all_tasks_file"
     task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
