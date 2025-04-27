@@ -83,7 +83,7 @@ ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # --- Set MAX_PARALLEL_TASKS ---
 # 最大値を 5 に制限
-#MAX_PARALLEL_TASKS="$(c=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1); calculated_tasks=$((c + 1)); if [ "$calculated_tasks" -gt 5 ]; then echo 5; else echo "$calculated_tasks"; fi)"
+MAX_PARALLEL_TASKS="$(c=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1); calculated_tasks=$((c + 1)); if [ "$calculated_tasks" -gt 5 ]; then echo 5; else echo "$calculated_tasks"; fi)"
 
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
@@ -2022,12 +2022,104 @@ get_commit_version() {
     return 1
 }
 
+# save_version_to_cache 関数 (grep -v ステータス処理修正 + 第4引数受け取り)
+# 変更点:
+# 1. grep -v 実行後の終了ステータスチェックを修正。
+#    ステータス 0 (成功) または 1 (指定パターンにマッチする行を除外した結果、何も残らなかった) を成功とみなし、
+#    それ以外のステータス (2以上) をエラーとして扱うように変更。
+# 2. 第4引数 ($4) を受け取るように local auth_method="$4" を追加 (ただしキャッシュ保存はしない)。
+save_version_to_cache() {
+    local file_name="$1"
+    local version="$2"
+    local script_file="$3"
+    local auth_method="$4" # <<< 変更点: 第4引数を受け取る
+    local tmp_file="${script_file}.tmp.$$" # プロセス固有の一時ファイル名
+    local lock_dir="${script_file}.lock"  # ロック用ディレクトリパス
+    local lock_acquired=0                 # ロック取得フラグ (0: 未取得, 1: 取得済)
+
+    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file', auth_method='$auth_method', tmp_file='$tmp_file', lock_dir='$lock_dir'" # <<< 変更点: auth_method をログに追加
+
+    if [ -z "$version" ]; then
+        debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
+        return 1 # バージョンが空なら失敗
+    fi
+
+    # --- ロック取得試行 ---
+    if mkdir "$lock_dir" 2>/dev/null; then
+        lock_acquired=1
+        debug_log "DEBUG" "save_version_to_cache: Lock acquired: $lock_dir"
+    else
+        debug_log "DEBUG" "save_version_to_cache: Could not acquire lock '$lock_dir', another process might be updating. Skipping cache update for '$file_name'."
+        return 0 # ロック失敗は致命的エラーではないため成功として扱う (更新スキップ)
+    fi
+
+    # --- クリティカルセクション (ロック取得時のみ実行) ---
+    local return_status=0 # このセクション内での処理ステータス
+
+    # script_file が存在する場合の処理
+    if [ -f "$script_file" ]; then
+        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' exists. Filtering existing entry for '$file_name'."
+        grep -v "^${file_name}=" "$script_file" > "$tmp_file"
+        local grep_status=$?
+        # <<< 変更点: grep -v のステータスチェック修正 >>>
+        if [ "$grep_status" -eq 0 ] || [ "$grep_status" -eq 1 ]; then
+            # ステータス 0 (成功) または 1 (マッチなし) は正常
+            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully filtered '$script_file' to '$tmp_file' (grep status: $grep_status)."
+        else
+            # ステータス 2 以上は grep コマンド自体のエラー
+            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: grep command failed with status $grep_status for '$script_file'."
+            return_status=1 # 失敗ステータスを設定
+        fi
+        # <<< 変更点ここまで >>>
+
+        if [ "$return_status" -eq 0 ]; then
+            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Appending new version '$version' for '$file_name' to '$tmp_file'."
+            echo "${file_name}=${version}" >> "$tmp_file"
+
+            if mv "$tmp_file" "$script_file"; then
+                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully moved '$tmp_file' to '$script_file'."
+            else
+                local mv_status=$?
+                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: mv command failed with status $mv_status. Failed to update '$script_file'."
+                return_status=1 # 失敗ステータスを設定
+                # mv失敗時は一時ファイルが残る可能性があるため削除
+                rm -f "$tmp_file" 2>/dev/null
+            fi
+        else
+             # grep失敗時は一時ファイルを削除
+             rm -f "$tmp_file" 2>/dev/null
+        fi
+    else
+        # script_file が存在しない場合の処理
+        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' does not exist. Creating new file."
+        if echo "${file_name}=${version}" > "$script_file"; then
+             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully created '$script_file' with initial version."
+        else
+             local echo_status=$?
+             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: echo command failed with status $echo_status. Failed to create '$script_file'."
+             return_status=1 # 失敗ステータスを設定
+        fi
+    fi
+
+    # --- ロック解放 ---
+    if [ "$lock_acquired" -eq 1 ]; then
+        if rmdir "$lock_dir"; then
+            debug_log "DEBUG" "save_version_to_cache: Lock released: $lock_dir"
+        else
+            debug_log "DEBUG" "save_version_to_cache: Failed to release lock '$lock_dir'. Manual cleanup might be needed."
+            # ロック解除失敗は関数の成否には影響させない
+        fi
+    fi
+
+    return $return_status
+}
+
 # save_version_to_cache 関数 (grep -v ステータス処理修正)
 # 変更点:
 # 1. grep -v 実行後の終了ステータスチェックを修正。
 #    ステータス 0 (成功) または 1 (指定パターンにマッチする行を除外した結果、何も残らなかった) を成功とみなし、
 #    それ以外のステータス (2以上) をエラーとして扱うように変更。
-save_version_to_cache() {
+OK_save_version_to_cache() {
     local file_name="$1"
     local version="$2"
     local script_file="$3"
@@ -2110,8 +2202,160 @@ save_version_to_cache() {
     return $return_status
 }
 
-# download 関数の全文 
+# download 関数 (シングルスレッド時の load オプション対応)
+# 変更点:
+# 1. オプション解析で `load` オプションも受け取るように `load_mode` 変数を追加。
+# 2. 関数の最後に、`IN_PARALLEL_DOWNLOAD` が true でなく、かつ `load_mode` が true の場合に、
+#    ファイルを `.` (source) コマンドで読み込む処理を追加。
+# 3. `save_version_to_cache` 呼び出し時に `auth_method` を渡すように修正。
 download() {
+    local file_name="$1"
+    shift
+
+    # download_parallel 内のサブシェルから呼び出されたかを示すフラグ
+    local suppress_message="false"
+    if [ "$IN_PARALLEL_DOWNLOAD" = "true" ]; then
+        suppress_message="true"
+        debug_log "DEBUG" "download: Running inside parallel task, suppressing individual success message for $file_name."
+    fi
+
+    # デフォルト設定
+    local chmod_mode="false"
+    local force_mode="false"
+    local hidden_mode="false"
+    local quiet_mode="false"
+    local load_mode="false" # <<< 変更点: load_mode 変数を追加
+    local interpreter_name=""
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            chmod)   chmod_mode="true" ;;
+            force)   force_mode="true" ;;
+            hidden)  hidden_mode="true" ;;
+            quiet)   quiet_mode="true" ;;
+            load)    load_mode="true" ;; # <<< 変更点: load オプションを認識
+            bash|python3|node|perl)
+                interpreter_name="$1"
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    # ファイル名が空の場合は即失敗
+    if [ -z "$file_name" ]; then
+        debug_log "DEBUG" "download: filename is empty"
+        return 1
+    fi
+
+    # バージョン管理
+    local remote_version_info remote_version auth_method local_version
+    remote_version_info=$(get_commit_version "$file_name" "$force_mode")
+    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+        debug_log "DEBUG" "download: Failed to get remote version for $file_name"
+        return 1 # 失敗時は 1 を返す
+    fi
+    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+
+    # ローカルバージョン
+    local script_file="${CACHE_DIR}/script.ch"
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    [ -z "$local_version" ] && local_version=""
+
+    local file_path="${BASE_DIR}/${file_name}"
+
+    # 強制DL判定
+    if [ "$force_mode" = "true" ]; then
+        debug_log "DEBUG" "download: force mode enabled for $file_name"
+    fi
+
+    # バージョン一致判定（force未指定時のみスキップ）
+    if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
+        debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
+        # chmod要求ありなら実行
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
+        fi
+        # <<< 変更点: シングルスレッド時のロード処理 >>>
+        if [ "$suppress_message" = "false" ] && [ "$load_mode" = "true" ]; then
+            if [ -f "$file_path" ]; then
+                debug_log "DEBUG" "download: Sourcing existing up-to-date file (single-thread load): $file_path"
+                . "$file_path"
+                if [ $? -ne 0 ]; then
+                    debug_log "DEBUG" "download: Failed to source existing file $file_path"
+                    return 1 # source 失敗時はエラー
+                fi
+            else
+                debug_log "DEBUG" "download: File not found for sourcing (single-thread load): $file_path"
+                return 1 # ファイルがない場合はエラー
+            fi
+        fi
+        # <<< 変更点ここまで >>>
+        return 0 # 成功時は 0 を返す
+    fi
+
+    # DL処理
+    local api_status
+    # APIレートチェックは並列実行中は行わない（download_parallel開始時に行う想定）
+    if [ "$suppress_message" = "false" ]; then
+        api_status=$(check_api_rate_limit)
+        debug_log "DEBUG" "download: API status: $api_status"
+    else
+        api_status="(Checked)" # 並列中はチェック済みとして表示
+    fi
+
+    # DL実行
+    if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
+        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
+        return 1 # 失敗時は 1 を返す
+    fi
+
+    # バージョンキャッシュ保存
+    if [ -n "$remote_version" ]; then
+        # <<< 変更点: save_version_to_cache に auth_method を渡す >>>
+        if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
+            debug_log "DEBUG" "download: save_version_to_cache failed for $file_name, but download itself succeeded."
+        fi
+        # <<< 変更点ここまで >>>
+    fi
+
+    # chmod (download_fetch_file 内でも実行されるが、念のためここでも)
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed after download for $file_path"
+    fi
+
+    # サイレント/隠しモードでなく、かつ並列実行中でない場合のみ、DL成功メッセージ表示
+    if [ "$suppress_message" = "false" ] && [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
+    fi
+
+    # <<< 変更点: シングルスレッド時のロード処理 >>>
+    if [ "$suppress_message" = "false" ] && [ "$load_mode" = "true" ]; then
+        if [ -f "$file_path" ]; then
+            debug_log "DEBUG" "download: Sourcing downloaded file (single-thread load): $file_path"
+            . "$file_path"
+            if [ $? -ne 0 ]; then
+                 debug_log "DEBUG" "download: Failed to source downloaded file $file_path"
+                 return 1 # source 失敗時はエラー
+            fi
+        else
+            debug_log "DEBUG" "download: File not found for sourcing after download (single-thread load): $file_path"
+            return 1 # ファイルがない場合はエラー
+        fi
+    fi
+    # <<< 変更点ここまで >>>
+
+    return 0 # 成功時は 0 を返す
+}
+
+# download 関数の全文 
+OK_download() {
     local file_name="$1"
     shift
 
