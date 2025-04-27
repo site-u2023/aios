@@ -2112,7 +2112,7 @@ save_version_to_cache() {
     return $return_status
 }
 
-download() {
+MURI_download() {
     local file_name="$1"
     # --- ↓↓↓ 追加 ↓↓↓ ---
     local original_args="$@" # 関数呼び出し時の引数リスト全体を保存
@@ -2193,7 +2193,7 @@ download() {
     return 0 # 成功時は 0 を返す
 }
 
-OK_download() {
+download() {
     local file_name="$1"
     shift
 
