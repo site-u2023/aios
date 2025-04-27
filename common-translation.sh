@@ -130,7 +130,6 @@ translate_with_google() {
         debug_log "DEBUG" "translate_with_google: Could not read network type from $ip_check_file or file is empty, defaulting to v4."
         network_type="v4"
     fi
-    debug_log "DEBUG" "translate_with_google: Detected network type: $network_type"
     case "$network_type" in
         "v4"|"v4v6") wget_options="-4" ;;
         "v6") wget_options="-6" ;;
@@ -146,7 +145,6 @@ translate_with_google() {
         return 1
     fi
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
-    debug_log "DEBUG" "translate_with_google: API URL: $api_url"
 
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
