@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.27-01-00"
+SCRIPT_VERSION="2025.04.27-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2191,8 +2191,6 @@ OK_save_version_to_cache() {
     return $return_status
 }
 
-# Parallel download function using eval based on user-provided structure
-# Assumes the 'download' function called via eval handles chmod/load internally.
 download_parallel() {
     local total_lines
     local lines_per_task
@@ -2200,89 +2198,115 @@ download_parallel() {
     local max_parallel
     local pids=""
     local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${DL_DIR}/dl_tmp" # Temporary directory for task definition files
+    local tmp_dir="${DL_DIR}/dl_tmp" # DL_DIR利用
     local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
     local task_file_prefix="${tmp_dir}/dl_task_"
+    local load_targets_file="${tmp_dir}/load_targets.tmp" # ロード対象記録
     local pid job_index=0 wait_pid proc_status task_file
     local success_message failure_message spinner_message
     local script_path="$0" # Store the script path
     local task_base_name # For log file naming
-    local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_" # Prefix for logs in LOG_DIR
+    local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_"
     local fail_flag_file="${tmp_dir}/dl_failed_flag"
-    # Variables to export for the subshell's 'download' function and its dependencies
-    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE DL_URL_BASE CHECKSUM_FILE GITHUB_TOKEN USE_API_TOKEN QUIET_MODE MAX_PARALLEL_TASKS MAX_RETRIES RETRY_DELAY CONNECT_TIMEOUT MAX_TIME" # Add others if needed
+    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE DL_URL_BASE CHECKSUM_FILE GITHUB_TOKEN USE_API_TOKEN QUIET_MODE MAX_PARALLEL_TASKS MAX..."
 
-    # --- Configuration and Preparation ---
+    # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
-    case "$max_parallel" in *[!0-9]* | "") max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;; *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;; esac
+    case "$max_parallel" in
+        *[!0-9]* | "") max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;;
+        *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;;
+    esac
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "ERROR" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Setup failed.')" "failure"; return 1; fi; fi
+    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "ERROR" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi
     if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "ERROR" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
     debug_log "DEBUG" "Using task definition directory: $tmp_dir"
     debug_log "DEBUG" "Using log directory: $LOG_DIR"
-    rm -f "$fail_flag_file" 2>/dev/null
+    rm -f "$fail_flag_file" "$load_targets_file" 2>/dev/null
 
-    # --- Start Spinner ---
+    # --- スピナー ---
     spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')"
     start_spinner "$spinner_message"
 
-    # --- Extract Commands from download_files() ---
+    # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "ERROR" "Script path '$script_path' is not a valid file." >&2; return 1; fi
-    # awk script extracts non-empty, non-comment lines from download_files()
-    if ! cat "$script_path" | awk ' BEGIN { in_func=0 } /^download_files\(\) *\{/ { in_func=1; next } /^}/ { if (in_func) { in_func=0 } } in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print } ' > "$all_tasks_file"; then cat_awk_status=$?; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed during script parsing.')" "failure"; debug_log "ERROR" "cat | awk command failed with status $cat_awk_status while parsing '$script_path'." >&2; return 1; fi
-    if ! [ -s "$all_tasks_file" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"; debug_log "INFO" "No executable tasks found in download_files function in '$script_path'." >&2; rm -f "$all_tasks_file"; return 0; fi
+    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "ERROR" "Script path '$script_path' is not found"; return 1; fi
+    # download_files()の各行を抜き出す
+    if ! awk '
+        BEGIN { in_func=0; }
+        /^download_files\(\) *\{/ { in_func=1; next }
+        /^}/ { if(in_func){in_func=0} }
+        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
+    ' "$script_path" > "$all_tasks_file"; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to extract download_files() commands.')" "failure"
+        debug_log "ERROR" "Failed to extract download_files() commands"
+        return 1
+    fi
+    if ! [ -s "$all_tasks_file" ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"
+        debug_log "INFO" "No executable tasks found in download_files function"
+        return 0
+    fi
 
-    # --- Calculate lines and generate task files ---
-    total_lines=$(wc -l < "$all_tasks_file"); if [ "$total_lines" -eq 0 ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success"; debug_log "INFO" "download_files function is empty after parsing." >&2; rm -f "$all_tasks_file"; return 0; fi
+    # --- コマンド分割＆ロード対象記録 ---
+    total_lines=$(wc -l < "$all_tasks_file")
+    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success" && debug_log "INFO" "download_files() is empty" && return 0
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
     rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
-    if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{ task_num = int((NR-1)/lpt); filename = sprintf("%s%03d.tmp", prefix, task_num); print $0 >> filename; close(filename) }' "$all_tasks_file"; then split_status=$?; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks into files.')" "failure"; debug_log "ERROR" "awk splitting command failed with status $split_status." >&2; rm -f "$all_tasks_file"; return 1; fi
-    rm -f "$all_tasks_file"
-    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l); debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
-    if [ "$task_count" -eq 0 ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"; debug_log "ERROR" "Failed to create task files after splitting, although tasks were found." >&2; return 1; fi
 
-    # --- Execute Task Files in Parallel ---
+    # コマンドを分割しつつ、「load」付きファイルを記述順でload_targets.tmpに追記
+    awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" -v loadfile="$load_targets_file" '
+        function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+        {
+            task_num = int((NR-1)/lpt)
+            filename = sprintf("%s%03d.tmp", prefix, task_num)
+            print $0 >> filename
+            # 「download "xxx" ...」のload指定を抽出
+            line = trim($0)
+            if (match(line, /^download[ \t]+\"([^\"]+)\".*\"load\"/, arr)) {
+                print arr[1] >> loadfile
+            }
+            close(filename)
+        }
+    ' "$all_tasks_file"
+
+    rm -f "$all_tasks_file"
+    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
+    debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
+    if [ "$task_count" -eq 0 ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"
+        debug_log "ERROR" "Failed to create task files"
+        return 1
+    fi
+
+    # --- 並列実行 ---
     pids=""
     job_index=0
-    # Export variables needed by the 'download' function and its dependencies
-    debug_log "DEBUG" "Exporting variables for subshells: $exported_vars"
     export $exported_vars
-
     find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
         task_base_name=$(basename "$task_file" .tmp)
         stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
         stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
         debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
         (
-            # Subshell environment: Exported variables are available.
-            # Functions (like debug_log, get_commit_version) are NOT inherited in ash.
-            # The 'download' function called by 'eval' needs access to its dependencies.
-            # Simplest (though potentially slow) might be to re-source the main script if needed:
-            # . "$script_path" # Uncomment ONLY if 'download' or its deps need non-exported functions
-
             while IFS= read -r command_line || [ -n "$command_line" ]; do
                 case "$command_line" in "" | \#*) continue ;; esac
-                debug_log "DEBUG" "Executing command from task file '$task_file': $command_line"
-                # Execute the command line (e.g., download "file" "chmod" "load")
-                eval "$command_line"
+                # loadオプションはdownload_parallelでは無効化
+                eval "$(echo "$command_line" | sed 's/"load"//g')"
                 local cmd_status=$?
                 if [ "$cmd_status" -ne 0 ]; then
-                    # Assume the 'download' function itself logs detailed errors
                     debug_log "ERROR" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
-                    exit 1 # Exit subshell with failure status
+                    exit 1
                 fi
             done < "$task_file"
-            exit 0 # Exit subshell with success status
+            exit 0
         ) > "$stdout_log" 2> "$stderr_log" &
         pid=$!
         pids="$pids $pid"
         job_index=$((job_index + 1))
         debug_log "DEBUG" "Background PID $pid started for task file $task_file"
 
-        # --- Job Control Logic (Wait if max_parallel reached) ---
         if [ "$job_index" -ge "$max_parallel" ]; then
              debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
              first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
@@ -2292,7 +2316,7 @@ download_parallel() {
                  else
                      proc_status=$?
                      debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check logs." >&2
-                     touch "$fail_flag_file" # Create flag file on failure
+                     touch "$fail_flag_file"
                  fi
                  pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
                  job_index=$((job_index - 1))
@@ -2301,9 +2325,9 @@ download_parallel() {
                  sleep 1
              fi
         fi
-    done # End of while loop reading task files
+    done
 
-    # --- Wait for All Remaining Jobs ---
+    # --- 残ジョブ待機 ---
     debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
         case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
@@ -2312,26 +2336,35 @@ download_parallel() {
         else
             proc_status=$?
             debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check logs." >&2
-            touch "$fail_flag_file" # Create flag file on failure
+            touch "$fail_flag_file"
         fi
     done
 
-    # --- Check Failure Flag ---
+    # --- 失敗判定 ---
     if [ -f "$fail_flag_file" ]; then
         debug_log "DEBUG" "Failure flag file '$fail_flag_file' detected. Setting overall status to failure."
         overall_status=1
-        rm -f "$fail_flag_file" # Clean up flag file
+        rm -f "$fail_flag_file"
     fi
 
-    # --- Final Status ---
-    if [ $overall_status -eq 0 ]; then
-        debug_log "DEBUG" "All tasks successful. Task definitions kept in $tmp_dir, logs kept in $LOG_DIR."
-        # rm -rf "$tmp_dir" # Optionally clean up task definition files on success
+    # --- DL完了後、ロード対象を親シェルでsource ---
+    if [ -f "$load_targets_file" ]; then
+        debug_log "DEBUG" "Sourcing load targets from $load_targets_file"
+        while IFS= read -r load_file; do
+            [ -z "$load_file" ] && continue
+            if [ -f "${BASE_DIR}/$load_file" ]; then
+                debug_log "DEBUG" "Sourcing ${BASE_DIR}/$load_file"
+                . "${BASE_DIR}/$load_file"
+            else
+                debug_log "ERROR" "Load target file not found: ${BASE_DIR}/$load_file"
+                overall_status=1
+            fi
+        done < "$load_targets_file"
     else
-        debug_log "ERROR" "One or more tasks failed. Task definition files kept in $tmp_dir, logs kept in $LOG_DIR for inspection."
+        debug_log "DEBUG" "No load targets to source"
     fi
 
-    # --- Stop Spinner and Return Status ---
+    # --- 結果表示 ---
     if [ $overall_status -eq 0 ]; then
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
         stop_spinner "$success_message" "success"
