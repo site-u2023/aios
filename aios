@@ -3433,16 +3433,15 @@ check_update() {
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
 
-    # ダウンロード実行 - silent オプションを追加し、標準出力を /dev/null へリダイレクト
-    download "aios" "chmod" "silent" > /dev/null
+    # ダウンロード実行
+    download "aios" "chmod"
     MODE="full"
 
     # ファイルが存在する場合のみ移動してexec
     if [ -f "$BASE_DIR/$BIN_FILE" ]; then
-        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH" 2>/dev/null || debug_log "DEBUG" "check_update: Failed to move $BASE_DIR/$BIN_FILE to $BIN_PATH"
+        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
     fi
 
-    # exec 呼び出しは変更なし
     exec "$BIN_PATH" "$lang_code" $filtered_args
 }
 
