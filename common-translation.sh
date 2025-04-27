@@ -174,7 +174,7 @@ translate_with_google() {
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
             debug_log "DEBUG" "translate_with_google: Retrying in 1 second..."
-            sleep 1 # Use integer sleep
+            # sleep 1 # Use integer sleep
         fi
     done
 
