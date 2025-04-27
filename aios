@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.27-01-01"
+SCRIPT_VERSION="2025.04.27-01-02"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2684,10 +2684,114 @@ OK2_download_parallel() {
     fi
 }
 
+download() {
+    local file_name="$1"
+    shift
+
+    # デフォルト設定
+    local chmod_mode="false"
+    local force_mode="false"
+    local hidden_mode="false"
+    local quiet_mode="false"
+    local interpreter_name=""
+    # "load"は完全無視
+    # その他オプションが追加される場合、ここでパース
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            chmod)   chmod_mode="true" ;;
+            force)   force_mode="true" ;;
+            hidden)  hidden_mode="true" ;;
+            quiet)   quiet_mode="true" ;;
+            bash|python3|node|perl)
+                interpreter_name="$1"
+                ;;
+            # "load"などはここで無視
+            load)    ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    # ファイル名が空の場合は即失敗
+    if [ -z "$file_name" ]; then
+        debug_log "ERROR" "download: filename is empty"
+        return 1
+    fi
+
+    # バージョン管理
+    local remote_version_info remote_version auth_method local_version
+    remote_version_info=$(get_commit_version "$file_name" "$force_mode")
+    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+        debug_log "ERROR" "download: Failed to get remote version for $file_name"
+        return 1
+    fi
+    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+
+    # ローカルバージョン
+    local script_file="${CACHE_DIR}/script.ch"
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    [ -z "$local_version" ] && local_version=""
+
+    local file_path="${BASE_DIR}/${file_name}"
+
+    # 強制DL判定
+    if [ "$force_mode" = "true" ]; then
+        debug_log "INFO" "download: force mode enabled for $file_name"
+    fi
+
+    # バージョン一致判定（force未指定時のみスキップ）
+    if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
+        debug_log "INFO" "download: Local version up-to-date for $file_name ($local_version); skipping download."
+        # chmod要求ありなら実行
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$file_path"
+        fi
+        return 0
+    fi
+
+    # DL処理
+    local api_status
+    api_status=$(check_api_rate_limit)
+    debug_log "DEBUG" "download: API status: $api_status"
+
+    # DL実行
+    if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
+        debug_log "ERROR" "download: download_fetch_file failed for $file_name"
+        return 1
+    fi
+
+    # バージョンキャッシュ保存
+    if [ -n "$remote_version" ]; then
+        if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
+            debug_log "ERROR" "download: save_version_to_cache failed for $file_name"
+            return 1
+        fi
+    fi
+
+    # chmod
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$file_path"
+    fi
+
+    # サイレント/隠しモードでなければ、DL成功メッセージ（詳細は既存システムに合わせる）
+    if [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS") $file_name $remote_version $api_status"
+    fi
+
+    return 0
+}
+
 # Download function designed to be called by 'eval' from download_parallel
 # Handles version check, download, chmod, and load internally based on arguments.
 # Arguments: $1=filename, $2=chmod_flag ("chmod" or ""), $3=load_flag ("load" or ""), $4=force_refresh ("force" or "", optional)
-download() {
+OK3_download() {
     local file_name="$1"
     local chmod_flag="$2" # "chmod" or ""
     local load_flag="$3"  # "load" or ""
