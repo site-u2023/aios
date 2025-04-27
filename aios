@@ -2044,7 +2044,7 @@ save_version_to_cache() {
         lock_acquired=1
         debug_log "DEBUG" "save_version_to_cache: Lock acquired: $lock_dir"
     else
-        debug_log "WARN" "save_version_to_cache: Could not acquire lock '$lock_dir', another process might be updating. Skipping cache update for '$file_name'."
+        debug_log "DEBUG" "save_version_to_cache: Could not acquire lock '$lock_dir', another process might be updating. Skipping cache update for '$file_name'."
         return 0 # ロック失敗は致命的エラーではないため成功として扱う (更新スキップ)
     fi
 
@@ -2062,7 +2062,7 @@ save_version_to_cache() {
             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully filtered '$script_file' to '$tmp_file' (grep status: $grep_status)."
         else
             # ステータス 2 以上は grep コマンド自体のエラー
-            debug_log "ERROR" "save_version_to_cache [Lock acquired]: grep command failed with status $grep_status for '$script_file'."
+            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: grep command failed with status $grep_status for '$script_file'."
             return_status=1 # 失敗ステータスを設定
         fi
         # --- ▲▲▲ grep -v ステータスチェック修正 ここまで ▲▲▲ ---
@@ -2075,7 +2075,7 @@ save_version_to_cache() {
                 debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully moved '$tmp_file' to '$script_file'."
             else
                 local mv_status=$?
-                debug_log "ERROR" "save_version_to_cache [Lock acquired]: mv command failed with status $mv_status. Failed to update '$script_file'."
+                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: mv command failed with status $mv_status. Failed to update '$script_file'."
                 return_status=1 # 失敗ステータスを設定
                 # mv失敗時は一時ファイルが残る可能性があるため削除
                 rm -f "$tmp_file" 2>/dev/null
@@ -2091,7 +2091,7 @@ save_version_to_cache() {
              debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully created '$script_file' with initial version."
         else
              local echo_status=$?
-             debug_log "ERROR" "save_version_to_cache [Lock acquired]: echo command failed with status $echo_status. Failed to create '$script_file'."
+             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: echo command failed with status $echo_status. Failed to create '$script_file'."
              return_status=1 # 失敗ステータスを設定
         fi
     fi
@@ -2101,89 +2101,7 @@ save_version_to_cache() {
         if rmdir "$lock_dir"; then
             debug_log "DEBUG" "save_version_to_cache: Lock released: $lock_dir"
         else
-            debug_log "ERROR" "save_version_to_cache: Failed to release lock '$lock_dir'. Manual cleanup might be needed."
-            # ロック解除失敗は関数の成否には影響させない
-        fi
-    fi
-
-    return $return_status
-}
-
-OK_save_version_to_cache() {
-    local file_name="$1"
-    local version="$2"
-    local script_file="$3"
-    local tmp_file="${script_file}.tmp.$$" # プロセス固有の一時ファイル名
-    local lock_dir="${script_file}.lock"  # ロック用ディレクトリパス
-    local lock_acquired=0                 # ロック取得フラグ (0: 未取得, 1: 取得済)
-
-    debug_log "DEBUG" "save_version_to_cache: Called for file='$file_name', version='$version', script_file='$script_file', tmp_file='$tmp_file', lock_dir='$lock_dir'"
-
-    if [ -z "$version" ]; then
-        debug_log "DEBUG" "save_version_to_cache: Received empty version for file '$file_name'. Aborting cache save."
-        return 1 # バージョンが空なら失敗
-    fi
-
-    # --- ロック取得試行 ---
-    if mkdir "$lock_dir" 2>/dev/null; then
-        lock_acquired=1
-        debug_log "DEBUG" "save_version_to_cache: Lock acquired: $lock_dir"
-    else
-        debug_log "WARN" "save_version_to_cache: Could not acquire lock '$lock_dir', another process might be updating. Skipping cache update for '$file_name'."
-        return 0 # ロック失敗は致命的エラーではないため成功として扱う (更新スキップ)
-    fi
-
-    # --- クリティカルセクション (ロック取得時のみ実行) ---
-    local return_status=0 # このセクション内での処理ステータス
-
-    # script_file が存在する場合の処理
-    if [ -f "$script_file" ]; then
-        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' exists. Filtering existing entry for '$file_name'."
-        if grep -v "^${file_name}=" "$script_file" > "$tmp_file"; then
-            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully filtered '$script_file' to '$tmp_file'."
-        else
-            local grep_status=$?
-            debug_log "ERROR" "save_version_to_cache [Lock acquired]: grep command failed with status $grep_status for '$script_file'."
-            return_status=1 # 失敗ステータスを設定
-        fi
-
-        if [ "$return_status" -eq 0 ]; then
-            debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Appending new version '$version' for '$file_name' to '$tmp_file'."
-            echo "${file_name}=${version}" >> "$tmp_file"
-
-            # ▼▼▼ 注意: mv 直前のデバッグ用 ls は削除しました ▼▼▼
-            # debug_log "DEBUG" "save_version_to_cache: Checking existence..."
-            # ... (削除された ls コマンド) ...
-
-            # mv の実行と結果確認
-            if mv "$tmp_file" "$script_file"; then
-                debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully moved '$tmp_file' to '$script_file'."
-            else
-                local mv_status=$?
-                debug_log "ERROR" "save_version_to_cache [Lock acquired]: mv command failed with status $mv_status. Failed to update '$script_file'."
-                # mv 失敗時も一時ファイルは削除しない
-                return_status=1 # 失敗ステータスを設定
-            fi
-        fi
-    else
-        # script_file が存在しない場合の処理
-        debug_log "DEBUG" "save_version_to_cache [Lock acquired]: File '$script_file' does not exist. Creating new file."
-        if echo "${file_name}=${version}" > "$script_file"; then
-             debug_log "DEBUG" "save_version_to_cache [Lock acquired]: Successfully created '$script_file' with initial version."
-        else
-             local echo_status=$?
-             debug_log "ERROR" "save_version_to_cache [Lock acquired]: echo command failed with status $echo_status. Failed to create '$script_file'."
-             return_status=1 # 失敗ステータスを設定
-        fi
-    fi
-
-    # --- ロック解放 ---
-    if [ "$lock_acquired" -eq 1 ]; then
-        if rmdir "$lock_dir"; then
-            debug_log "DEBUG" "save_version_to_cache: Lock released: $lock_dir"
-        else
-            # 通常ここには来ないはずだが、念のため
-            debug_log "ERROR" "save_version_to_cache: Failed to release lock '$lock_dir'. Manual cleanup might be needed."
+            debug_log "DEBUG" "save_version_to_cache: Failed to release lock '$lock_dir'. Manual cleanup might be needed."
             # ロック解除失敗は関数の成否には影響させない
         fi
     fi
@@ -2213,24 +2131,24 @@ download_parallel() {
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
     case "$max_parallel" in
-        *[!0-9]* | "") max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;;
-        *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;;
+        *[!0-9]* | "") max_parallel=4; debug_log "DEBUG" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;;
+        *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "DEBUG" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;;
     esac
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "ERROR" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi
-    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "ERROR" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
+    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi
+    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
     debug_log "DEBUG" "Using task definition directory: $tmp_dir"
     debug_log "DEBUG" "Using log directory: $LOG_DIR"
     rm -f "$fail_flag_file" "$load_targets_file" 2>/dev/null
 
     # --- スピナー ---
-    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')"
+    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files')"
     start_spinner "$spinner_message"
 
     # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "ERROR" "Script path '$script_path' is not found"; return 1; fi
+    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
     # download_files()の各行を抜き出す
     if ! awk '
         BEGIN { in_func=0; }
@@ -2239,18 +2157,18 @@ download_parallel() {
         in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
     ' "$script_path" > "$all_tasks_file"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to extract download_files() commands.')" "failure"
-        debug_log "ERROR" "Failed to extract download_files() commands"
+        debug_log "DEBUG" "Failed to extract download_files() commands"
         return 1
     fi
     if ! [ -s "$all_tasks_file" ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"
-        debug_log "INFO" "No executable tasks found in download_files function"
+        debug_log "DEBUG" "No executable tasks found in download_files function"
         return 0
     fi
 
     # --- コマンド分割＆ロード対象記録（ここを改修） ---
     total_lines=$(wc -l < "$all_tasks_file")
-    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success" && debug_log "INFO" "download_files() is empty" && return 0
+    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
     rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
@@ -2290,7 +2208,7 @@ download_parallel() {
     debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
     if [ "$task_count" -eq 0 ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"
-        debug_log "ERROR" "Failed to create task files"
+        debug_log "DEBUG" "Failed to create task files"
         return 1
     fi
 
@@ -2310,7 +2228,7 @@ download_parallel() {
                 eval "$(echo "$command_line" | sed 's/"load"//g')"
                 local cmd_status=$?
                 if [ "$cmd_status" -ne 0 ]; then
-                    debug_log "ERROR" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
+                    debug_log "DEBUG" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
                     exit 1
                 fi
             done < "$task_file"
@@ -2329,13 +2247,13 @@ download_parallel() {
                      debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
                  else
                      proc_status=$?
-                     debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check logs." >&2
+                     debug_log "DEBUG" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check logs." >&2
                      touch "$fail_flag_file"
                  fi
                  pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
                  job_index=$((job_index - 1))
              else
-                 debug_log "WARN" "Could not determine first PID to wait for."
+                 debug_log "DEBUG" "Could not determine first PID to wait for."
                  sleep 1
              fi
         fi
@@ -2349,7 +2267,7 @@ download_parallel() {
             debug_log "DEBUG" "PID $pid finished successfully."
         else
             proc_status=$?
-            debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check logs." >&2
+            debug_log "DEBUG" "Background task (PID $pid) failed with status $proc_status. Check logs." >&2
             touch "$fail_flag_file"
         fi
     done
@@ -2370,7 +2288,7 @@ download_parallel() {
                 debug_log "DEBUG" "Sourcing ${BASE_DIR}/$load_file"
                 . "${BASE_DIR}/$load_file"
             else
-                debug_log "ERROR" "Load target file not found: ${BASE_DIR}/$load_file"
+                debug_log "DEBUG" "Load target file not found: ${BASE_DIR}/$load_file"
                 overall_status=1
             fi
         done < "$load_targets_file"
@@ -2379,314 +2297,6 @@ download_parallel() {
     fi
 
     # --- 結果表示 ---
-    if [ $overall_status -eq 0 ]; then
-        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
-        stop_spinner "$success_message" "success"
-        return 0
-    else
-        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "Errors occurred during parallel download. Check logs in $LOG_DIR and task files in $tmp_dir")"
-        stop_spinner "$failure_message" "failure"
-        return 1
-    fi
-}
-
-# Parallel download function using eval based on user-provided structure
-# Assumes the 'download' function called via eval handles chmod/load internally.
-OK3_download_parallel() {
-    local total_lines
-    local lines_per_task
-    local task_count=0
-    local max_parallel
-    local pids=""
-    local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${DL_DIR}/dl_tmp" # Temporary directory for task definition files
-    local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
-    local task_file_prefix="${tmp_dir}/dl_task_"
-    local pid job_index=0 wait_pid proc_status task_file
-    local success_message failure_message spinner_message
-    local script_path="$0" # Store the script path
-    local task_base_name # For log file naming
-    local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_" # Prefix for logs in LOG_DIR
-    local fail_flag_file="${tmp_dir}/dl_failed_flag"
-    # Variables to export for the subshell's 'download' function and its dependencies
-    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE DL_URL_BASE CHECKSUM_FILE GITHUB_TOKEN USE_API_TOKEN QUIET_MODE MAX_PARALLEL_TASKS MAX_RETRIES RETRY_DELAY CONNECT_TIMEOUT MAX_TIME" # Add others if needed
-
-    # --- Configuration and Preparation ---
-    max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
-    case "$max_parallel" in *[!0-9]* | "") max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;; *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;; esac
-    debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
-
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "ERROR" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Setup failed.')" "failure"; return 1; fi; fi
-    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "ERROR" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
-    debug_log "DEBUG" "Using task definition directory: $tmp_dir"
-    debug_log "DEBUG" "Using log directory: $LOG_DIR"
-    rm -f "$fail_flag_file" 2>/dev/null
-
-    # --- Start Spinner ---
-    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')"
-    start_spinner "$spinner_message"
-
-    # --- Extract Commands from download_files() ---
-    debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "ERROR" "Script path '$script_path' is not a valid file." >&2; return 1; fi
-    # awk script extracts non-empty, non-comment lines from download_files()
-    if ! cat "$script_path" | awk ' BEGIN { in_func=0 } /^download_files\(\) *\{/ { in_func=1; next } /^}/ { if (in_func) { in_func=0 } } in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print } ' > "$all_tasks_file"; then cat_awk_status=$?; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed during script parsing.')" "failure"; debug_log "ERROR" "cat | awk command failed with status $cat_awk_status while parsing '$script_path'." >&2; return 1; fi
-    if ! [ -s "$all_tasks_file" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"; debug_log "INFO" "No executable tasks found in download_files function in '$script_path'." >&2; rm -f "$all_tasks_file"; return 0; fi
-
-    # --- Calculate lines and generate task files ---
-    total_lines=$(wc -l < "$all_tasks_file"); if [ "$total_lines" -eq 0 ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success"; debug_log "INFO" "download_files function is empty after parsing." >&2; rm -f "$all_tasks_file"; return 0; fi
-    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
-    debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
-    rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
-    if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{ task_num = int((NR-1)/lpt); filename = sprintf("%s%03d.tmp", prefix, task_num); print $0 >> filename; close(filename) }' "$all_tasks_file"; then split_status=$?; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks into files.')" "failure"; debug_log "ERROR" "awk splitting command failed with status $split_status." >&2; rm -f "$all_tasks_file"; return 1; fi
-    rm -f "$all_tasks_file"
-    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l); debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
-    if [ "$task_count" -eq 0 ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"; debug_log "ERROR" "Failed to create task files after splitting, although tasks were found." >&2; return 1; fi
-
-    # --- Execute Task Files in Parallel ---
-    pids=""
-    job_index=0
-    # Export variables needed by the 'download' function and its dependencies
-    debug_log "DEBUG" "Exporting variables for subshells: $exported_vars"
-    export $exported_vars
-
-    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
-        task_base_name=$(basename "$task_file" .tmp)
-        stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
-        stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
-        debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
-        (
-            # Subshell environment: Exported variables are available.
-            # Functions (like debug_log, get_commit_version) are NOT inherited in ash.
-            # The 'download' function called by 'eval' needs access to its dependencies.
-            # Simplest (though potentially slow) might be to re-source the main script if needed:
-            # . "$script_path" # Uncomment ONLY if 'download' or its deps need non-exported functions
-
-            while IFS= read -r command_line || [ -n "$command_line" ]; do
-                case "$command_line" in "" | \#*) continue ;; esac
-                debug_log "DEBUG" "Executing command from task file '$task_file': $command_line"
-                # Execute the command line (e.g., download "file" "chmod" "load")
-                eval "$command_line"
-                local cmd_status=$?
-                if [ "$cmd_status" -ne 0 ]; then
-                    # Assume the 'download' function itself logs detailed errors
-                    debug_log "ERROR" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
-                    exit 1 # Exit subshell with failure status
-                fi
-            done < "$task_file"
-            exit 0 # Exit subshell with success status
-        ) > "$stdout_log" 2> "$stderr_log" &
-        pid=$!
-        pids="$pids $pid"
-        job_index=$((job_index + 1))
-        debug_log "DEBUG" "Background PID $pid started for task file $task_file"
-
-        # --- Job Control Logic (Wait if max_parallel reached) ---
-        if [ "$job_index" -ge "$max_parallel" ]; then
-             debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
-             first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
-             if [ -n "$first_pid_in_batch" ]; then
-                 if wait "$first_pid_in_batch"; then
-                     debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
-                 else
-                     proc_status=$?
-                     debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check logs." >&2
-                     touch "$fail_flag_file" # Create flag file on failure
-                 fi
-                 pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
-                 job_index=$((job_index - 1))
-             else
-                 debug_log "WARN" "Could not determine first PID to wait for."
-                 sleep 1
-             fi
-        fi
-    done # End of while loop reading task files
-
-    # --- Wait for All Remaining Jobs ---
-    debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
-    for pid in $pids; do
-        case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
-        if wait "$pid"; then
-            debug_log "DEBUG" "PID $pid finished successfully."
-        else
-            proc_status=$?
-            debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check logs." >&2
-            touch "$fail_flag_file" # Create flag file on failure
-        fi
-    done
-
-    # --- Check Failure Flag ---
-    if [ -f "$fail_flag_file" ]; then
-        debug_log "DEBUG" "Failure flag file '$fail_flag_file' detected. Setting overall status to failure."
-        overall_status=1
-        rm -f "$fail_flag_file" # Clean up flag file
-    fi
-
-    # --- Final Status ---
-    if [ $overall_status -eq 0 ]; then
-        debug_log "DEBUG" "All tasks successful. Task definitions kept in $tmp_dir, logs kept in $LOG_DIR."
-        # rm -rf "$tmp_dir" # Optionally clean up task definition files on success
-    else
-        debug_log "ERROR" "One or more tasks failed. Task definition files kept in $tmp_dir, logs kept in $LOG_DIR for inspection."
-    fi
-
-    # --- Stop Spinner and Return Status ---
-    if [ $overall_status -eq 0 ]; then
-        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
-        stop_spinner "$success_message" "success"
-        return 0
-    else
-        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "Errors occurred during parallel download. Check logs in $LOG_DIR and task files in $tmp_dir")"
-        stop_spinner "$failure_message" "failure"
-        return 1
-    fi
-}
-
-# download_parallel 関数を修正
-# 変更点:
-# 1. サブシェル内のエラー判定を修正: eval の終了ステータスを明示的に確認
-# 2. 最終ステータス反映方法を変更: パイプライン問題を回避するため一時フラグファイルを使用
-# 3. 関数終了時にフラグファイルを削除
-# (expr 警告修正、成功時クリーンアップ削除は前回適用済み)
-OK2_download_parallel() {
-    local total_lines
-    local lines_per_task
-    local task_count=0
-    local max_parallel
-    local pids=""
-    local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${DL_DIR}/dl_tmp" # Temporary directory for task *definition* files inside DL_DIR
-    local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
-    local task_file_prefix="${tmp_dir}/dl_task_"
-    local pid job_index=0 wait_pid proc_status task_file
-    local success_message failure_message spinner_message
-    local script_path="$0" # Store the script path
-    local task_base_name # For log file naming
-    local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_" # Prefix for logs in LOG_DIR
-    # ▼▼▼ 変更点: 失敗フラグファイル用の変数を追加 ▼▼▼
-    local fail_flag_file="${tmp_dir}/dl_failed_flag"
-    # ▲▲▲ 変更点ここまで ▲▲▲
-
-    # --- Configuration and Preparation ---
-    max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
-    case "$max_parallel" in
-        *[!0-9]* | "") max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS. Using default: $max_parallel" >&2 ;;
-        *) if [ "$max_parallel" -le 0 ]; then max_parallel=4; debug_log "WARN" "Invalid MAX_PARALLEL_TASKS (must be > 0). Using default: $max_parallel" >&2; fi ;;
-    esac
-    debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
-
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "ERROR" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Setup failed.')" "failure"; return 1; fi; fi
-    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "ERROR" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
-    debug_log "DEBUG" "Using task definition directory: $tmp_dir"
-    debug_log "DEBUG" "Using log directory: $LOG_DIR"
-    # ▼▼▼ 変更点: ループ前に失敗フラグファイルを削除 ▼▼▼
-    rm -f "$fail_flag_file" 2>/dev/null
-    # ▲▲▲ 変更点ここまで ▲▲▲
-
-    # --- Start Spinner ---
-    spinner_message="$(get_message 'DOWNLOAD_PARALLEL_START' 'Downloading essential files...')"
-    start_spinner "$spinner_message"
-
-    # --- Extract Commands from download_files() ---
-    debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Script file not found for parsing.')" "failure"; debug_log "ERROR" "Script path '$script_path' is not a valid file." >&2; return 1; fi
-    if ! cat "$script_path" | awk ' BEGIN { in_func=0 } /^download_files\(\) *\{/ { in_func=1; next } /^}/ { if (in_func) { in_func=0 } } in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print } ' > "$all_tasks_file"; then cat_awk_status=$?; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed during script parsing.')" "failure"; debug_log "ERROR" "cat | awk command failed with status $cat_awk_status while parsing '$script_path'." >&2; return 1; fi
-    if ! [ -s "$all_tasks_file" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks found.')" "success"; debug_log "INFO" "No executable tasks found in download_files function in '$script_path'." >&2; rm -f "$all_tasks_file"; return 0; fi
-
-    # --- Calculate lines and generate task files ---
-    total_lines=$(wc -l < "$all_tasks_file"); if [ "$total_lines" -eq 0 ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'No download tasks to process.')" "success"; debug_log "INFO" "download_files function is empty after parsing." >&2; rm -f "$all_tasks_file"; return 0; fi
-    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
-    debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Lines per task file: $lines_per_task"
-    rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
-    if ! awk -v lpt="$lines_per_task" -v prefix="$task_file_prefix" '{ task_num = int((NR-1)/lpt); filename = sprintf("%s%03d.tmp", prefix, task_num); print $0 >> filename; close(filename) }' "$all_tasks_file"; then split_status=$?; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks into files.')" "failure"; debug_log "ERROR" "awk splitting command failed with status $split_status." >&2; rm -f "$all_tasks_file"; return 1; fi
-    rm -f "$all_tasks_file"
-    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l); debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
-    if [ "$task_count" -eq 0 ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'Error: Failed to split tasks (no files created).')" "failure"; debug_log "ERROR" "Failed to create task files after splitting, although tasks were found." >&2; return 1; fi
-
-    # --- Execute Task Files in Parallel ---
-    pids=""
-    job_index=0
-    # overall_status=0 # Reset status (already done at start)
-    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
-        task_base_name=$(basename "$task_file" .tmp)
-        stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
-        stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
-        debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
-        (
-            while IFS= read -r command_line || [ -n "$command_line" ]; do
-                case "$command_line" in "" | \#*) continue ;; esac
-                debug_log "DEBUG" "Executing command from task file '$task_file': $command_line"
-                # ▼▼▼ 変更点: eval の終了ステータスを明示的に確認 ▼▼▼
-                eval "$command_line"
-                local cmd_status=$?
-                if [ "$cmd_status" -ne 0 ]; then
-                    debug_log "ERROR" "Command failed with status $cmd_status in task file '$task_file': $command_line" >&2
-                    exit 1 # 失敗ステータスでサブシェルを終了
-                fi
-                # ▲▲▲ 変更点ここまで ▲▲▲
-            done < "$task_file"
-            exit 0 # すべて成功したら 0 で終了
-        ) > "$stdout_log" 2> "$stderr_log" &
-        pid=$!
-        pids="$pids $pid"
-        job_index=$((job_index + 1))
-        debug_log "DEBUG" "Background PID $pid started for task file $task_file"
-
-        if [ "$job_index" -ge "$max_parallel" ]; then
-             debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
-             first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
-             if [ -n "$first_pid_in_batch" ]; then
-                 if wait "$first_pid_in_batch"; then
-                     debug_log "DEBUG" "PID $first_pid_in_batch finished successfully. Continuing..."
-                 else
-                     proc_status=$?
-                     debug_log "ERROR" "Background task (PID $first_pid_in_batch) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
-                     # ▼▼▼ 変更点: overall_status=1 の代わりにフラグファイル作成 ▼▼▼
-                     touch "$fail_flag_file"
-                     # ▲▲▲ 変更点ここまで ▲▲▲
-                 fi
-                 pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
-                 job_index=$((job_index - 1))
-             else
-                 debug_log "WARN" "Could not determine first PID to wait for."
-                 sleep 1
-             fi
-        fi
-    done # End of while loop reading task files
-
-    # --- Wait for All Remaining Jobs ---
-    debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
-    for pid in $pids; do
-        case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
-        if wait "$pid"; then
-            debug_log "DEBUG" "PID $pid finished successfully."
-        else
-            proc_status=$?
-            debug_log "ERROR" "Background task (PID $pid) failed with status $proc_status. Check corresponding stderr log in $LOG_DIR for details." >&2
-            # ▼▼▼ 変更点: overall_status=1 の代わりにフラグファイル作成 ▼▼▼
-            touch "$fail_flag_file"
-            # ▲▲▲ 変更点ここまで ▲▲▲
-        fi
-    done
-
-    # ▼▼▼ 変更点: フラグファイルの存在を確認して overall_status を設定 ▼▼▼
-    if [ -f "$fail_flag_file" ]; then
-        debug_log "DEBUG" "Failure flag file '$fail_flag_file' detected. Setting overall status to failure."
-        overall_status=1
-        rm -f "$fail_flag_file" # 確認後、フラグファイルを削除
-    fi
-    # ▲▲▲ 変更点ここまで ▲▲▲
-
-    # --- Final Status (Cleanup removed previously) ---
-    if [ $overall_status -eq 0 ]; then
-        debug_log "DEBUG" "All tasks successful. Task definitions kept in $tmp_dir, logs kept in $LOG_DIR."
-    else
-        debug_log "ERROR" "One or more tasks failed. Task definition files kept in $tmp_dir, logs kept in $LOG_DIR for inspection."
-        debug_log "ERROR" "Task definition files are in $tmp_dir"
-        debug_log "ERROR" "Task logs are in $LOG_DIR"
-    fi
-
-    # 最終的なステータス表示
     if [ $overall_status -eq 0 ]; then
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' 'Essential files downloaded successfully.')"
         stop_spinner "$success_message" "success"
@@ -2732,7 +2342,7 @@ download() {
 
     # ファイル名が空の場合は即失敗
     if [ -z "$file_name" ]; then
-        debug_log "ERROR" "download: filename is empty"
+        debug_log "DEBUG" "download: filename is empty"
         return 1
     fi
 
@@ -2740,7 +2350,7 @@ download() {
     local remote_version_info remote_version auth_method local_version
     remote_version_info=$(get_commit_version "$file_name" "$force_mode")
     if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "ERROR" "download: Failed to get remote version for $file_name"
+        debug_log "DEBUG" "download: Failed to get remote version for $file_name"
         return 1
     fi
     remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
@@ -2757,12 +2367,12 @@ download() {
 
     # 強制DL判定
     if [ "$force_mode" = "true" ]; then
-        debug_log "INFO" "download: force mode enabled for $file_name"
+        debug_log "DEBUG" "download: force mode enabled for $file_name"
     fi
 
     # バージョン一致判定（force未指定時のみスキップ）
     if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
-        debug_log "INFO" "download: Local version up-to-date for $file_name ($local_version); skipping download."
+        debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
         # chmod要求ありなら実行
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$file_path"
@@ -2777,14 +2387,14 @@ download() {
 
     # DL実行
     if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
-        debug_log "ERROR" "download: download_fetch_file failed for $file_name"
+        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
         return 1
     fi
 
     # バージョンキャッシュ保存
     if [ -n "$remote_version" ]; then
         if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
-            debug_log "ERROR" "download: save_version_to_cache failed for $file_name"
+            debug_log "DEBUG" "download: save_version_to_cache failed for $file_name"
             return 1
         fi
     fi
@@ -2799,487 +2409,6 @@ download() {
         printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS") $file_name $remote_version $api_status"
     fi
 
-    return 0
-}
-
-# Download function designed to be called by 'eval' from download_parallel
-# Handles version check, download, chmod, and load internally based on arguments.
-# Arguments: $1=filename, $2=chmod_flag ("chmod" or ""), $3=load_flag ("load" or ""), $4=force_refresh ("force" or "", optional)
-OK3_download() {
-    local file_name="$1"
-    local chmod_flag="$2" # "chmod" or ""
-    local load_flag="$3"  # "load" or ""
-    local force_refresh="${4:-}" # "force" or "" (optional)
-
-    # --- Function Dependencies & Variable Initialization ---
-    # Ensure dependent functions (debug_log, get_commit_version, etc.) are accessible.
-    # This might require sourcing the main script if running in a raw subshell context.
-    # Example: Check if a key function exists, if not, try sourcing.
-    # if ! command -v get_commit_version >/dev/null 2>&1; then
-    #     if [ -n "$script_path" ] && [ -f "$script_path" ]; then
-    #         debug_log "WARN" "download: Sourcing '$script_path' in subshell to find dependencies." >&2 # Use >&2 if debug_log itself isn't available yet
-    #         . "$script_path"
-    #     else
-    #         echo "ERROR: download: Cannot find dependencies and script_path is invalid." >&2
-    #         return 1
-    #     fi
-    # fi
-
-    local remote_version_info remote_version local_version download_url file_path save_path
-    local dl_method skip_cache_flag auth_method_used script_file api_status_msg
-    local get_version_status save_cache_status chmod_status load_status
-
-    # Use global settings (exported by download_parallel) or defaults
-    dl_method="${DOWNLOAD_METHOD:-api}"
-    skip_cache_flag="${SKIP_CACHE:-false}"
-    # Note: DEBUG_MODE, BASE_DIR, CACHE_DIR etc. are expected to be exported
-
-    debug_log "DEBUG" "download: Starting for '$file_name', chmod='$chmod_flag', load='$load_flag', force='$force_refresh', method='$dl_method', skip_cache='$skip_cache_flag'"
-
-    # 1. Get Remote Version Info
-    remote_version_info=$(get_commit_version "$file_name" "$force_refresh" "$dl_method" "$skip_cache_flag")
-    get_version_status=$?
-    if [ "$get_version_status" -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "ERROR" "download: Failed to get remote version for '$file_name'. Status: $get_version_status, VersionInfo: '$remote_version_info'"
-        return 1
-    fi
-    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    auth_method_used=$(echo "$remote_version_info" | cut -d' ' -f2)
-
-    # 2. Get Local Version Info
-    script_file="${CACHE_DIR}/script.ch"
-    local_version=""
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version=""
-    file_path="${BASE_DIR}/${file_name}" # Use BASE_DIR
-
-    debug_log "DEBUG" "download: Remote version: $file_name - $remote_version (Auth: $auth_method_used)"
-    debug_log "DEBUG" "download: Local version: $file_name - $local_version"
-
-    # 3. Check if Download is Needed
-    if [ "$remote_version" = "$local_version" ] && [ "$force_refresh" != "force" ] && [ -f "$file_path" ]; then
-        debug_log "INFO" "download: Local version of '$file_name' is up-to-date ($local_version). Skipping download."
-        # Still need to handle chmod/load for existing up-to-date files if requested
-        # Apply chmod if requested and not already executable (optional check)
-        if [ "$chmod_flag" = "chmod" ]; then
-            if [ ! -x "$file_path" ]; then # Check if not already executable
-                 if chmod +x "$file_path"; then
-                     debug_log "DEBUG" "download: Applied chmod +x to existing up-to-date file: $file_name"
-                 else
-                     chmod_status=$?
-                     debug_log "ERROR" "download: Failed to apply chmod +x to existing file '$file_path'. Status: $chmod_status"
-                     return 1
-                 fi
-             else
-                  debug_log "DEBUG" "download: Existing up-to-date file '$file_name' is already executable."
-             fi
-        fi
-        # Load if requested
-        if [ "$load_flag" = "load" ]; then
-            debug_log "DEBUG" "download: Loading existing up-to-date file: $file_path"
-            if . "$file_path"; then
-                debug_log "DEBUG" "download: Successfully loaded existing file '$file_path'."
-            else
-                load_status=$?
-                debug_log "ERROR" "download: Failed to load existing file '$file_path'. Status: $load_status"
-                return 1
-            fi
-        fi
-        return 0 # Return success if up-to-date and chmod/load (if requested) succeeded
-    fi
-
-    # 4. Download File
-    api_status_msg=$(check_api_rate_limit)
-    debug_log "DEBUG" "download: API Status before fetch: $api_status_msg (Version check auth: $auth_method_used)"
-    save_path="$file_path"
-    if ! download_fetch_file "$file_name" "$save_path"; then
-        debug_log "ERROR" "download: download_fetch_file failed for '$file_name'."
-        return 1
-    fi
-
-    # 5. Post-Download Actions (Chmod, Save Cache, Load)
-    if [ "$chmod_flag" = "chmod" ]; then
-        if chmod +x "$save_path"; then
-            debug_log "DEBUG" "download: chmod +x applied to downloaded $file_name"
-        else
-            chmod_status=$?
-            debug_log "ERROR" "download: Failed to apply chmod +x to '$save_path'. Status: $chmod_status"
-            return 1
-        fi
-    fi
-
-    if [ -n "$remote_version" ]; then
-        save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method_used"
-        save_cache_status=$?
-        if [ "$save_cache_status" -ne 0 ]; then
-             debug_log "ERROR" "download: save_version_to_cache failed for '$file_name' with status $save_cache_status."
-             # return 1 # Decide if this is fatal
-        else
-             debug_log "DEBUG" "download: Version saved to cache (or skipped) for '$file_name'."
-        fi
-    fi
-
-    if [ "$load_flag" = "load" ]; then
-        debug_log "DEBUG" "download: Loading downloaded file: $save_path"
-        if . "$save_path"; then
-             debug_log "DEBUG" "download: Successfully loaded downloaded file '$save_path'."
-        else
-             load_status=$?
-             debug_log "ERROR" "download: Failed to load downloaded file '$save_path'. Status: $load_status"
-             return 1
-        fi
-    fi
-
-    debug_log "INFO" "download: Processing completed successfully for '$file_name'."
-    return 0
-}
-
-# download 関数 (save_version_to_cache 呼び出し修正)
-# 変更点:
-# 1. save_version_to_cache の呼び出し時に渡していた不要な4番目の引数 ($auth_method_used) を削除。
-# 2. save_version_to_cache の終了ステータスハンドリングを修正。
-#    - 終了ステータスが 0 (成功またはスキップ) の場合はデバッグログのみ出力。
-#    - 終了ステータスが 1 (内部エラー) の場合はエラーログを出力し、return 1 する。
-OK2_download() {
-    local file_name="$1"
-    local chmod_flag="$2" # "chmod" or ""
-    local load_flag="$3"  # "load" or ""
-    local force_refresh="${4:-}" # "force" or "" (optional, used by get_commit_version)
-
-    local remote_version_info remote_version local_version download_url file_path save_path
-    local dl_method skip_cache_flag auth_method_used script_file api_status_msg
-
-    # Use global settings or defaults
-    dl_method="${DOWNLOAD_METHOD:-api}"
-    skip_cache_flag="${SKIP_CACHE:-false}"
-
-    debug_log "DEBUG" "download: Starting for '$file_name', chmod='$chmod_flag', load='$load_flag', force='$force_refresh', method='$dl_method', skip_cache='$skip_cache_flag'"
-
-    # 1. Get Remote Version Info
-    remote_version_info=$(get_commit_version "$file_name" "$force_refresh" "$dl_method" "$skip_cache_flag")
-    local get_version_status=$?
-    if [ "$get_version_status" -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "ERROR" "download: Failed to get remote version for '$file_name'. Status: $get_version_status, VersionInfo: '$remote_version_info'"
-        return 1 # Exit if version check fails
-    fi
-    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    auth_method_used=$(echo "$remote_version_info" | cut -d' ' -f2) # Store auth method used by get_commit_version
-
-    # Get Local Version Info
-    script_file="${CACHE_DIR}/script.ch"
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version="" # Using empty string as default
-
-    file_path="${BASE_DIR}/${file_name}"
-
-    debug_log "DEBUG" "download: Remote version: $file_name - $remote_version (Auth: $auth_method_used)"
-    debug_log "DEBUG" "download: Local version: $file_name - $local_version"
-
-    # 2. Check if Download is Needed
-    if [ "$remote_version" = "$local_version" ] && [ "$force_refresh" != "force" ] && [ -f "$file_path" ]; then
-        debug_log "INFO" "download: Local version of '$file_name' is up-to-date ($local_version). Skipping download."
-        if [ "$load_flag" = "load" ]; then
-            if [ -f "$file_path" ]; then
-                debug_log "DEBUG" "download: Loading existing up-to-date file: $file_path"
-                if . "$file_path"; then
-                    debug_log "DEBUG" "download: Successfully loaded existing file '$file_path'."
-                else
-                    local load_status=$?
-                    debug_log "ERROR" "download: Failed to load existing file '$file_path'. Status: $load_status"
-                    return 1
-                fi
-            else
-                debug_log "WARN" "download: File '$file_path' not found for loading despite version match."
-                return 1
-            fi
-        fi
-        return 0
-    fi
-
-    # 3. Download File
-    api_status_msg=$(check_api_rate_limit)
-    debug_log "DEBUG" "download: API Status before fetch: $api_status_msg (Version check auth: $auth_method_used)"
-
-    save_path="$file_path"
-    if ! download_fetch_file "$file_name" "$save_path"; then
-        debug_log "ERROR" "download: download_fetch_file failed for '$file_name'."
-        return 1
-    fi
-
-    # 4. Post-Download Actions
-    if [ "$chmod_flag" = "chmod" ]; then
-        if chmod +x "$save_path"; then
-            debug_log "DEBUG" "download: chmod +x applied to $file_name"
-        else
-            local chmod_status=$?
-            debug_log "ERROR" "download: Failed to apply chmod +x to '$save_path'. Status: $chmod_status"
-            return 1
-        fi
-    fi
-
-    # Save version only if remote_version is not empty
-    if [ -n "$remote_version" ]; then
-        # --- ▼▼▼ save_version_to_cache 呼び出しとハンドリング修正 ▼▼▼ ---
-        save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch"
-        local save_cache_status=$?
-
-        if [ "$save_cache_status" -eq 0 ]; then
-             # 終了ステータス 0 は成功またはスキップ (ロック競合)
-             debug_log "DEBUG" "download: save_version_to_cache completed for '$file_name' (Status 0: Success or Skipped)."
-        else
-             # 終了ステータス 1 は内部エラー
-             debug_log "ERROR" "download: save_version_to_cache failed for '$file_name' with internal error (Status $save_cache_status)."
-             return 1 # 内部エラーの場合はスクリプト実行を中断
-        fi
-        # --- ▲▲▲ save_version_to_cache 呼び出しとハンドリング修正 ここまで ▲▲▲ ---
-    fi
-
-    if [ "$load_flag" = "load" ]; then
-        debug_log "DEBUG" "download: Loading downloaded file: $save_path"
-        if . "$save_path"; then
-             debug_log "DEBUG" "download: Successfully loaded downloaded file '$save_path'."
-        else
-             local load_status=$?
-             debug_log "ERROR" "download: Failed to load downloaded file '$save_path'. Status: $load_status"
-             return 1
-        fi
-    fi
-
-    return 0 # All steps successful
-}
-
-# download 関数を修正
-# 変更点:
-# 1. download_fetch_file 後の各ステップ (chmod, save_version_to_cache, .) の終了ステータスをチェック
-# 2. いずれかのステップで失敗した場合、具体的なエラーログを出力し、return 1 するように変更
-# --- 2025-04-26 修正 ---
-# 3. 誤って導入された get_local_version 呼び出しを、キャッシュファイル読み取り処理に置き換え
-# 4. 誤って導入された display_api_status 呼び出しを、check_api_rate_limit + debug_log 処理に置き換え
-# 5. file_path の定義を $DL_DIR から $BASE_DIR に修正
-OK_download() {
-    local file_name="$1"
-    local chmod_flag="$2" # "chmod" or ""
-    local load_flag="$3"  # "load" or ""
-    local force_refresh="${4:-}" # "force" or "" (optional, used by get_commit_version)
-
-    local remote_version_info remote_version local_version download_url file_path save_path
-    local dl_method skip_cache_flag auth_method_used script_file api_status_msg
-
-    # Use global settings or defaults
-    dl_method="${DOWNLOAD_METHOD:-api}"
-    skip_cache_flag="${SKIP_CACHE:-false}"
-
-    debug_log "DEBUG" "download: Starting for '$file_name', chmod='$chmod_flag', load='$load_flag', force='$force_refresh', method='$dl_method', skip_cache='$skip_cache_flag'"
-
-    # 1. Get Remote Version Info
-    remote_version_info=$(get_commit_version "$file_name" "$force_refresh" "$dl_method" "$skip_cache_flag")
-    local get_version_status=$?
-    if [ "$get_version_status" -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "ERROR" "download: Failed to get remote version for '$file_name'. Status: $get_version_status, VersionInfo: '$remote_version_info'"
-        return 1 # Exit if version check fails
-    fi
-    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    auth_method_used=$(echo "$remote_version_info" | cut -d' ' -f2) # Store auth method used by get_commit_version
-
-    # --- ▼▼▼ 修正点 1: get_local_version 呼び出しをキャッシュ読み取り処理に置き換え ▼▼▼ ---
-    # Get Local Version Info
-    script_file="${CACHE_DIR}/script.ch"
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-    # If not found in cache or cache doesn't exist, set empty (or a default like "No version control")
-    [ -z "$local_version" ] && local_version="" # Using empty string as default
-    # --- ▲▲▲ 修正点 1 ここまで ▲▲▲ ---
-
-    # --- ▼▼▼ 修正点 3: file_path の定義を $BASE_DIR に修正 ▼▼▼ ---
-    file_path="${BASE_DIR}/${file_name}"
-    # --- ▲▲▲ 修正点 3 ここまで ▲▲▲ ---
-
-    debug_log "DEBUG" "download: Remote version: $file_name - $remote_version (Auth: $auth_method_used)"
-    debug_log "DEBUG" "download: Local version: $file_name - $local_version"
-
-    # 2. Check if Download is Needed
-    # Use version_is_newer for comparison, handling cleaned versions internally if needed
-    if [ "$remote_version" = "$local_version" ] && [ "$force_refresh" != "force" ] && [ -f "$file_path" ]; then
-        debug_log "INFO" "download: Local version of '$file_name' is up-to-date ($local_version). Skipping download."
-        # If load flag is set, still try to load the existing file
-        if [ "$load_flag" = "load" ]; then
-            if [ -f "$file_path" ]; then
-                debug_log "DEBUG" "download: Loading existing up-to-date file: $file_path"
-                if . "$file_path"; then
-                    debug_log "DEBUG" "download: Successfully loaded existing file '$file_path'."
-                else
-                    local load_status=$?
-                    debug_log "ERROR" "download: Failed to load existing file '$file_path'. Status: $load_status"
-                    return 1 # load失敗時はエラーとする
-                fi
-            else
-                debug_log "WARN" "download: File '$file_path' not found for loading despite version match."
-                return 1 # Treat as error if file expected but not found
-            fi
-        fi
-        return 0 # Up-to-date, no download needed (or load succeeded/not requested)
-    fi
-
-    # 3. Download File
-    # --- ▼▼▼ 修正点 2: display_api_status 呼び出しを check_api_rate_limit + debug_log に置き換え ▼▼▼ ---
-    # Display API rate limit info before download attempt
-    api_status_msg=$(check_api_rate_limit)
-    debug_log "DEBUG" "download: API Status before fetch: $api_status_msg (Version check auth: $auth_method_used)"
-    # --- ▲▲▲ 修正点 2 ここまで ▲▲▲ ---
-
-    save_path="$file_path" # Use the corrected file_path
-    if ! download_fetch_file "$file_name" "$save_path"; then
-        debug_log "ERROR" "download: download_fetch_file failed for '$file_name'."
-        return 1 # Exit if download fails
-    fi
-
-    # 4. Post-Download Actions
-    if [ "$chmod_flag" = "chmod" ]; then
-        if chmod +x "$save_path"; then
-            debug_log "DEBUG" "download: chmod +x applied to $file_name"
-        else
-            local chmod_status=$?
-            debug_log "ERROR" "download: Failed to apply chmod +x to '$save_path'. Status: $chmod_status"
-            return 1 # chmod 失敗時はエラー
-        fi
-    fi
-
-    # Save version only if remote_version is not empty (get_commit_version succeeded)
-    if [ -n "$remote_version" ]; then
-        # Use the auth_method returned by get_commit_version for saving cache
-        if save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method_used"; then
-             debug_log "DEBUG" "download: Version saved to cache for '$file_name' (Auth: $auth_method_used)."
-        else
-             local save_cache_status=$?
-             if [ "$save_cache_status" -ne 0 ]; then
-                 debug_log "ERROR" "download: save_version_to_cache failed for '$file_name' with status $save_cache_status."
-                 return 1
-             else
-                 debug_log "DEBUG" "download: save_version_to_cache skipped for '$file_name' due to lock contention (status $save_cache_status)."
-             fi
-        fi
-    fi
-
-    if [ "$load_flag" = "load" ]; then
-        debug_log "DEBUG" "download: Loading downloaded file: $save_path"
-        if . "$save_path"; then
-             debug_log "DEBUG" "download: Successfully loaded downloaded file '$save_path'."
-        else
-             local load_status=$?
-             debug_log "ERROR" "download: Failed to load downloaded file '$save_path'. Status: $load_status"
-             return 1 # load失敗時はエラー
-        fi
-    fi
-
-    return 0 # All steps successful
-}
-
-OK_download() {
-    # ファイル名を最初の引数として処理
-    local file_name="$1"
-    shift
-    
-    # 空ファイル名のチェック
-    if [ -z "$file_name" ]; then
-        return 1
-    fi
-
-    # 設定変数の初期化
-    local hidden_mode="false"
-    local quiet_mode="${QUIET_MODE:-false}"
-    local chmod_mode="false"
-    local load_mode="false"
-    local interpreter_name=""  # デフォルト値を空に
-    
-    # オプション引数の処理（改善版）
-    while [ $# -gt 0 ]; do
-        local option="$1"
-        local value="true"
-        
-        # キー=値形式の場合は分解処理
-        if echo "$option" | grep -q "="; then
-            value=$(echo "$option" | cut -d'=' -f2)
-            option=$(echo "$option" | cut -d'=' -f1)
-        fi
-        
-        # オプション判定（値がtrueの場合のみ処理）
-        if [ "$value" = "true" ]; then
-            case "$option" in
-                # インタプリタオプション
-                bash)   interpreter_name="bash" ;;
-                python3) interpreter_name="python" ;;
-                node)   interpreter_name="node" ;;
-                perl)   interpreter_name="perl" ;;
-                # モードオプション
-                hidden) hidden_mode="true" ;;
-                quiet)  quiet_mode="true" ;;
-                debug)  DEBUG_MODE="true" ;;
-                chmod)  chmod_mode="true" ;;
-                load)   load_mode="true" ;;
-                # 不明オプション
-                *) ;;
-            esac
-        fi
-        shift
-    done
-
-    # インタプリタが設定されていなければデフォルト値を設定
-    [ -z "$interpreter_name" ] && interpreter_name="ash"
-
-    # バージョン情報取得
-    local version_data
-    version_data=$(download_check_version "$file_name")
-    
-    local update_required=$(echo "$version_data" | cut -d'|' -f1)
-    local clean_remote_version=$(echo "$version_data" | cut -d'|' -f2)
-    local clean_local_version=$(echo "$version_data" | cut -d'|' -f3)
-    local api_status=$(echo "$version_data" | cut -d'|' -f4)
-    
-    # ファイルの存在確認を追加
-    local file_exists="true"
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        file_exists="false"
-        update_required="true"
-    elif [ ! -s "${BASE_DIR}/$file_name" ]; then
-        file_exists="false"
-        update_required="true"
-    fi
-    
-    # デバッグモード時は常にダウンロード
-    if [ "$DEBUG_MODE" = "true" ]; then
-        update_required="true"
-    fi
-    
-    # ファイルダウンロード処理
-    local status_type="no_update"
-    # local status_message="$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
-    
-    if [ "$update_required" = "true" ] || [ "$file_exists" = "false" ]; then
-        if ! download_fetch_file "$file_name" "$clean_remote_version" "$chmod_mode"; then
-            return 1
-        fi
-        status_type="success"
-        status_message="$(get_message "CONFIG_DOWNLOAD_SUCCESS")"
-        
-        # aiosファイルは常に実行権限を設定する（追加）
-        if [ "$file_name" = "aios" ]; then
-            chmod +x "${BASE_DIR}/${file_name}"
-        fi
-    fi
-    
-    # ファイルの存在を再確認
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        return 1
-    fi
-
-    # 結果表示とファイル読み込み
-    download_finalize "$file_name" "$status_message" "$clean_remote_version" "$api_status" "$load_mode" "$hidden_mode" "$status_type" "$interpreter_name"
-    
     return 0
 }
 
@@ -3404,88 +2533,6 @@ download_fetch_file() {
     
     # バージョン情報をキャッシュに保存
     save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
-    
-    return 0
-}
-
-OK_download_finalize() {
-    local file_name="$1"
-    local status_message="$2" 
-    local clean_remote_version="$3"
-    local api_status="$4"
-    local load_mode="$5"
-    local hidden_mode="$6"
-    local status_type="$7"
-    local interpreter="${8:-ash}"  # デフォルト値をashに設定
-    
-    debug_log "DEBUG" "Finalizing download for ${file_name}, status=${status_type}, interpreter=${interpreter}"
-    
-    # ファイルが実際に存在するか確認
-    if [ ! -f "${BASE_DIR}/${file_name}" ]; then
-        debug_log "DEBUG" "File not found: ${BASE_DIR}/${file_name}"
-        return 1
-    fi
-    
-    # 隠しモードチェック
-    if [ "$hidden_mode" = "true" ]; then
-        debug_log "DEBUG" "Hidden mode is active, skipping status message"
-        # 隠しモードの場合はメッセージを表示しない
-    else        
-        # ファイル名がDBファイルかどうかをチェック (.db拡張子)
-        if echo "$file_name" | grep -q "\.db$"; then
-            debug_log "DEBUG" "DB file handling for ${file_name}"
-        fi
-        
-        # ステータスメッセージ表示
-        if [ "$status_type" = "success" ]; then
-            # 成功時
-            if [ "$load_mode" = "true" ]; then
-                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} Loaded"
-            else
-                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
-            fi
-        else
-            # 更新不要時など
-            if [ "$load_mode" = "true" ]; then
-                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status} Loaded"
-            else
-                printf "%s\n" "${status_message} ${file_name} ${clean_remote_version} ${api_status}"
-            fi
-        fi
-    fi
-    
-    # ファイル読込み処理
-    if [ "$load_mode" = "true" ]; then
-        debug_log "DEBUG" "Loading file with ${interpreter}: ${BASE_DIR}/${file_name}"
-        
-        if [ -s "${BASE_DIR}/${file_name}" ]; then
-            # インタープリタが存在するか確認
-            if [ "$interpreter" != "$INTERPRETER" ]; then
-                if ! command -v "$interpreter" > /dev/null 2>&1; then
-                    printf "%s\n" "$(color red "Error: Interpreter '${interpreter}' is not installed on this system.")"
-                    install_package ${interpreter} yn hidden
-                    
-                    # インストール後に再度確認
-                    if ! command -v "$interpreter" > /dev/null 2>&1; then
-                        debug_log "EBUG" "Interpreter still not found after installation attempt: ${interpreter}"
-                        return 1
-                    else
-                        debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
-                        $interpreter "${BASE_DIR}/${file_name}"
-                    fi
-                else
-                    debug_log "DEBUG" "Executing with specified interpreter: ${interpreter}"
-                    $interpreter "${BASE_DIR}/${file_name}"
-                fi
-            else
-                debug_log "DEBUG" "File loaded with source"
-                . "${BASE_DIR}/${file_name}"
-            fi
-        else
-            debug_log "DEBUG" "Cannot load empty file: ${file_name}"
-            return 1
-        fi
-    fi
     
     return 0
 }
