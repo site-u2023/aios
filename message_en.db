@@ -62,7 +62,6 @@ en|MSG_ISP_INFO_UNKNOWN=Unknoun
 en|MSG_QUERY_INFO=Querying {t}{:} {a} via {n}
 en|MSG_LOCATION_RESULT=Location information retrieved {s}
 en|MSG_TIMEZONE_API=Zone Source{:} {a}
-en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:}
 en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
 
 # =======================
@@ -160,7 +159,7 @@ en|CONFIG_DOWNLOAD_FAILED=Failed to download{:} {0}
 en|DOWNLOAD_PARALLEL_START=Downloading essential files
 en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully
 en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed{:}
-en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:}
+en|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f} {v} {api}{:}
 
 en|MSG_INFO_DEVICE=Device information retrieved successfully
 en|MSG_HELP_USAGE=Usage{:} aios [OPTIONS] [LANGUAGE]
