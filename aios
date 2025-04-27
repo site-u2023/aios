@@ -302,7 +302,7 @@ into_memory_message() {
     # 基本メッセージの設定
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_START=Downloading essential files"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}{:}"$'\n'
 
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}{v} {api}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"$'\n'
