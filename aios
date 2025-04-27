@@ -2445,15 +2445,13 @@ download_parallel() {
         # メッセージキーの引数を修正
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')"
         stop_spinner "$success_message" "success"
-        # クリーンアップ（成功時のみ）
-        rm -rf "$tmp_dir" 2>/dev/null
+        # rm -rf "$tmp_dir" 2>/dev/null
         debug_log "DEBUG" "Cleaned up temporary task directory: $tmp_dir"
         return 0
     else
         # メッセージキーの引数を修正し、ログパス情報を含める
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "param1=Check logs in $LOG_DIR and task files in $tmp_dir")"
         stop_spinner "$failure_message" "failure"
-        # 失敗時は一時ファイルを保持
         debug_log "DEBUG" "Temporary task directory retained for debugging: $tmp_dir"
         return 1
     fi
