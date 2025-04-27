@@ -2227,8 +2227,6 @@ download() {
     # --- ▼▼▼ 変更: メッセージ表示条件変更 ▼▼▼ ---
     # サイレント/隠しモードでなく、かつ並列実行中でない場合のみ、DL成功メッセージ表示
     if [ "$suppress_message" = "false" ] && [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
-        # printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS") $file_name $remote_version $api_status"
-        # 変更: get_message の引数を修正し、プレースホルダー対応
         printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "file=$file_name" "version=$remote_version" "api=$api_status")"
     fi
     # --- ▲▲▲ 変更 ここまで ▲▲▲ ---
@@ -2781,9 +2779,9 @@ OK_download() {
         chmod +x "$file_path"
     fi
 
-    # サイレント/隠しモードでなければ、DL成功メッセージ（詳細は既存システムに合わせる）
+    # サイレント/隠しモードでなければ、DL成功メッセージ
     if [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
-        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS") $file_name $remote_version $api_status"
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "file=$file_name" "version=$remote_version" "api=$api_status")"
     fi
 
     return 0
