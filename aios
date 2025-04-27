@@ -2244,19 +2244,39 @@ download_parallel() {
     local task_base_name # For log file naming
     local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_"
     # --- MODIFIED: Removed fail_flag_file, added variables for first error info ---
-    # local fail_flag_file="${tmp_dir}/dl_failed_flag"
     local first_failed_task_name=""
     local first_error_message=""
     local error_info_file_prefix="${tmp_dir}/error_info_" # Prefix for error info files
     # --- END MODIFIED ---
     local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE IN_PARALLEL_DOWNLOAD" # Added IN_PARALLEL_DOWNLOAD
+    local awk_script # awkスクリプト格納用変数
+
+    # --- awk スクリプトを変数に格納 (前回の修正) ---
+    awk_script='
+        BEGIN { in_func=0; }
+        /^download_files\(\) *\{/ { in_func=1; next }
+        /^}/ { if(in_func){in_func=0} }
+        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
+    '
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
-    if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi # Error handling improved
-    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
+    # ディレクトリ作成 (エラーハンドリング改善)
+    if ! mkdir -p "$tmp_dir"; then
+        if [ ! -d "$tmp_dir" ]; then
+            debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2
+            stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'f=mkdir' 'e=Failed to create tmp dir')" "failure" # Simplified message
+            return 1
+        fi
+    fi
+    if ! mkdir -p "$LOG_DIR"; then
+        if [ ! -d "$LOG_DIR" ]; then
+            debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2
+            # Log dir failure is not fatal for the function itself
+        fi
+    fi
     debug_log "DEBUG" "Using task definition directory: $tmp_dir"
     debug_log "DEBUG" "Using log directory: $LOG_DIR"
     # --- MODIFIED: Remove error info files at the start ---
@@ -2268,14 +2288,13 @@ download_parallel() {
 
     # --- download_files()のコマンド抽出 ---
     debug_log "DEBUG" "Parsing script file '$script_path' for download_files() function..."
-    if [ ! -f "$script_path" ]; then stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; debug_log "DEBUG" "Script path '$script_path' is not found"; return 1; fi
-    # download_files()の各行を抜き出す
-    if ! awk '
-        BEGIN { in_func=0; }
-        /^download_files\(\) *\{/ { in_func=1; next }
-        /^}/ { if(in_func){in_func=0} }
-        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
-    ' "$script_path" > "$all_tasks_file"; then
+    if [ ! -f "$script_path" ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' 'f=script' 'e=not found')" "failure"
+        debug_log "DEBUG" "Script path '$script_path' is not found"
+        return 1
+    fi
+    # download_files()の各行を抜き出す (変数使用)
+    if ! awk "$awk_script" "$script_path" > "$all_tasks_file"; then
         # --- MODIFIED: Provide basic error info ---
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=awk" "e=Failed to extract commands")" "failure"
         # --- END MODIFIED ---
@@ -2290,18 +2309,27 @@ download_parallel() {
 
     # --- コマンド分割＆ロード対象記録（剰余演算子使用） ---
     total_lines=$(wc -l < "$all_tasks_file")
-    [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
-    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
+    # Check again for empty after wc, though -s should have caught it
+    if [ "$total_lines" -eq 0 ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
+        debug_log "DEBUG" "download_files() is empty or became empty"
+        rm -f "$all_tasks_file" # Clean up empty file
+        return 0
+    fi
+    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel ))
+    [ "$lines_per_task" -eq 0 ] && lines_per_task=1 # Avoid division by zero or zero lines per task
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Approx lines per task file (for info only): $lines_per_task"
-    rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
+    rm -f "${task_file_prefix}"*.tmp 2>/dev/null
+    debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
 
     # 1. タスク分割ファイルの生成 (剰余演算子を使用)
     line_index=0
     while IFS= read -r task_line || [ -n "$task_line" ]; do
+        # 行番号を並列数で割った余りを使ってファイル番号を決定
         task_file="${task_file_prefix}$(printf "%03d" $((line_index % max_parallel))).tmp"
         echo "$task_line" >> "$task_file"
         line_index=$((line_index + 1))
-    done < "$all_tasks_file"
+    done < "$all_tasks_file" # Loop 1 done
 
     # 2. ロード対象ファイル生成（インデント無視、POSIXシェル組み込みのみ）
     > "$load_targets_file"
@@ -2311,19 +2339,25 @@ download_parallel() {
             download*)
                 case "$trimmed_line" in
                     *'"load"')
-                        set -- $trimmed_line
-                        load_fname=$2
-                        load_fname=${load_fname#\"}
-                        load_fname=${load_fname%\"}
-                        echo "$load_fname" >> "$load_targets_file"
+                        # POSIX compliant way to extract second field after splitting by space
+                        set -- $trimmed_line # Use default IFS splitting
+                        if [ "$#" -ge 2 ]; then # Ensure there's at least a second field
+                            load_fname=$2
+                            load_fname=${load_fname#\"} # Remove leading quote
+                            load_fname=${load_fname%\"} # Remove trailing quote
+                            # Ensure fname is not empty after removing quotes
+                            if [ -n "$load_fname" ]; then
+                                echo "$load_fname" >> "$load_targets_file"
+                            fi
+                        fi
                         ;;
                 esac
                 ;;
         esac
-    done < "$all_tasks_file"
+    done < "$all_tasks_file" # Loop 2 done
 
     rm -f "$all_tasks_file"
-    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" 2>/dev/null | wc -l)
+    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" -type f 2>/dev/null | wc -l) # Ensure only files are counted
     debug_log "DEBUG" "Created/updated $task_count task files in $tmp_dir."
     if [ "$task_count" -eq 0 ]; then
         # --- MODIFIED: Provide basic error info ---
@@ -2338,7 +2372,9 @@ download_parallel() {
     job_index=0
     export IN_PARALLEL_DOWNLOAD="true"
     export $exported_vars # 他の変数もエクスポート
-    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" | sort | while IFS= read -r task_file; do
+
+    # Use find with -print to ensure proper handling of filenames, pipe to while loop
+    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" -type f -print | sort | while IFS= read -r task_file; do
         task_base_name=$(basename "$task_file" .tmp)
         stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
         stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
@@ -2346,8 +2382,10 @@ download_parallel() {
         sub_error_info_file="${error_info_file_prefix}${task_base_name}.txt"
         # --- END MODIFIED ---
         debug_log "DEBUG" "Starting task file: $task_file (stdout: $stdout_log, stderr: $stderr_log)"
+
+        # Start subshell in background
         (
-            # --- MODIFIED: Pass error info file path to subshell ---
+            # --- MODIFIED: Pass necessary variables as arguments ---
             local task_file_path="$1"
             local task_stderr_log="$2"
             local task_error_info_file="$3"
@@ -2355,59 +2393,68 @@ download_parallel() {
             # --- END MODIFIED ---
             local sub_task_failed=0 # サブタスク失敗フラグ
             local failed_command="" # Store the failed command line
+            local line_num=0
 
             # --- MODIFIED: Read from passed task_file_path ---
             while IFS= read -r command_line || [ -n "$command_line" ]; do
+                line_num=$((line_num + 1))
             # --- END MODIFIED ---
+                # Skip empty lines and comments
                 case "$command_line" in "" | \#*) continue ;; esac
 
-                # loadオプションは無効化
+                # Remove "load" argument for execution
                 local eval_command=$(echo "$command_line" | sed 's/"load"//g')
-                debug_log "DEBUG" "[Subshell $$][$task_base] Executing: $eval_command"
+                debug_log "DEBUG" "[Subshell $$][$task_base] Line $line_num: Executing: $eval_command"
 
-                # eval で実行し、その終了ステータスを確認
+                # Execute the command using eval
                 eval "$eval_command"
                 local cmd_status=$?
 
+                # Check command status
                 if [ "$cmd_status" -ne 0 ]; then
-                    # download コマンド自体が失敗した場合
-                    debug_log "DEBUG" "[Subshell $$][$task_base] Command failed with status $cmd_status: $command_line" >&2
+                    debug_log "DEBUG" "[Subshell $$][$task_base] Line $line_num: Command failed with status $cmd_status: $command_line" >&2
                     sub_task_failed=1
                     failed_command="$command_line" # Store the command that failed
-                    break # このサブシェルのループを抜ける
+                    break # Exit the inner while loop on first failure
                 else
-                    debug_log "DEBUG" "[Subshell $$][$task_base] Command succeeded: $command_line"
+                    debug_log "DEBUG" "[Subshell $$][$task_base] Line $line_num: Command succeeded: $command_line"
                 fi
-            done < "$task_file_path" # --- MODIFIED: Read from passed path ---
+            done < "$task_file_path" # Inner loop done
 
-            # サブタスクが一つでも失敗していたらエラー情報を書き込んで exit 1
+            # If any task in the file failed, write error info and exit with failure status
             if [ "$sub_task_failed" -eq 1 ]; then
                 debug_log "DEBUG" "[Subshell $$][$task_base] Task failed. Writing error info to $task_error_info_file"
                 # --- MODIFIED: Extract error message and write to error info file ---
                 local error_detail="Unknown error" # Default error message
-                if [ -f "$task_stderr_log" ]; then
+                # Check if stderr log exists and is not empty
+                if [ -f "$task_stderr_log" ] && [ -s "$task_stderr_log" ]; then
                     # Try to get the first non-empty line from stderr log
                     error_detail=$(grep -v '^[[:space:]]*$' "$task_stderr_log" | head -n 1)
-                    # Fallback if grep finds nothing but file is not empty
-                    if [ -z "$error_detail" ] && [ -s "$task_stderr_log" ]; then
+                    # Fallback if grep finds nothing (e.g., only whitespace lines)
+                    if [ -z "$error_detail" ]; then
                          error_detail=$(head -n 1 "$task_stderr_log")
                     fi
-                    # Fallback if still empty
-                    [ -z "$error_detail" ] && error_detail="See $task_stderr_log"
+                # If stderr log doesn't exist or is empty, provide a generic message
+                else
+                    error_detail="No error output captured"
                 fi
+                # Fallback if still empty
+                [ -z "$error_detail" ] && error_detail="See $task_stderr_log"
+
                 # Write task base name (line 1) and error detail (line 2)
                 {
-                    echo "$task_base"
-                    echo "$error_detail"
-                } > "$task_error_info_file" 2>/dev/null
+                    echo "$task_base" # e.g., dl_task_001
+                    echo "$error_detail" # First line of error
+                } > "$task_error_info_file" 2>/dev/null # Redirect potential write errors
                 # --- END MODIFIED ---
                 debug_log "DEBUG" "[Subshell $$][$task_base] Exiting with status 1."
-                exit 1
+                exit 1 # Exit subshell with failure
             else
                 debug_log "DEBUG" "[Subshell $$][$task_base] All tasks completed successfully. Exiting with status 0."
-                exit 0
+                exit 0 # Exit subshell with success
             fi
         # --- MODIFIED: Pass necessary variables to the subshell ---
+        # Ensure arguments are quoted if they might contain spaces, though unlikely here
         ) "$task_file" "$stderr_log" "$sub_error_info_file" "$task_base_name" > "$stdout_log" 2> "$stderr_log" &
         # --- END MODIFIED ---
         pid=$!
@@ -2416,9 +2463,10 @@ download_parallel() {
         debug_log "DEBUG" "Background PID $pid started for task $task_base_name (stderr: $stderr_log)"
 
         # Wait for a process to finish if max parallel is reached
-        # --- MODIFIED: Wait logic remains similar, but error handling inside wait loop is simplified ---
+        # --- MODIFIED: Wait logic, simplified error handling inside loop ---
         if [ "$job_index" -ge "$max_parallel" ]; then
              debug_log "DEBUG" "Max parallel tasks ($max_parallel) reached, waiting for one to finish..."
+             # Get the first PID from the list
              first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
              if [ -n "$first_pid_in_batch" ]; then
                  if wait "$first_pid_in_batch"; then
@@ -2426,52 +2474,61 @@ download_parallel() {
                  else
                      proc_status=$?
                      debug_log "DEBUG" "Background task (PID $first_pid_in_batch) failed with status $proc_status." >&2
-                     # Set overall status but don't try to read error info file here yet
+                     # Set overall status to failure. Error info file should have been created by subshell.
                      overall_status=1
                  fi
-                 pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
+                 # Remove the completed PID from the list
+                 pids=$(echo "$pids" | sed "s/^$first_pid_in_batch[[:space:]]*//; s/[[:space:]]$first_pid_in_batch[[:space:]]*/ /; s/[[:space:]]$first_pid_in_batch$//") # More robust removal
                  job_index=$((job_index - 1))
              else
-                 debug_log "DEBUG" "Could not determine first PID to wait for."
-                 sleep 1
+                 debug_log "DEBUG" "Could not determine first PID to wait for. Waiting briefly."
+                 sleep 1 # Prevent tight loop if something goes wrong with pid extraction
              fi
         fi
         # --- END MODIFIED ---
-    done
+    done # Outer while loop (find) done <-- This is likely around Line 2411
 
     # --- 残ジョブ待機 ---
     debug_log "DEBUG" "Waiting for remaining background jobs: [$pids]"
     for pid in $pids; do
-        case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
+        # Skip potentially empty or non-numeric elements in pids string
+        case "$pid" in
+            ''|*[!0-9]*) continue ;;
+        esac
         if wait "$pid"; then
             debug_log "DEBUG" "PID $pid finished successfully."
         else
             proc_status=$?
             debug_log "DEBUG" "Background task (PID $pid) failed with status $proc_status." >&2
-            # Set overall status but don't try to read error info file here yet
+            # Set overall status to failure. Error info file should have been created by subshell.
             overall_status=1
         fi
-    done
-    # --- END MODIFIED ---
+    done # For loop done
 
     # --- 失敗判定 & エラー情報取得 ---
     # --- MODIFIED: Read error info after all waits are done ---
     if [ $overall_status -eq 1 ]; then
         debug_log "DEBUG" "Overall status is failure. Looking for first error info file."
-        # Find the first error info file (lexicographically)
-        first_error_file=$(find "$tmp_dir" -name "${error_info_file_prefix}*.txt" 2>/dev/null | sort | head -n 1)
+        # Find the first error info file (lexicographically, usually corresponds to first failure)
+        # Use find to be safe with filenames, sort, take head
+        first_error_file=$(find "$tmp_dir" -name "${error_info_file_prefix}*.txt" -type f -print 2>/dev/null | sort | head -n 1)
 
         if [ -n "$first_error_file" ] && [ -f "$first_error_file" ]; then
              debug_log "DEBUG" "Found first error info file: $first_error_file"
-             # Read task name (line 1) and error message (line 2)
+             # Read task name (line 1) and error message (line 2) robustly
              first_failed_task_name=$(head -n 1 "$first_error_file" 2>/dev/null)
-             first_error_message=$(sed -n '2p' "$first_error_file" 2>/dev/null)
+             first_error_message=$(sed -n '2p' "$first_error_file" 2>/dev/null) # Get exactly the second line
              # Sanitize error message (remove potential control characters, limit length)
-             first_error_message=$(echo "$first_error_message" | tr -cd '[:print:]\t' | head -c 100)
+             # Use printf for better control char handling if available, fallback to tr
+             if command -v printf >/dev/null; then
+                 first_error_message=$(printf '%s' "$first_error_message" | tr -cd '[:print:]\t' | head -c 100)
+             else
+                 first_error_message=$(echo "$first_error_message" | tr -cd '[:print:]\t' | head -c 100)
+             fi
              debug_log "DEBUG" "Captured failure: Task='${first_failed_task_name}', Error='${first_error_message}'"
         else
              debug_log "DEBUG" "Overall status is failure, but no error info file found in $tmp_dir."
-             # Set default values if file not found
+             # Set default values if no error file found (shouldn't happen if subshell worked)
              first_failed_task_name="Unknown"
              first_error_message="Check logs in $LOG_DIR"
         fi
@@ -2484,8 +2541,10 @@ download_parallel() {
     # --- END MODIFIED ---
         debug_log "DEBUG" "Sourcing load targets from $load_targets_file"
         while IFS= read -r load_file; do
+            # Skip empty lines
             [ -z "$load_file" ] && continue
             local full_load_path="${BASE_DIR}/$load_file" # Construct full path
+
             if [ -f "$full_load_path" ]; then
                 debug_log "DEBUG" "Sourcing $full_load_path"
                 # POSIX compliant source: use dot command
@@ -2495,23 +2554,25 @@ download_parallel() {
                     debug_log "DEBUG" "Failed to source '$full_load_path' with status $source_status. Marking overall status as failed." >&2
                     overall_status=1 # Mark as failure if sourcing fails
                     # --- MODIFIED: Capture sourcing error info ---
-                    if [ -z "$first_failed_task_name" ]; then # Only if no previous download error
+                    if [ -z "$first_failed_task_name" ]; then # Only capture if no previous download error
                         first_failed_task_name="source"
-                        first_error_message="Failed to source $load_file"
+                        first_error_message="Failed to source $load_file (status $source_status)"
                     fi
                     # --- END MODIFIED ---
+                    break # Stop sourcing on first error
                 fi
             else
                 debug_log "DEBUG" "Load target file not found: '$full_load_path'. Marking overall status as failed." >&2
                 overall_status=1 # Mark as failure if load target is missing
                 # --- MODIFIED: Capture sourcing error info ---
-                if [ -z "$first_failed_task_name" ]; then # Only if no previous download error
+                if [ -z "$first_failed_task_name" ]; then # Only capture if no previous download error
                     first_failed_task_name="source"
                     first_error_message="Load target $load_file not found"
                 fi
                 # --- END MODIFIED ---
+                break # Stop sourcing if a file is missing
             fi
-        done < "$load_targets_file"
+        done < "$load_targets_file" # Load loop done
     elif [ $overall_status -eq 0 ]; then # Success but no load file
         debug_log "DEBUG" "No load targets file found or it's empty: $load_targets_file"
     fi
@@ -2521,8 +2582,8 @@ download_parallel() {
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')"
         stop_spinner "$success_message" "success"
         # クリーンアップ（成功時のみ）
+        debug_log "DEBUG" "Cleaning up temporary task directory: $tmp_dir"
         rm -rf "$tmp_dir" 2>/dev/null
-        debug_log "DEBUG" "Cleaned up temporary task directory: $tmp_dir"
         return 0
     else
         # --- MODIFIED: Use captured error info for the final message ---
@@ -2530,6 +2591,7 @@ download_parallel() {
         [ -z "$first_failed_task_name" ] && first_failed_task_name="Unknown"
         [ -z "$first_error_message" ] && first_error_message="Check logs in $LOG_DIR"
 
+        # Format the final failure message using the captured details
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_task_name" "e=$first_error_message")"
         stop_spinner "$failure_message" "failure"
         # 失敗時は一時ファイルを保持
