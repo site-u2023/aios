@@ -317,6 +317,216 @@ handle_user_selection() {
         fi
         action="$processed_action"
 
+        # --- START MODIFICATION: Handle semicolon-separated commands ---
+        local cmd_status=0
+        # Execute command(s) in a subshell to prevent accidental script exit
+        # and handle potential sourcing correctly.
+        (
+            # Check if the action contains a semicolon
+            if echo "$action" | grep -q ';'; then
+                debug_log "DEBUG" "Semicolon detected in command, executing sequentially: $action"
+                # Split the command string at the first semicolon
+                local first_cmd=$(echo "$action" | cut -d';' -f1)
+                local second_cmd=$(echo "$action" | cut -d';' -f2-) # Get the rest after the first semicolon
+
+                # Trim leading/trailing whitespace (POSIX compliant)
+                first_cmd=$(echo "$first_cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                second_cmd=$(echo "$second_cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+                debug_log "DEBUG" "First command part: $first_cmd"
+                debug_log "DEBUG" "Second command part: $second_cmd"
+
+                # Execute the first part
+                if [ -n "$first_cmd" ]; then
+                    eval "$first_cmd"
+                    local status1=$?
+                    debug_log "DEBUG" "First command part finished with status: $status1"
+                    if [ $status1 -ne 0 ]; then
+                        debug_log "ERROR" "First command part failed: $first_cmd"
+                        exit $status1 # Exit subshell with the error status
+                    fi
+                fi
+
+                # If the first part succeeded and the second part exists, execute it
+                if [ -n "$second_cmd" ]; then
+                    eval "$second_cmd"
+                    local status2=$?
+                    debug_log "DEBUG" "Second command part finished with status: $status2"
+                    if [ $status2 -ne 0 ]; then
+                        debug_log "ERROR" "Second command part failed: $second_cmd"
+                        exit $status2 # Exit subshell with the error status
+                    fi
+                fi
+                # If both parts succeeded (or second part didn't exist), exit subshell with 0
+                exit 0
+            else
+                # No semicolon, execute the command as is
+                debug_log "DEBUG" "No semicolon detected, executing single command: $action"
+                eval "$action"
+                local status=$?
+                debug_log "DEBUG" "Single command finished with status: $status"
+                exit $status # Exit subshell with the command's status
+            fi
+        )
+        # Capture the exit status of the subshell
+        cmd_status=$?
+        # --- END MODIFICATION ---
+
+        if [ $cmd_status -eq 0 ]; then
+            debug_log "DEBUG" "Command execution (subshell) succeeded for action: $action in section [$section_name]."
+            # Command succeeded, redisplay current menu
+            return 0
+        else
+            # --- START MODIFICATION: Log the original action on failure ---
+            debug_log "DEBUG" "Command execution (subshell) failed with status $cmd_status for action: $action in section [$section_name]."
+            # --- END MODIFICATION ---
+            # Command failed, redisplay current menu (no error message shown here)
+            return 0
+        fi
+    else
+        debug_log "ERROR" "Internal error: Unknown action type detected for choice '$choice' in section [$section_name]."
+        # Internal error, redisplay current menu
+        return 0
+    fi
+}
+
+# Handle user selection - Revised order for special inputs
+OK_handle_user_selection() {
+    # Correct argument list matching the call from selector
+    local section_name="$1"        # Current menu section name
+    local is_main_menu="$2"        # 1 if main menu, 0 otherwise
+    local menu_count="$3"          # Total menu items (including special)
+    local num_normal_choices="$4"  # Number of normal choices (1 to N)
+    local menu_keys_file="$5"      # Temp file with menu keys
+    local menu_displays_file="$6"  # Temp file with display strings (unused here)
+    local menu_commands_file="$7"  # Temp file with commands
+    local menu_colors_file="$8"    # Temp file with colors
+    local main_menu="$9"           # Main menu section name
+
+    # --- Display Prompt ---
+    local selection_prompt=""
+    if [ "$is_main_menu" -eq 1 ]; then
+        selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
+        selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
+    else
+        selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
+        selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
+    fi
+    printf "%s" "$(color white "$selection_prompt")" # Display prompt before read
+
+    # --- Read User Input with Failure Check ---
+    local choice=""
+    if ! read -r choice; then
+        debug_log "ERROR" "Failed to read user input in section [$section_name]. Returning 1 to stop loop."
+        return 1
+    fi
+    if command -v normalize_input >/dev/null 2>&1; then
+        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    fi
+    debug_log "DEBUG" "User input: '$choice'"
+
+    # --- Input Validation (Numeric Check) ---
+    # Allow "00" through this check
+    case "$choice" in
+        ''|*[!0-9]*)
+            # Check if it's not exactly "00" before declaring invalid
+            if [ "$choice" != "00" ]; then
+                printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+                debug_log "DEBUG" "Invalid input (not a number or '00'): '$choice' in section [$section_name]. Returning 0 to retry."
+                return 0
+            fi
+            ;;
+    esac
+
+    # --- Handle Special Selections (Order: 00, 0, 10) ---
+
+    # Check for "00" first using string comparison
+    if [ "$choice" = "00" ]; then
+        if [ "$is_main_menu" -eq 0 ]; then
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+             debug_log "DEBUG" "'00' selected in submenu [$section_name]. Invalid. Returning 0 to retry."
+             return 0
+        fi
+        # Valid "00" in main menu
+        debug_log "DEBUG" "User selected 00 (Exit & Delete) in section [$section_name]."
+        remove_exit
+        local remove_status=$?
+        debug_log "DEBUG" "remove_exit returned status: $remove_status"
+        return $remove_status # Exit selector loop after remove_exit
+    fi
+
+    # Check for "0" using numeric comparison (safe now as "00" is handled)
+    if [ "$choice" -eq 0 ]; then
+        if [ "$is_main_menu" -eq 1 ]; then
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+             debug_log "DEBUG" "'0' selected in main menu [$section_name]. Invalid. Returning 0 to retry."
+             return 0 # Retry input
+        fi
+        # Valid "0" in submenu (Go Back)
+        debug_log "DEBUG" "User selected 0 (Go Back) in section [$section_name]."
+        go_back_menu
+        local go_back_status=$?
+        debug_log "DEBUG" "go_back_menu returned status: $go_back_status"
+        # If go_back_menu succeeds (returns 0 or specific code handled by selector),
+        # it will redisplay the previous menu. If it fails (returns non-zero),
+        # the selector loop might terminate based on that status.
+        # We return the status from go_back_menu to let the selector decide.
+        return $go_back_status
+    fi
+
+    # Check for "10" using numeric comparison
+    if [ "$choice" -eq 10 ]; then
+        debug_log "DEBUG" "User selected 10 (Exit) in section [$section_name]."
+        menu_exit # This function calls exit 0, terminating the script
+        # The following line is unlikely to be reached, but return 0 for consistency
+        return 0
+    fi
+
+    # --- Handle Normal Selections (1 to N) ---
+    # At this point, choice must be a positive integer
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$num_normal_choices" ]; then
+         printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+         debug_log "DEBUG" "Selection '$choice' out of range (1-$num_normal_choices) in section [$section_name]. Returning 0 to retry."
+         return 0 # Retry input
+    fi
+
+    # --- Get Action Details from Temp Files using the choice number ---
+    local action=$(awk "NR==$choice" "$menu_commands_file")
+    local selected_key=$(awk "NR==$choice" "$menu_keys_file")
+    local selected_color=$(awk "NR==$choice" "$menu_colors_file")
+    local type="command"
+    if echo "$action" | grep -q "^selector "; then
+        type="menu"
+        action=$(echo "$action" | sed 's/^selector //')
+    fi
+
+    if [ -z "$action" ] || [ -z "$selected_key" ] || [ -z "$selected_color" ]; then
+        debug_log "ERROR" "Failed to retrieve action details for choice '$choice' from temp files in section [$section_name]."
+        # No generic message here either
+        return 0 # Retry input
+    fi
+
+    debug_log "DEBUG" "Choice '$choice' mapped to: Key='$selected_key', Color='$selected_color', Action='$action', Type='$type'"
+
+    # --- Execute Action ---
+    if [ "$type" = "menu" ]; then
+        debug_log "DEBUG" "User selected submenu '$action' from section [$section_name]."
+        push_menu_history "$selected_key" "$selected_color"
+        selector "$action"
+        local submenu_status=$?
+        debug_log "DEBUG" "Submenu selector '$action' returned status: $submenu_status"
+        # Return the status from the submenu selector. If it's 0, the current selector loop continues.
+        # If it's non-zero (e.g., from go_back_menu or an error), propagate it up.
+        return $submenu_status
+    elif [ "$type" = "command" ]; then
+        debug_log "DEBUG" "Executing command: $action from section [$section_name]"
+        local processed_action=""
+        if ! processed_action=$(process_menu_yn "$action"); then
+             debug_log "DEBUG" "Command cancelled by user via menu_yn confirmation."
+             return 0 # Command cancelled, redisplay current menu
+        fi
+        action="$processed_action"
+
         # Execute command in a subshell to prevent accidental script exit
         (eval "$action")
         local cmd_status=$?
