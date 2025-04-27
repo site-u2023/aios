@@ -2234,7 +2234,7 @@ download_parallel() {
     local max_parallel
     local pids=""
     local overall_status=0 # 0: success, 1: failure
-    local tmp_dir="${DL_DIR}/dl_tmp" # DL_DIR利用
+    local tmp_dir="${DL_DIR}"
     local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
     local task_file_prefix="${tmp_dir}/dl_task_"
     local load_targets_file="${tmp_dir}/load_targets.tmp" # ロード対象記録
