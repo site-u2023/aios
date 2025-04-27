@@ -53,7 +53,7 @@ en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as} unsupported{:} Manual setup required
 
 # =======================
 # common-information.sh
-# =======================
+# ======================= 
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
