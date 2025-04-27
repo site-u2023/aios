@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.27-01-02"
+SCRIPT_VERSION="2025.04.27-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2208,7 +2208,7 @@ download_parallel() {
     local task_base_name # For log file naming
     local stdout_log stderr_log log_file_prefix="${LOG_DIR}/download_parallel_task_"
     local fail_flag_file="${tmp_dir}/dl_failed_flag"
-    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE DL_URL_BASE CHECKSUM_FILE GITHUB_TOKEN USE_API_TOKEN QUIET_MODE MAX_PARALLEL_TASKS MAX..."
+    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE DL_URL_BASE CHECKSUM_FILE GITHUB_TOKEN USE_API_TOKEN QUIET_MODE MAX_PARALLEL_TASKS MAX_RETRIES RETRY_DELAY CONNECT_TIMEOUT MAX_TIME"
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
