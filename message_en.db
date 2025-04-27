@@ -158,7 +158,7 @@ en|CONFIG_DOWNLOAD_FAILED=Failed to download{:} {0}
 # =======================
 en|DOWNLOAD_PARALLEL_START=Downloading essential files
 en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully
-en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed{:}
+en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}{:}
 en|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f} {v} {api}
 
 en|MSG_INFO_DEVICE=Device information retrieved successfully
