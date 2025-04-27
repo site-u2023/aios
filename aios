@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.27-05-00"
+SCRIPT_VERSION="2025.04.28-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -2112,11 +2112,8 @@ save_version_to_cache() {
     return $return_status
 }
 
-MURI_download() {
+download() {
     local file_name="$1"
-    # --- ↓↓↓ 追加 ↓↓↓ ---
-    local original_args="$@" # 関数呼び出し時の引数リスト全体を保存
-    # --- ↑↑↑ 追加 ↑↑↑ ---
     shift
 
     # download_parallel 内のサブシェルから呼び出されたかを示すフラグ
@@ -2132,10 +2129,9 @@ MURI_download() {
     local hidden_mode="false"
     local quiet_mode="false"
     local interpreter_name=""
-    # "load"は完全無視
-    # その他オプションが追加される場合、ここでパース
+    local load_mode="false"
 
-    # オプション解析 (この部分は変更なし)
+    # オプション解析
     while [ $# -gt 0 ]; do
         case "$1" in
             chmod)   chmod_mode="true" ;;
@@ -2145,8 +2141,7 @@ MURI_download() {
             bash|python3|node|perl)
                 interpreter_name="$1"
                 ;;
-            # "load"などはここで無視
-            load)    ;;
+            load)   load_mode="true" ;;
             *)
                 ;;
         esac
@@ -2154,46 +2149,97 @@ MURI_download() {
     done
     [ -z "$interpreter_name" ] && interpreter_name="ash"
 
-    # ... (ファイル名チェック、バージョン管理、ダウンロード処理などは変更なし) ...
+    # ファイル名が空の場合は即失敗
+    if [ -z "$file_name" ]; then
+        debug_log "DEBUG" "download: filename is empty"
+        return 1
+    fi
 
-    # --- ↓↓↓ "load" オプション処理 (修正版) ↓↓↓ ---
-    local load_mode="false"
-    # 保存しておいた元の引数リスト (original_args) を確認し "load" が存在するかチェック
-    local arg
-    # POSIX準拠で安全に引数を処理するために eval set を使用
-    eval "set -- $original_args"
-    for arg do # eval set で設定された位置パラメータ ($@ と同じ) をループ
-        if [ "$arg" = "load" ]; then
-            load_mode="true"
-            break
+    # バージョン管理
+    local remote_version_info remote_version auth_method local_version
+    remote_version_info=$(get_commit_version "$file_name" "$force_mode")
+    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+        debug_log "DEBUG" "download: Failed to get remote version for $file_name"
+        return 1 # 失敗時は 1 を返す
+    fi
+    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+
+    # ローカルバージョン
+    local script_file="${CACHE_DIR}/script.ch"
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    [ -z "$local_version" ] && local_version=""
+
+    local file_path="${BASE_DIR}/${file_name}"
+
+    # 強制DL判定
+    if [ "$force_mode" = "true" ]; then
+        debug_log "DEBUG" "download: force mode enabled for $file_name"
+    fi
+
+    # バージョン一致判定（force未指定時のみスキップ）
+    if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
+        debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
+        # chmod要求ありなら実行
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
         fi
-    done
-    # 注意: この eval set は関数内の位置パラメータを一時的に上書きするだけです
+        return 0 # 成功時は 0 を返す
+    fi
 
-    # "load" が指定されていて、かつ並列ダウンロード中でない場合のみ source する
-    if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
-        local file_to_load="${BASE_DIR}/${file_name}"
-        if [ -f "$file_to_load" ]; then
-            debug_log "DEBUG" "download: Sourcing file due to 'load' option (not in parallel): $file_to_load"
-            # POSIX準拠の source コマンド
-            . "$file_to_load"
+    # DL処理
+    local api_status
+    # APIレートチェックは並列実行中は行わない（download_parallel開始時に行う想定）
+    if [ "$suppress_message" = "false" ]; then
+        api_status=$(check_api_rate_limit)
+        debug_log "DEBUG" "download: API status: $api_status"
+    else
+        api_status="(Checked)" # 並列中はチェック済みとして表示
+    fi
+
+    # DL実行
+    if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
+        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
+        return 1 # 失敗時は 1 を返す
+    fi
+
+    # バージョンキャッシュ保存
+    if [ -n "$remote_version" ]; then
+        # save_version_to_cache が失敗しても download 自体の成否には影響させない
+        if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
+            debug_log "DEBUG" "download: save_version_to_cache failed for $file_name, but download itself succeeded."
+        fi
+    fi
+
+    # chmod (download_fetch_file 内でも実行されるが、念のためここでも)
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed after download for $file_path"
+    fi
+
+    # サイレント/隠しモードでなく、かつ並列実行中でない場合のみ、DL成功メッセージ表示
+    if [ "$suppress_message" = "false" ] && [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
+    fi
+
+    # <<< Add: Source the file if load_mode is true after successful download
+    if [ "$load_mode" = "true" ]; then
+        if [ -f "$file_path" ]; then
+            debug_log "DEBUG" "download: Sourcing downloaded file due to load option: $file_path"
+            . "$file_path"
             local source_status=$?
             if [ $source_status -ne 0 ]; then
-                debug_log "DEBUG" "download: Failed to source file '$file_to_load' with status $source_status."
+                debug_log "DEBUG" "download: Sourcing downloaded file failed with status $source_status: $file_path"
+                # sourceに失敗しても download 自体は成功しているので成功扱いとする
             fi
-        else
-            debug_log "DEBUG" "download: 'load' option specified but file not found: $file_to_load"
         fi
-    elif [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" = "true" ]; then
-         # "load" が指定されていても並列実行中は source しない (download_parallel が後でまとめて行うため)
-         debug_log "DEBUG" "download: 'load' option specified but skipping source because IN_PARALLEL_DOWNLOAD is true for $file_name"
     fi
-    # --- ↑↑↑ "load" オプション処理 (修正版) ↑↑↑ ---
 
     return 0 # 成功時は 0 を返す
 }
 
-download() {
+OK_download() {
     local file_name="$1"
     shift
 
