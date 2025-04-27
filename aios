@@ -2169,7 +2169,7 @@ download_parallel() {
         return 0
     fi
 
-    # --- コマンド分割＆ロード対象記録（ここを改修） ---
+    # --- コマンド分割＆ロード対象記録 ---
     total_lines=$(wc -l < "$all_tasks_file")
     [ "$total_lines" -eq 0 ] && stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success" && debug_log "DEBUG" "download_files() is empty" && return 0
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
@@ -2181,7 +2181,7 @@ download_parallel() {
     task_index=0
     line_index=0
     while IFS= read -r task_line || [ -n "$task_line" ]; do
-        task_file="${task_file_prefix}$(printf "%03d" $((line_index / lines_per_task))).tmp"
+        task_file="${task_file_prefix}$(printf "%03d" $((line_index % max_parallel))).tmp"
         echo "$task_line" >> "$task_file"
         line_index=$((line_index + 1))
     done < "$all_tasks_file"
