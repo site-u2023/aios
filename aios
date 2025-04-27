@@ -2202,12 +2202,7 @@ OK_save_version_to_cache() {
     return $return_status
 }
 
-# download 関数 (シングルスレッド時の load オプション対応)
-# 変更点:
-# 1. オプション解析で `load` オプションも受け取るように `load_mode` 変数を追加。
-# 2. 関数の最後に、`IN_PARALLEL_DOWNLOAD` が true でなく、かつ `load_mode` が true の場合に、
-#    ファイルを `.` (source) コマンドで読み込む処理を追加。
-# 3. `save_version_to_cache` 呼び出し時に `auth_method` を渡すように修正。
+# download 関数の全文 
 download() {
     local file_name="$1"
     shift
@@ -2224,8 +2219,9 @@ download() {
     local force_mode="false"
     local hidden_mode="false"
     local quiet_mode="false"
-    local load_mode="false" # <<< 変更点: load_mode 変数を追加
     local interpreter_name=""
+    # "load"は完全無視
+    # その他オプションが追加される場合、ここでパース
 
     # オプション解析
     while [ $# -gt 0 ]; do
@@ -2234,10 +2230,11 @@ download() {
             force)   force_mode="true" ;;
             hidden)  hidden_mode="true" ;;
             quiet)   quiet_mode="true" ;;
-            load)    load_mode="true" ;; # <<< 変更点: load オプションを認識
             bash|python3|node|perl)
                 interpreter_name="$1"
                 ;;
+            # "load"などはここで無視
+            load)    ;;
             *)
                 ;;
         esac
@@ -2282,21 +2279,6 @@ download() {
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
         fi
-        # <<< 変更点: シングルスレッド時のロード処理 >>>
-        if [ "$suppress_message" = "false" ] && [ "$load_mode" = "true" ]; then
-            if [ -f "$file_path" ]; then
-                debug_log "DEBUG" "download: Sourcing existing up-to-date file (single-thread load): $file_path"
-                . "$file_path"
-                if [ $? -ne 0 ]; then
-                    debug_log "DEBUG" "download: Failed to source existing file $file_path"
-                    return 1 # source 失敗時はエラー
-                fi
-            else
-                debug_log "DEBUG" "download: File not found for sourcing (single-thread load): $file_path"
-                return 1 # ファイルがない場合はエラー
-            fi
-        fi
-        # <<< 変更点ここまで >>>
         return 0 # 成功時は 0 を返す
     fi
 
@@ -2318,11 +2300,10 @@ download() {
 
     # バージョンキャッシュ保存
     if [ -n "$remote_version" ]; then
-        # <<< 変更点: save_version_to_cache に auth_method を渡す >>>
+        # save_version_to_cache が失敗しても download 自体の成否には影響させない
         if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
             debug_log "DEBUG" "download: save_version_to_cache failed for $file_name, but download itself succeeded."
         fi
-        # <<< 変更点ここまで >>>
     fi
 
     # chmod (download_fetch_file 内でも実行されるが、念のためここでも)
@@ -2335,27 +2316,11 @@ download() {
         printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
     fi
 
-    # <<< 変更点: シングルスレッド時のロード処理 >>>
-    if [ "$suppress_message" = "false" ] && [ "$load_mode" = "true" ]; then
-        if [ -f "$file_path" ]; then
-            debug_log "DEBUG" "download: Sourcing downloaded file (single-thread load): $file_path"
-            . "$file_path"
-            if [ $? -ne 0 ]; then
-                 debug_log "DEBUG" "download: Failed to source downloaded file $file_path"
-                 return 1 # source 失敗時はエラー
-            fi
-        else
-            debug_log "DEBUG" "download: File not found for sourcing after download (single-thread load): $file_path"
-            return 1 # ファイルがない場合はエラー
-        fi
-    fi
-    # <<< 変更点ここまで >>>
-
     return 0 # 成功時は 0 を返す
 }
 
 # download 関数の全文 
-OK_download() {
+download_multi() {
     local file_name="$1"
     shift
 
