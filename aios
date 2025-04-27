@@ -2226,6 +2226,37 @@ download() {
         printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
     fi
 
+    # --- "load" オプションの処理を追加 ---
+    local load_mode="false"
+    # download 関数に渡された元の引数リスト ($@) を確認し "load" が存在するかチェック
+    local arg
+    for arg in "$@"; do
+        if [ "$arg" = "load" ]; then
+            load_mode="true"
+            break
+        fi
+    done
+
+    # "load" が指定されていて、かつ並列ダウンロード中でない場合のみ source する
+    if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
+        local file_to_load="${BASE_DIR}/${file_name}"
+        if [ -f "$file_to_load" ]; then
+            debug_log "DEBUG" "download: Sourcing file due to 'load' option (not in parallel): $file_to_load"
+            # POSIX準拠の source コマンド
+            . "$file_to_load"
+            local source_status=$?
+            if [ $source_status -ne 0 ]; then
+                debug_log "DEBUG" "download: Failed to source file '$file_to_load' with status $source_status."
+            fi
+        else
+            debug_log "DEBUG" "download: 'load' option specified but file not found: $file_to_load"
+        fi
+    elif [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" = "true" ]; then
+         # "load" が指定されていても並列実行中は source しない (download_parallel が後でまとめて行うため)
+         debug_log "DEBUG" "download: 'load' option specified but skipping source because IN_PARALLEL_DOWNLOAD is true for $file_name"
+    fi
+    # --- "load" オプション処理ここまで ---
+
     return 0 # 成功時は 0 を返す
 }
 
