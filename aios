@@ -2380,6 +2380,8 @@ download_parallel() {
     # --- END ADDED ---
     local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE IN_PARALLEL_DOWNLOAD" # Added IN_PARALLEL_DOWNLOAD
 
+    trap 'debug_log "DEBUG" "download_parallel exiting, setting IN_PARALLEL_DOWNLOAD=false via trap."; IN_PARALLEL_DOWNLOAD="false"; trap - EXIT' EXIT
+
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
