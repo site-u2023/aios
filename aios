@@ -82,10 +82,7 @@ SPINNER_COLOR="white" # デフォルトのスピナー色
 ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # --- Set MAX_PARALLEL_TASKS ---
-MAX_CORES_LIMIT="${MAX_CORES_LIMIT:-4}"
-detected_cores=$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
-[ -z "$detected_cores" ] && detected_cores=1  # 検出失敗時のフォールバック
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(printf "%s\n%s\n" "$detected_cores" "$MAX_CORES_LIMIT" | sort -n | head -n 1)}"
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
 
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
