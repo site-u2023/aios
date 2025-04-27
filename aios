@@ -2185,6 +2185,148 @@ download() {
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
         fi
+        
+        # ★★★ 変更点: ファイルが最新でもload_modeが有効ならsourceする ★★★
+        if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
+            if [ -f "$file_path" ]; then
+                debug_log "DEBUG" "download: Sourcing existing file due to load option: $file_path"
+                . "$file_path"
+                local source_status=$?
+                if [ $source_status -ne 0 ]; then
+                    debug_log "DEBUG" "download: Sourcing existing file failed with status $source_status: $file_path"
+                    # sourceに失敗しても download 自体は成功しているので成功扱いとする
+                fi
+            fi
+        fi
+        # ★★★ 変更点ここまで ★★★
+        
+        return 0 # 成功時は 0 を返す
+    fi
+
+    # DL処理
+    local api_status
+    # APIレートチェックは並列実行中は行わない（download_parallel開始時に行う想定）
+    if [ "$suppress_message" = "false" ]; then
+        api_status=$(check_api_rate_limit)
+        debug_log "DEBUG" "download: API status: $api_status"
+    else
+        api_status="(Checked)" # 並列中はチェック済みとして表示
+    fi
+
+    # DL実行
+    if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
+        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
+        return 1 # 失敗時は 1 を返す
+    fi
+
+    # バージョンキャッシュ保存
+    if [ -n "$remote_version" ]; then
+        # save_version_to_cache が失敗しても download 自体の成否には影響させない
+        if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
+            debug_log "DEBUG" "download: save_version_to_cache failed for $file_name, but download itself succeeded."
+        fi
+    fi
+
+    # chmod (download_fetch_file 内でも実行されるが、念のためここでも)
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed after download for $file_path"
+    fi
+
+    # サイレント/隠しモードでなく、かつ並列実行中でない場合のみ、DL成功メッセージ表示
+    if [ "$suppress_message" = "false" ] && [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
+    fi
+
+    # <<< Add: Source the file if load_mode is true after successful download
+    if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
+        if [ -f "$file_path" ]; then
+            debug_log "DEBUG" "download: Sourcing downloaded file due to load option: $file_path"
+            . "$file_path"
+            local source_status=$?
+            if [ $source_status -ne 0 ]; then
+                debug_log "DEBUG" "download: Sourcing downloaded file failed with status $source_status: $file_path"
+                # sourceに失敗しても download 自体は成功しているので成功扱いとする
+            fi
+        fi
+    fi
+
+    return 0 # 成功時は 0 を返す
+}
+
+OK_download() {
+    local file_name="$1"
+    shift
+
+    # download_parallel 内のサブシェルから呼び出されたかを示すフラグ
+    local suppress_message="false"
+    if [ "$IN_PARALLEL_DOWNLOAD" = "true" ]; then
+        suppress_message="true"
+        debug_log "DEBUG" "download: Running inside parallel task, suppressing individual success message for $file_name."
+    fi
+
+    # デフォルト設定
+    local chmod_mode="false"
+    local force_mode="false"
+    local hidden_mode="false"
+    local quiet_mode="false"
+    local interpreter_name=""
+    local load_mode="false"
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            chmod)   chmod_mode="true" ;;
+            force)   force_mode="true" ;;
+            hidden)  hidden_mode="true" ;;
+            quiet)   quiet_mode="true" ;;
+            bash|python3|node|perl)
+                interpreter_name="$1"
+                ;;
+            load)   load_mode="true" ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    # ファイル名が空の場合は即失敗
+    if [ -z "$file_name" ]; then
+        debug_log "DEBUG" "download: filename is empty"
+        return 1
+    fi
+
+    # バージョン管理
+    local remote_version_info remote_version auth_method local_version
+    remote_version_info=$(get_commit_version "$file_name" "$force_mode")
+    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+        debug_log "DEBUG" "download: Failed to get remote version for $file_name"
+        return 1 # 失敗時は 1 を返す
+    fi
+    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+    auth_method=$(echo "$remote_version_info" | cut -d' ' -f2)
+
+    # ローカルバージョン
+    local script_file="${CACHE_DIR}/script.ch"
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+    [ -z "$local_version" ] && local_version=""
+
+    local file_path="${BASE_DIR}/${file_name}"
+
+    # 強制DL判定
+    if [ "$force_mode" = "true" ]; then
+        debug_log "DEBUG" "download: force mode enabled for $file_name"
+    fi
+
+    # バージョン一致判定（force未指定時のみスキップ）
+    if [ "$force_mode" != "true" ] && [ "$remote_version" = "$local_version" ] && [ -f "$file_path" ]; then
+        debug_log "DEBUG" "download: Local version up-to-date for $file_name ($local_version); skipping download."
+        # chmod要求ありなら実行
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
+        fi
         return 0 # 成功時は 0 を返す
     fi
 
