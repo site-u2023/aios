@@ -2523,6 +2523,7 @@ download_parallel() {
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
+    [ "$CORE_COUNT" -ge 4 ] && max_parallel=5
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
     if ! mkdir -p "$tmp_dir"; then if [ ! -d "$tmp_dir" ]; then debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2; stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"; return 1; fi; fi # Error handling improved
