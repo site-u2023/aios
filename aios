@@ -2811,18 +2811,53 @@ download_parallel() {
     # --- DL完了後、ロード対象を親シェルでsource ---
     # --- MODIFIED: Only source if overall_status is 0 (no flag file and no source error) ---
     if [ $overall_status -eq 0 ] && [ -f "$load_targets_file" ]; then
-    # --- END MODIFIED ---
         debug_log "DEBUG" "Sourcing load targets from $load_targets_file"
+        
+        # ★★★ 変更点: ファイルシステムの同期を強制（バッファをディスクに書き込み） ★★★
+        sync 2>/dev/null || true
+        # ファイルシステムが安定するのを短く待つ
+        sleep 1
+        
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
             local full_load_path="${BASE_DIR}/$load_file" # Construct full path
-            if [ -f "$full_load_path" ]; then
+            
+            # ★★★ 変更点: ファイル存在確認の強化 ★★★
+            local retry_count=0
+            local max_retries=2
+            local file_verified=0
+            
+            while [ $retry_count -lt $max_retries ]; do
+                if [ -f "$full_load_path" ] && [ -s "$full_load_path" ]; then
+                    # ファイルが存在し、内容がある
+                    file_verified=1
+                    debug_log "DEBUG" "File verified: $full_load_path (size: $(wc -c < "$full_load_path" 2>/dev/null || echo 'unknown') bytes)"
+                    break
+                fi
+                
+                debug_log "DEBUG" "Waiting for file to be fully accessible: $full_load_path (attempt $((retry_count + 1))/$max_retries)"
+                sync 2>/dev/null || true
+                sleep 1
+                retry_count=$((retry_count + 1))
+            done
+            
+            if [ $file_verified -eq 1 ]; then
                 debug_log "DEBUG" "Sourcing $full_load_path"
-                # POSIX compliant source: use dot command
+                # 最初のsource試行
                 . "$full_load_path"
                 local source_status=$?
+                
+                # ★★★ 変更点: sourceに失敗した場合のリトライ ★★★
                 if [ $source_status -ne 0 ]; then
-                    debug_log "DEBUG" "Failed to source '$full_load_path' with status $source_status. Marking overall status as failed." >&2
+                    debug_log "DEBUG" "First attempt to source '$full_load_path' failed with status $source_status. Retrying..."
+                    sync 2>/dev/null || true
+                    sleep 1
+                    . "$full_load_path"
+                    source_status=$?
+                fi
+                
+                if [ $source_status -ne 0 ]; then
+                    debug_log "DEBUG" "Failed to source '$full_load_path' with status $source_status after retry. Marking overall status as failed." >&2
                     overall_status=1 # Mark as failure if sourcing fails
                     # --- ADDED: Capture sourcing error info if no prior download error ---
                     # Check fail_flag_file existence instead of overall_status to ensure download error wasn't the cause
@@ -2833,19 +2868,23 @@ download_parallel() {
                     # --- END ADDED ---
                     break # Stop sourcing on first error
                 fi
+                
+                # ★★★ 変更点: 次のファイルをsourceする前に短く待機 ★★★
+                sleep 1
             else
-                debug_log "DEBUG" "Load target file not found: '$full_load_path'. Marking overall status as failed." >&2
+                debug_log "DEBUG" "Load target file not found or empty after retries: '$full_load_path' (path exists: $([ -e "$full_load_path" ] && echo 'yes' || echo 'no'))"
                 overall_status=1 # Mark as failure if load target is missing
                 # --- ADDED: Capture sourcing error info if no prior download error ---
                 # Check fail_flag_file existence instead of overall_status
                 if ! [ -f "$fail_flag_file" ]; then
                     first_failed_task_name="source"
-                    first_error_message="Load target $load_file not found"
+                    first_error_message="Load target $load_file not found or empty after multiple attempts"
                 fi
                 # --- END ADDED ---
                 break # Stop sourcing if file not found
             fi
         done < "$load_targets_file"
+        # ★★★ 変更点ここまで ★★★
     elif [ $overall_status -eq 0 ]; then # Keep original condition for no load file
         # load_targets_file が存在しないのは正常な場合もある
         debug_log "DEBUG" "No load targets file found or it's empty: $load_targets_file"
