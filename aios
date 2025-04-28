@@ -1111,7 +1111,7 @@ setup_github_token() {
 start_spinner() {
     local message="$1"
     local spinner_color="${2:-$SPINNER_COLOR}"
-    local anim_type="${3:-figure}" 
+    local anim_type="${3:-bloc2}" 
     
     # グローバル変数を設定
     SPINNER_MESSAGE="$message"
@@ -1160,9 +1160,12 @@ start_spinner() {
         moon)
             # 環境依存
             SPINNER_CHARS="🌑 🌘 🌗 🌖 🌝 🌔 🌓 🌒"
-            # SPINNER_CHARS="🌕 🌖 🌗 🌘 🌑 🌒 🌓 🌔"
             ;;
         bloc)
+            # 環境依存
+            SPINNER_CHARS="⠧ ⠏ ⠛ ⠹ ⠼ ⠶"
+            ;;
+        bloc2)
             # 環境依存
             SPINNER_CHARS="⢿ ⣻ ⣽ ⣾ ⣷ ⣯ ⣟ ⡿"
             ;;
