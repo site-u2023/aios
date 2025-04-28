@@ -754,6 +754,48 @@ get_message() {
 
 # 🔴　メッセージ系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
+# 🔵　ネットワーク系　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
+
+# ネットワーク接続状態を確認する関数
+check_network_connectivity() {
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local ret4=1
+    local ret6=1
+
+    debug_log "DEBUG: Checking IPv4 connectivity"
+    # ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
+    ping -4 -c 1 -w 3 one.one.one.one >/dev/null 2>&1
+    ret4=$?
+
+    debug_log "DEBUG: Checking IPv6 connectivity"
+    # ping6 -c 1 -w 3 2001:4860:4860::8888 >/dev/null 2>&1
+    ping -6  -c 1 -w 3 one.one.one.one >/dev/null 2>&1
+    ret6=$?
+
+    if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
+        # v4v6デュアルスタック - 両方成功
+        echo "v4v6" > "${ip_check_file}"
+        debug_log "DEBUG: Dual-stack (v4v6) connectivity detected"
+    elif [ "$ret4" -eq 0 ]; then
+        # IPv4のみ成功
+        echo "v4" > "${ip_check_file}"
+        debug_log "DEBUG: IPv4-only connectivity detected"
+    elif [ "$ret6" -eq 0 ]; then
+        # IPv6のみ成功
+        echo "v6" > "${ip_check_file}"
+        debug_log "DEBUG: IPv6-only connectivity detected"
+    else
+        # 両方失敗
+        echo "" > "${ip_check_file}"
+        debug_log "DEBUG: No network connectivity detected"
+        printf "\033[31mPlease connect to the network.\033[0m\n"
+        exit 1
+    fi
+}
+
+# 🔴 ネットワーク系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
+
+
 # 🔵　トークン系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # コミット情報をキャッシュに保存する関数
@@ -3733,7 +3775,7 @@ download_check_version() {
     return 0
 }
 
-download_fetch_file() {
+OK_download_fetch_file() {
     local file_name="$1"
     local clean_remote_version="$2"
     local chmod_mode="$3"
