@@ -1106,9 +1106,123 @@ setup_github_token() {
 
 
 # 🔵　スピナー系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
+start_spinner() {
+    local message="$1"
+    local spinner_color="${2:-$SPINNER_COLOR}"
+    local anim_type="${3:-spinner}" 
+    
+    # グローバル変数を設定
+    SPINNER_MESSAGE="$message"
+    SPINNER_TYPE="$anim_type"
+    SPINNER_COLOR="$spinner_color"
+    
+    if [ "$ANIMATION_ENABLED" -eq "0" ]; then
+        debug_log "DEBUG: Animation disabled, showing static message"
+        return
+    fi
+
+    # OpenWrtでの標準実装 - usleep関連コードを削除
+    SPINNER_DELAY="1"  # アニメーションディレイ値（秒）
+    debug_log "DEBUG: Using standard animation mode (1s)"
+
+    # カーソル非表示
+    printf "\033[?25l"
+
+    # アニメーションタイプに応じた文字セット
+    case "$anim_type" in
+        spinner)
+            SPINNER_CHARS="- \\ | /"
+            ;;
+        dot)
+            SPINNER_CHARS=". .. ... .... ....."
+            ;;
+        figure)
+            SPINNER_CHARS="0 1 2 3 4 5 6 7 8 9"
+            ;;
+        circle)
+            # 環境依存
+            SPINNER_CHARS="◷ ◶ ◵ ◴"
+            ;;
+        square)
+            # 環境依存
+            SPINNER_CHARS="◳ ◲ ◱ ◰"
+            ;;
+        emoji)
+            # 環境依存
+            SPINNER_CHARS="💩 👺 😀 👽 😈 💀"
+            ;;
+        moon)
+            # 環境依存
+            SPINNER_CHARS="🌑 🌘 🌗 🌖 🌝 🌔 🌓 🌒"
+            ;;
+        bloc)
+            # 環境依存
+            SPINNER_CHARS="⠧ ⠏ ⠛ ⠹ ⠼ ⠶"
+            ;;
+        bloc2)
+            # 環境依存
+            SPINNER_CHARS="⢿ ⣻ ⣽ ⣾ ⣷ ⣯ ⣟ ⡿"
+            ;;
+        *)
+            SPINNER_CHARS="- \\ | /"
+            ;;
+    esac
+
+    debug_log "DEBUG: Starting spinner with message: $message, type: $anim_type, delay: $SPINNER_DELAY"
+
+    # 直前のスピナープロセスがまだ実行中の場合は停止
+    if [ -n "$SPINNER_PID" ]; then
+        ps | grep -v grep | grep -q "$SPINNER_PID" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG: Stopping previous spinner process PID: $SPINNER_PID"
+            kill "$SPINNER_PID" >/dev/null 2>&1
+            wait "$SPINNER_PID" 2>/dev/null || true
+        fi
+    fi
+
+    # メッセージファイルの設定
+    SPINNER_MSG_FILE="${CACHE_DIR}/spinner_msg_$$.tmp"
+    mkdir -p "${CACHE_DIR}" 2>/dev/null
+    printf "%s" "$message" > "$SPINNER_MSG_FILE"
+    debug_log "DEBUG: Created spinner message file: $SPINNER_MSG_FILE"
+
+    # バックグラウンドでスピナーを実行
+    (
+        i=0
+        local curr_msg="$message"
+        
+        while true; do
+            # ファイルから新しいメッセージを読み取る
+            if [ -f "$SPINNER_MSG_FILE" ]; then
+                new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
+                    curr_msg="$new_msg"
+                fi
+            fi
+            
+            for char in $SPINNER_CHARS; do
+                printf "\r\033[K%s %s" "$curr_msg" "$(color "$SPINNER_COLOR" "$char")"
+
+                # usleep関連のコードを削除し、常にsleepを使用
+                sleep "$SPINNER_DELAY"
+                
+                # アニメーションサイクル中のメッセージ更新チェック
+                if [ -f "$SPINNER_MSG_FILE" ]; then
+                    new_msg=$(cat "$SPINNER_MSG_FILE" 2>/dev/null)
+                    if [ -n "$new_msg" ] && [ "$new_msg" != "$curr_msg" ]; then
+                        curr_msg="$new_msg"
+                        break  # 新しいメッセージがあれば次のサイクルへ
+                    fi
+                fi
+            done
+        done
+    ) &
+    SPINNER_PID=$!
+    debug_log "DEBUG: Spinner started with PID: $SPINNER_PID"
+}
 
 # スピナー開始関数
-start_spinner() {
+OK_start_spinner() {
     local message="$1"
     local spinner_color="${2:-$SPINNER_COLOR}"
     local anim_type="${3:-spinner}" 
