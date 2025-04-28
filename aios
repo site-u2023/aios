@@ -765,6 +765,9 @@ check_network_connectivity() {
     local ret4=1
     local ret6=1
 
+    # デフォルトのIPバージョンオプション（空=システム設定に従う）
+    WGET_IPV_OPT=""
+
     debug_log "DEBUG: Checking IPv4 connectivity"
     # ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1
     ping -4 -c 1 -w 3 one.one.one.one >/dev/null 2>&1
@@ -805,32 +808,16 @@ check_network_connectivity() {
 }
 
 setup_wget_options() {
-    # ネットワーク状態をキャッシュファイルから取得
-    local network_type=""
-    if [ -f "${CACHE_DIR}/network.ch" ]; then
-        network_type=$(cat "${CACHE_DIR}/network.ch")
+    # ip_type.chの内容をWGET_IPV_OPTにセットするラッパー
+    if [ -f "${CACHE_DIR}/ip_type.ch" ]; then
+        WGET_IPV_OPT=$(cat "${CACHE_DIR}/ip_type.ch")
+        # 空やunknownの場合は空文字列
+        if [ -z "$WGET_IPV_OPT" ] || [ "$WGET_IPV_OPT" = "unknown" ]; then
+            WGET_IPV_OPT=""
+        fi
+    else
+        WGET_IPV_OPT=""
     fi
-    
-    # デフォルトのIPバージョンオプション（空=システム設定に従う）
-    WGET_IPV_OPT=""
-    
-    # ネットワーク状態に応じてIPバージョンオプションを設定 
-    case "$network_type" in
-        v4)
-            WGET_IPV_OPT="-4"
-            debug_log "DEBUG" "Setting wget to use IPv4 only"
-            ;;
-        v6)
-            WGET_IPV_OPT="-6"
-            debug_log "DEBUG" "Setting wget to use IPv6 only"
-            ;;
-        v4v6|*)
-            # デュアルスタック環境またはデフォルト
-            WGET_IPV_OPT="-4"
-            debug_log "DEBUG" "Using system default IP settings for wget"
-            ;;
-    esac
-    
     debug_log "DEBUG" "wget IP version updated to: ${WGET_IPV_OPT}"
 }
 
