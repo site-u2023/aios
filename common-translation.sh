@@ -127,6 +127,9 @@ translate_with_google() {
     fi
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
 
+    # RES_OPTIONSによるDNSタイムアウト短縮（関数内限定）
+    export RES_OPTIONS="timeout:1 attempts:1"
+
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         response_data=""
@@ -155,7 +158,7 @@ translate_with_google() {
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
             debug_log "DEBUG" "translate_with_google: Retrying in 1 second..."
-            # sleep 1 # Use integer sleep
+            sleep 1
         fi
     done
 
@@ -164,22 +167,16 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# Google翻訳APIを使用した翻訳関数 (修正版 - 一時ファイル不使用、変数経由処理)
-# @param $1: source_text (string) - The text to translate.
-# @param $2: target_lang_code (string) - The target language code (e.g., "ja").
-# @stdout: Translated text on success. Empty string on failure.
-# @return: 0 on success, non-zero on failure.
 OK_translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
 
-    local ip_check_file="${CACHE_DIR}/network.ch"
+    # --- network.ch依存をip_type.chに変更 ---
+    local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local wget_options=""
     local retry_count=0
-    local network_type=""
-    # --- CHANGE: temp_file related variables removed ---
-    # local temp_file="${BASE_DIR}/google_response_$$.tmp"
+    # --- temp_file関連の変数は元から未使用 ---
     local api_url=""
     local translated_text=""
     local wget_exit_code=0
@@ -188,29 +185,16 @@ OK_translate_with_google() {
     # Ensure BASE_DIR exists (still needed for potential cache files, etc.)
     mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
 
-    # --- Network Type Detection (remains the same) ---
-    if [ ! -f "$ip_check_file" ]; then
-         if type check_network_connectivity >/dev/null 2>&1; then
-            debug_log "DEBUG" "translate_with_google: Running check_network_connectivity"
-            check_network_connectivity
-         else
-             debug_log "DEBUG" "translate_with_google: check_network_connectivity not found, assuming v4"
-             network_type="v4"
-         fi
+    # --- IPバージョン判定（ip_type.chの内容をそのままwget_optionsに） ---
+    if [ ! -f "$ip_type_file" ]; then
+        echo "Network is not available. (ip_type.ch not found)" >&2
+        return 1
     fi
-    network_type=$(cat "$ip_check_file" 2>/dev/null)
-    if [ -z "$network_type" ]; then
-        debug_log "DEBUG" "translate_with_google: Could not read network type from $ip_check_file or file is empty, defaulting to v4."
-        network_type="v4"
+    wget_options=$(cat "$ip_type_file" 2>/dev/null)
+    if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
+        echo "Network is not available. (ip_type.ch is unknown or empty)" >&2
+        return 1
     fi
-    case "$network_type" in
-        "v4"|"v4v6") wget_options="-4" ;;
-        "v6") wget_options="-6" ;;
-        *)
-           debug_log "DEBUG" "translate_with_google: Unknown network type '$network_type', using no specific IP version."
-           wget_options="" ;;
-    esac
-    # --- End Network Type Detection ---
 
     local encoded_text=$(urlencode "$source_text")
     if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
@@ -251,7 +235,6 @@ OK_translate_with_google() {
         fi
     done
 
-    # --- CHANGE: No temp file to remove ---
     debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
     printf "" # Output empty string on failure
     return 1 # Failure
