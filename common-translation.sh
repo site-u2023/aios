@@ -66,44 +66,10 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を�
 # --- Set MAX_PARALLEL_TASKS ---
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
 
-urlencode() {
-    local input="$1"
-    # hexdumpで1バイト16進、スペース区切りで出力しawkで処理
-    printf '%s' "$input" | hexdump -v -e '/1 "%02X "' | awk '
-    BEGIN {
-        # ASCII範囲かつ許可文字列（A-Z,a-z,0-9,.,~,_,-)はそのまま出力
-        for (i = 0; i <= 255; i++) {
-            c = sprintf("%c", i)
-            if ((i >= 0x30 && i <= 0x39) ||    # 0-9
-                (i >= 0x41 && i <= 0x5A) ||    # A-Z
-                (i >= 0x61 && i <= 0x7A) ||    # a-z
-                i == 0x2E || i == 0x7E || i == 0x5F || i == 0x2D) # .~_-
-                tbl[sprintf("%02X", i)] = c
-            else if (i == 0x20)
-                tbl[sprintf("%02X", i)] = "%20"
-            else
-                tbl[sprintf("%02X", i)] = "%" sprintf("%02X", i)
-        }
-    }
-    {
-        out = ""
-        n = split($0, a, " ")
-        for (i = 1; i <= n; i++) {
-            hex = a[i]
-            if (hex == "") continue
-            if (hex in tbl)
-                out = out tbl[hex]
-            else
-                out = out "%" hex
-        }
-        print out
-    }'
-}
-
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
 # @stdout: URL-encoded string.
-OK_urlencode() {
+urlencode() {
     local string="$1"
     local encoded=""
     local char # This variable is no longer needed with the direct slicing
