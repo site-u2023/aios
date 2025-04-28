@@ -156,6 +156,7 @@ en|CONFIG_DOWNLOAD_FAILED=Failed to download{:} {0}
 # =======================
 # aios
 # =======================
+en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
 en|DOWNLOAD_PARALLEL_START=Downloading essential files
 en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully
 en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}{:}
