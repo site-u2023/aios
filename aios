@@ -82,7 +82,7 @@ ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # --- Set MAX_PARALLEL_TASKS ---
 # MAX_PARALLEL_TASKS="$(c=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1); calculated_tasks=$((c + 1)); if [ "$calculated_tasks" -gt 5 ]; then echo 5; else echo "$calculated_tasks"; fi)"
-PARALLEL_LIMIT="4"
+PARALLEL_LIMIT="5"
 CORE_COUNT=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
 MAX_PARALLEL_TASKS=$(( (CORE_COUNT + 1 > PARALLEL_LIMIT) * PARALLEL_LIMIT + (CORE_COUNT + 1 <= PARALLEL_LIMIT) * (CORE_COUNT + 1) ))
 echo "MAX PARALLELE: $MAX_PARALLEL_TASKS"
@@ -1782,8 +1782,138 @@ OK_detect_wget_capabilities() {
     fi
 }
 
-# APIレート制限情報のチェックと取得（キャッシュ機能付き）
 check_api_rate_limit() {
+    local token="$(get_github_token)"
+    local temp_file="${CACHE_DIR}/api_limit.tmp"
+    local auth_method="direct"
+    local current_time=$(date +%s)
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local network_type=""
+    local WGET_IPV_OPT=""
+
+    # IPバージョン設定（network.ch優先）
+    if [ -f "$ip_check_file" ]; then
+        network_type=$(cat "$ip_check_file" 2>/dev/null)
+    fi
+    case "$network_type" in
+        "v4"|"v4v6") WGET_IPV_OPT="-4" ;;
+        "v6") WGET_IPV_OPT="-6" ;;
+        *) WGET_IPV_OPT="" ;;
+    esac
+
+    # 先にキャッシュファイルをロード（初回実行時）
+    if [ -z "$API_LAST_CHECK" ] && [ -f "${CACHE_DIR}/api_rate.ch" ]; then
+        debug_log "DEBUG" "Loading API rate information from cache file"
+        . "${CACHE_DIR}/api_rate.ch"
+    fi
+
+    # キャッシュ有効期間内の場合は保存値を返す
+    if [ -n "$API_REMAINING" ] && [ $(( current_time - API_LAST_CHECK )) -lt ${API_CACHE_TTL:-60} ]; then
+        debug_log "DEBUG" "Using cached API rate limit info: $API_REMAINING/$API_LIMIT, age: $(( current_time - API_LAST_CHECK ))s"
+        echo "API: ${API_REMAINING}/${API_LIMIT} TTL:${API_RESET_TIME}m"
+        return 0
+    fi
+
+    # 既存のファイルを削除
+    [ -f "$temp_file" ] && rm -f "$temp_file"
+
+    # wget機能と認証方法の検出（一度だけ実行）
+    if [ -z "$WGET_CAPABILITY" ] && [ -n "$token" ]; then
+        WGET_CAPABILITY=$(detect_wget_capabilities)
+        debug_log "DEBUG" "Detected wget capability: $WGET_CAPABILITY"
+        if [ "$WGET_CAPABILITY" = "limited" ] && [ -f "$GITHUB_TOKEN_FILE" ]; then
+            debug_log "DEBUG" "GitHub token is set but authentication is not supported with current wget version"
+        fi
+    fi
+
+    # 認証方法の選択
+    if [ -n "$token" ] && [ "$WGET_CAPABILITY" != "limited" ]; then
+        if [ "$WGET_CAPABILITY" = "header" ]; then
+            $BASE_WGET $WGET_IPV_OPT -O "$temp_file" --header="Authorization: token $token" \
+                "https://api.github.com/rate_limit" 2>/dev/null
+
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                auth_method="token"
+                debug_log "DEBUG" "Successfully authenticated with token header"
+            fi
+        elif [ "$WGET_CAPABILITY" = "basic" ]; then
+            $BASE_WGET $WGET_IPV_OPT -O "$temp_file" --user="$token" --password="x-oauth-basic" \
+                "https://api.github.com/rate_limit" 2>/dev/null
+
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ] && ! grep -q "Bad credentials\|Unauthorized" "$temp_file"; then
+                auth_method="basic"
+                debug_log "DEBUG" "Successfully authenticated with basic auth"
+            fi
+        fi
+    fi
+
+    # 非認証リクエスト（認証に失敗した場合または認証なしの場合）
+    if [ "$auth_method" = "direct" ]; then
+        debug_log "DEBUG" "Making direct API request"
+        $BASE_WGET $WGET_IPV_OPT -O "$temp_file" "https://api.github.com/rate_limit" 2>/dev/null
+    fi
+
+    # レスポンス解析（元ソース通り）
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        local core_limit=$(grep -o '"limit"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        local core_remaining=$(grep -o '"remaining"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        local core_reset=$(grep -o '"reset"[ ]*:[ ]*[0-9]\+' "$temp_file" | head -1 | grep -o '[0-9]\+')
+        if [ -z "$core_limit" ] || [ -z "$core_remaining" ] || [ -z "$core_reset" ]; then
+            local core_section=$(sed -n '/"core":/,/},/p' "$temp_file")
+            [ -z "$core_limit" ] && core_limit=$(echo "$core_section" | grep -o '"limit"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_remaining" ] && core_remaining=$(echo "$core_section" | grep -o '"remaining"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+            [ -z "$core_reset" ] && core_reset=$(echo "$core_section" | grep -o '"reset"[ ]*:[ ]*[0-9]\+' | head -1 | grep -o '[0-9]\+')
+        fi
+        local reset_minutes=60
+        if [ -n "$core_reset" ] && [ "$core_reset" -gt 1000000000 ]; then
+            local now_time=$(date +%s)
+            if [ "$core_reset" -gt "$now_time" ]; then
+                local reset_seconds=$(( core_reset - now_time ))
+                reset_minutes=$(( reset_seconds / 60 ))
+                [ "$reset_minutes" -lt 1 ] && reset_minutes=1
+            else
+                reset_minutes=0
+            fi
+        else
+            if [ "$auth_method" != "direct" ]; then
+                reset_minutes=60
+            else
+                reset_minutes=5
+            fi
+        fi
+        API_REMAINING=$core_remaining
+        API_LIMIT=$core_limit
+        API_RESET_TIME=$reset_minutes
+        API_AUTH_METHOD=$auth_method
+        API_LAST_CHECK=$current_time
+        [ -z "$API_LIMIT" ] && API_LIMIT="?"
+        [ -z "$API_REMAINING" ] && API_REMAINING="?"
+    else
+        if [ "$auth_method" != "direct" ]; then
+            API_LIMIT="5000"
+            API_REMAINING="?"
+            API_RESET_TIME="60"
+        else
+            API_LIMIT="60"
+            API_REMAINING="?"
+            API_RESET_TIME="5"
+        fi
+        API_AUTH_METHOD=$auth_method
+        API_LAST_CHECK=$current_time
+    fi
+
+    save_api_rate_cache
+
+    local status_text="API: ${API_REMAINING}/${API_LIMIT} TTL:${API_RESET_TIME}m"
+    debug_log "DEBUG" "Final API status: $status_text (auth_method=$auth_method)"
+
+    [ -f "$temp_file" ] && rm -f "$temp_file"
+
+    echo "$status_text"
+}
+
+# APIレート制限情報のチェックと取得（キャッシュ機能付き）
+OK_check_api_rate_limit() {
     local token="$(get_github_token)"
     local temp_file="${CACHE_DIR}/api_limit.tmp"
     local auth_method="direct"
