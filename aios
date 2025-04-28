@@ -3775,6 +3775,89 @@ download_check_version() {
     return 0
 }
 
+download_fetch_file() {
+    local file_name="$1"
+    local clean_remote_version="$2"
+    local chmod_mode="$3"
+    local install_path="${BASE_DIR}/$file_name"
+    local script_file="${CACHE_DIR}/script.ch"
+    
+    debug_log "DEBUG" "download_fetch_file called for ${file_name}"
+    
+    # ダウンロードURLの設定
+    local remote_url="${BASE_URL}/$file_name"
+    
+    # キャッシュバスティングの適用
+    if [ "$FORCE" = "true" ] || echo "$clean_remote_version" | grep -q "direct"; then
+        remote_url="${remote_url}${CACHE_BUST}"
+    fi
+    
+    debug_log "DEBUG" "Downloading from ${remote_url} to ${install_path}"
+    
+    # ネットワークタイプ検出と適切なwgetオプションの設定
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local wget_options=""
+    local network_type=""
+    local wget_exit_code=0
+    
+    if [ ! -f "$ip_check_file" ]; then
+         if type check_network_connectivity >/dev/null 2>&1; then
+            debug_log "DEBUG" "download_fetch_file: Running check_network_connectivity"
+            check_network_connectivity
+         else
+             debug_log "DEBUG" "download_fetch_file: check_network_connectivity not found, assuming v4"
+             network_type="v4"
+         fi
+    fi
+    
+    network_type=$(cat "$ip_check_file" 2>/dev/null)
+    if [ -z "$network_type" ]; then
+        debug_log "DEBUG" "download_fetch_file: Could not read network type from $ip_check_file or file is empty, defaulting to v4."
+        network_type="v4"
+    fi
+    
+    case "$network_type" in
+        "v4"|"v4v6") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        *)
+           debug_log "DEBUG" "download_fetch_file: Unknown network type '$network_type', using no specific IP version."
+           wget_options="" ;;
+    esac
+    
+    # BusyBox wget向けに最適化した明示的なコマンド構文
+    wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O "$install_path" "$remote_url" 2>/dev/null
+    wget_exit_code=$?
+    
+    if [ "$wget_exit_code" -ne 0 ]; then
+        debug_log "DEBUG" "Download failed: $file_name"
+        return 1
+    fi
+    
+    # ファイル検証
+    if [ ! -f "$install_path" ]; then
+        debug_log "DEBUG" "Downloaded file not found: $file_name"
+        return 1
+    fi
+    
+    if [ ! -s "$install_path" ]; then
+        debug_log "DEBUG" "Downloaded file is empty: $file_name"
+        return 1
+    fi
+    
+    debug_log "DEBUG" "File successfully downloaded to ${install_path}"
+    
+    # 権限設定
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$install_path"
+        debug_log "DEBUG" "chmod +x applied to $file_name"
+    fi
+    
+    # バージョン情報をキャッシュに保存
+    save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
+    
+    return 0
+}
+
 OK_download_fetch_file() {
     local file_name="$1"
     local clean_remote_version="$2"
