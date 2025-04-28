@@ -2276,7 +2276,7 @@ download_parallel() {
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
-    printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "$MAX_PARALLEL_TASKS")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$MAX_PARALLEL_TASKS")")"
 
     # [ "$CORE_COUNT" -ge 4 ] && max_parallel=5
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
