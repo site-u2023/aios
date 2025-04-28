@@ -137,8 +137,17 @@ translate_with_google() {
         wget_exit_code=$?
         if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
             if echo "$response_data" | grep -q '^\s*\[\[\["'; then
-                translated_text=$(echo "$response_data" | sed -e 's/^\s*\[\[\["//' -e 's/",".*//' | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/\&/g' -e 's/\\"/"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
-
+                translated_text=$(printf %s "$response_data" | sed -e 's/^\s*\[\[\["//' \
+                    -e 's/",".*//' \
+                    -e 's/\\u003d/=/g' \
+                    -e 's/\\u003c/</g' \
+                    -e 's/\\u003e/>/g' \
+                    -e 's/\\u0026/\&/g' \
+                    -e 's/\\"/"/g' \
+                    -e 's/\\n/\n/g' \
+                    -e 's/\\r//g' \
+                    -e 's/\\\\/\\/g')
+                    
                 if [ -n "$translated_text" ]; then
                     printf "%s\n" "$translated_text"
                     return 0 # Success
