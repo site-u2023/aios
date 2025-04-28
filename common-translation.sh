@@ -91,7 +91,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-translate_with_google() {
+GOOD_translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
@@ -185,7 +185,7 @@ translate_with_google() {
 }
 
 
-OK2_translate_with_google() {
+translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
