@@ -1111,7 +1111,7 @@ setup_github_token() {
 start_spinner() {
     local message="$1"
     local spinner_color="${2:-$SPINNER_COLOR}"
-    local anim_type="${3:-bloc}" 
+    local anim_type="${3:-circle}" 
     
     # グローバル変数を設定
     SPINNER_MESSAGE="$message"
@@ -1152,6 +1152,14 @@ start_spinner() {
         pulse)
             # 環境依存
             SPINNER_CHARS="◯ ◎"
+            ;;
+        circle)
+            # 環境依存
+            SPINNER_CHARS="◴ ◵ ◶ ◷"
+            ;;
+        square)
+            # 環境依存
+            SPINNER_CHARS="◰ ◱ ◲ ◳"
             ;;
         emoji)
             # 環境依存
@@ -2531,7 +2539,7 @@ download_parallel() {
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
-    [ "$CORE_COUNT" -ge 4 ] && max_parallel=5
+    # [ "$CORE_COUNT" -ge 4 ] && max_parallel=5
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
     if ! mkdir -p "$tmp_dir"; then 
