@@ -77,7 +77,6 @@ DL_DIR="${DL_DIR:-$BASE_DIR/download}"
 
 # スピナーデフォルト設定
 SPINNER_DELAY="1" # デフォルトは秒単位
-SPINNER_USLEEP_VALUE="1000000" # 1秒（マイクロ秒）
 SPINNER_COLOR="white" # デフォルトのスピナー色
 ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
@@ -1121,8 +1120,7 @@ start_spinner() {
         return
     fi
 
-    # OpenWrtでの標準実装 - usleep関連コードを削除
-    SPINNER_DELAY="1"  # アニメーションディレイ値（秒）
+    SPINNER_DELAY="${SPINNER_DELAY:-1}"  # アニメーションディレイ値（秒）
     debug_log "DEBUG: Using standard animation mode (1s)"
 
     # カーソル非表示
