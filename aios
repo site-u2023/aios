@@ -777,18 +777,22 @@ check_network_connectivity() {
     if [ "$ret4" -eq 0 ] && [ "$ret6" -eq 0 ]; then
         # v4v6デュアルスタック - 両方成功
         echo "v4v6" > "${ip_check_file}"
+        WGET_IPV_OPT="-4"
         debug_log "DEBUG: Dual-stack (v4v6) connectivity detected"
     elif [ "$ret4" -eq 0 ]; then
         # IPv4のみ成功
         echo "v4" > "${ip_check_file}"
+        WGET_IPV_OPT="-4"
         debug_log "DEBUG: IPv4-only connectivity detected"
     elif [ "$ret6" -eq 0 ]; then
         # IPv6のみ成功
         echo "v6" > "${ip_check_file}"
+        WGET_IPV_OPT="-6"
         debug_log "DEBUG: IPv6-only connectivity detected"
     else
         # 両方失敗
-        echo "" > "${ip_check_file}"
+        echo "unknown" > "${ip_check_file}"
+        WGET_IPV_OPT="unknown"
         debug_log "DEBUG: No network connectivity detected"
         printf "\033[31mPlease connect to the network.\033[0m\n"
         exit 1
