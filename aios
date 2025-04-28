@@ -2528,7 +2528,7 @@ download_parallel() {
 
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
-    [ "$CORE_COUNT" -ge 4 ] && max_parallel=7
+    [ "$CORE_COUNT" -ge 4 ] && max_parallel=5
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
     if ! mkdir -p "$tmp_dir"; then 
