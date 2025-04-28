@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-28-00-00"
+SCRIPT_VERSION="2025-04-28-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -68,29 +68,33 @@ MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch"
 
 urlencode() {
     local input="$1"
-    # hexdumpでバイト列→awkでURLエンコード
-    printf '%s' "$input" | hexdump -v -e '/1 "%02X"' | \
-    awk '
-    function chr2c(c) {
-        if (c ~ /^[0-9A-Fa-f]{2}$/) {
-            val = strtonum("0x" c)
-            if ((val >= 0x30 && val <= 0x39) ||    # 0-9
-                (val >= 0x41 && val <= 0x5A) ||    # A-Z
-                (val >= 0x61 && val <= 0x7A) ||    # a-z
-                val == 0x2E || val == 0x7E || val == 0x5F || val == 0x2D) # .~_-
-                return sprintf("%c", val)
-            else if (val == 0x20)
-                return "%20"
+    # hexdumpで1バイト16進、スペース区切りで出力しawkで処理
+    printf '%s' "$input" | hexdump -v -e '/1 "%02X "' | awk '
+    BEGIN {
+        # ASCII範囲かつ許可文字列（A-Z,a-z,0-9,.,~,_,-)はそのまま出力
+        for (i = 0; i <= 255; i++) {
+            c = sprintf("%c", i)
+            if ((i >= 0x30 && i <= 0x39) ||    # 0-9
+                (i >= 0x41 && i <= 0x5A) ||    # A-Z
+                (i >= 0x61 && i <= 0x7A) ||    # a-z
+                i == 0x2E || i == 0x7E || i == 0x5F || i == 0x2D) # .~_-
+                tbl[sprintf("%02X", i)] = c
+            else if (i == 0x20)
+                tbl[sprintf("%02X", i)] = "%20"
             else
-                return sprintf("%%%02X", val)
+                tbl[sprintf("%02X", i)] = "%" sprintf("%02X", i)
         }
-        return ""
     }
     {
         out = ""
-        for (i = 1; i <= length($0); i += 2) {
-            c = substr($0, i, 2)
-            out = out chr2c(c)
+        n = split($0, a, " ")
+        for (i = 1; i <= n; i++) {
+            hex = a[i]
+            if (hex == "") continue
+            if (hex in tbl)
+                out = out tbl[hex]
+            else
+                out = out "%" hex
         }
         print out
     }'
