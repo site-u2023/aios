@@ -1654,8 +1654,78 @@ version_is_newer() {
     return 1  # 同一バージョン
 }
 
-# OpenWrt環境のwget機能検出関数（改良版）
 detect_wget_capabilities() {
+    debug_log "DEBUG" "Detecting wget capabilities for current environment"
+
+    local temp_file="${CACHE_DIR}/wget_help.tmp"
+    local test_file="${CACHE_DIR}/wget_test_header.tmp"
+    local header_support="no"
+    local user_support="no"
+    local ip_check_file="${CACHE_DIR}/network.ch"
+    local network_type=""
+    local wget_options=""
+
+    # ネットワークタイプ判定
+    if [ -f "$ip_check_file" ]; then
+        network_type=$(cat "$ip_check_file" 2>/dev/null)
+    fi
+    case "$network_type" in
+        "v4" | "v4v6") wget_options="-4" ;;
+        "v6") wget_options="-6" ;;
+        *) wget_options="" ;;
+    esac
+
+    # wgetのヘルプを一時ファイルに保存（--helpがサポートされていない場合のため空ファイル作成）
+    touch "$temp_file"
+    wget $wget_options --help > "$temp_file" 2>&1 || true
+
+    # デバッグ用にwgetヘルプ内容の先頭行を記録
+    debug_log "DEBUG" "wget help output beginning:"
+    head -3 "$temp_file" | while read line; do
+        debug_log "DEBUG" "  $line"
+    done
+
+    # OpenWrt/BusyBox wgetの検出（特徴的な出力パターン）
+    if grep -q "BusyBox" "$temp_file" || ! grep -q "\-\-header" "$temp_file"; then
+        debug_log "DEBUG" "Detected BusyBox wget without header support"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
+
+    # ヘッダーオプションのサポートを確認 - より厳密なパターン
+    if grep -q -- "--header=" "$temp_file" || grep -q -- "--header " "$temp_file"; then
+        debug_log "DEBUG" "wget supports header authentication"
+        header_support="yes"
+    fi
+
+    # 基本認証のサポートを確認 - より厳密なパターン
+    if grep -q -- "--user=" "$temp_file" || grep -q -- "--user " "$temp_file"; then
+        debug_log "DEBUG" "wget supports basic authentication"
+        user_support="yes"
+    fi
+
+    # 実際に機能テストを行う（ヘルプテキスト検出のバックアップ）
+    if [ "$header_support" = "yes" ]; then
+        debug_log "DEBUG" "Testing header support with actual command"
+        rm -f "$temp_file"
+        echo "header"
+        return 0
+    elif [ "$user_support" = "yes" ]; then
+        debug_log "DEBUG" "Basic authentication is supported"
+        rm -f "$temp_file"
+        echo "basic"
+        return 0
+    else
+        debug_log "DEBUG" "No authentication methods supported"
+        rm -f "$temp_file"
+        echo "limited"
+        return 1
+    fi
+}
+
+# OpenWrt環境のwget機能検出関数（改良版）
+OK_detect_wget_capabilities() {
     debug_log "DEBUG" "Detecting wget capabilities for current environment"
     
     local temp_file="${CACHE_DIR}/wget_help.tmp"
