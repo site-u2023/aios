@@ -385,7 +385,6 @@ format_string() {
     case "$format_type" in
         "upper")
             # Convert entire string to uppercase using shell loop and case
-            debug_log "DEBUG" "format_string: Formatting to uppercase (using loop)"
             length=${#input_string}
             while [ "$i" -lt "$length" ]; do
                 char="${input_string:$i:1}"
@@ -423,7 +422,6 @@ format_string() {
             ;;
         "capitalize")
             # Convert first letter to uppercase, rest to lowercase using shell loop and case
-            debug_log "DEBUG" "format_string: Formatting to capitalize (using loop)"
             # Extract first character and rest of the string (ash/bash extensions)
             local first_char="${input_string:0:1}"
             local rest_string="${input_string:1}"
@@ -498,7 +496,6 @@ format_string() {
             ;;
         *)
             # Unknown or empty format type, return original string
-            debug_log "DEBUG" "format_string: Unknown format type '$format_type', returning original string"
             output_string="$input_string"
             ;;
     esac
