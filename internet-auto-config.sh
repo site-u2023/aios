@@ -124,7 +124,7 @@ internet_auto_config_main() {
     local aftr_address=""
     local exit_code=0
 
-    debug_log "DEBUG" "Starting automatic internet configuration process..." 
+    debug_log "DEBUG" "Starting automatic internet configuration process..."
 
     # --- 1. Prerequisite Checks & Downloads ---
     debug_log "DEBUG" "Checking prerequisites..."
@@ -144,7 +144,7 @@ internet_auto_config_main() {
 
     # Check and download dependent scripts if missing
     if [ ! -f "$MAP_E_SCRIPT" ]; then
-        debug_log "DEBUG" "MAP-E script not found, attempting download..." 
+        debug_log "DEBUG" "MAP-E script not found, attempting download..."
         download "$MAP_E_SCRIPT_NAME" "chmod" "hidden"
         if [ ! -f "$MAP_E_SCRIPT" ]; then
             debug_log "DEBUG" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME"
@@ -153,7 +153,7 @@ internet_auto_config_main() {
         fi
     fi
     if [ ! -f "$DS_LITE_SCRIPT" ]; then
-        debug_log "DEBUG" "DS-Lite script not found, attempting download..." 
+        debug_log "DEBUG" "DS-Lite script not found, attempting download..."
         download "$DS_LITE_SCRIPT_NAME" "chmod" "hidden"
         if [ ! -f "$DS_LITE_SCRIPT" ]; then
             debug_log "DEBUG" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME"
@@ -164,22 +164,25 @@ internet_auto_config_main() {
 
     # --- 2. Network Connectivity Check (ip_type.ch利用) ---
     debug_log "DEBUG" "Checking network connectivity..."
-    network_status=$(cat "$ip_type_file" 2>/dev/null)
-    if [ -z "$network_status" ] || [ "$network_status" = "unknown" ]; then
-        debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
-        printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2
-        return 1
-    fi
-    case "$network_status" in
-        v6|v4v6)
-            debug_log "DEBUG" "IPv6 connectivity confirmed ($network_status)."
-            ;;
-        *)
-            debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
-            printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2
-            return 1
-            ;;
-    esac
+    # ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+    # IPタイプによる判定・ブロックをコメントアウト（機能停止）
+    # network_status=$(cat "$ip_type_file" 2>/dev/null)
+    # if [ -z "$network_status" ] || [ "$network_status" = "unknown" ]; then
+    #     debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
+    #     printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2
+    #     return 1
+    # fi
+    # case "$network_status" in
+    #     v6|v4v6)
+    #         debug_log "DEBUG" "IPv6 connectivity confirmed ($network_status)."
+    #         ;;
+    #     *)
+    #         debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
+    #         printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2
+    #         return 1
+    #         ;;
+    # esac
+    # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 
     # --- 3. Get AS Number ---
     debug_log "DEBUG" "Retrieving AS number..."
@@ -189,7 +192,7 @@ internet_auto_config_main() {
         printf "%s\n" "$(color red "Error: Could not retrieve AS number for automatic detection.")" >&2
         return 1
     fi
-    debug_log "DEBUG" "Detected AS Number: $asn" 
+    debug_log "DEBUG" "Detected AS Number: $asn"
 
     # --- 4. Determine Connection Type ---
     debug_log "DEBUG" "Determining connection type using ASN..."
@@ -198,7 +201,7 @@ internet_auto_config_main() {
     provider_key=$(echo "$connection_info" | cut -d'|' -f2)
     aftr_address=$(echo "$connection_info" | cut -d'|' -f3)
 
-    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address" 
+    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address"
 
     # --- 4a. Get Display Info and Confirm with User (Skip for 'unknown') ---
     if [ "$connection_type" != "unknown" ]; then
@@ -226,7 +229,7 @@ internet_auto_config_main() {
         confirm_apply=$?
 
         if [ $confirm_apply -ne 0 ]; then
-            debug_log "DEBUG" "User declined to apply the automatically detected settings." 
+            debug_log "DEBUG" "User declined to apply the automatically detected settings."
             return 0
         fi
         debug_log "DEBUG" "User confirmed applying settings for $display_isp_name ($display_conn_type)."
@@ -236,12 +239,12 @@ internet_auto_config_main() {
     # --- 5. Execute Configuration Based on Type ---
     case "$connection_type" in
         "map-e")
-            debug_log "DEBUG" "MAP-E connection confirmed. Loading MAP-E script..." 
+            debug_log "DEBUG" "MAP-E connection confirmed. Loading MAP-E script..."
             if . "$MAP_E_SCRIPT"; then
                 if command -v internet_main >/dev/null 2>&1; then
                     debug_log "DEBUG" "Executing internet_main function from $MAP_E_SCRIPT_NAME"
                     if internet_main; then
-                       debug_log "DEBUG" "MAP-E script executed successfully." 
+                       debug_log "DEBUG" "MAP-E script executed successfully."
                     else
                        debug_log "DEBUG" "MAP-E script execution failed."
                        printf "%s\n" "$(color red "Error: Execution of script '$MAP_E_SCRIPT_NAME' failed.")" >&2
@@ -259,12 +262,12 @@ internet_auto_config_main() {
             fi
             ;;
         "ds-lite")
-            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..." 
+            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..."
             if . "$DS_LITE_SCRIPT"; then
                 if command -v apply_dslite_settings >/dev/null 2>&1; then
                     debug_log "DEBUG" "Executing apply_dslite_settings function from $DS_LITE_SCRIPT_NAME with AFTR: $aftr_address, Key: $provider_key"
                     if apply_dslite_settings "$aftr_address" "$provider_key"; then
-                        debug_log "DEBUG" "DS-Lite script executed successfully." 
+                        debug_log "DEBUG" "DS-Lite script executed successfully."
                     else
                         debug_log "DEBUG" "DS-Lite script execution failed."
                         printf "%s\n" "$(color red "Error: Execution of script '$DS_LITE_SCRIPT_NAME' failed.")" >&2
@@ -294,7 +297,7 @@ internet_auto_config_main() {
     esac
 
     if [ "$exit_code" -eq 0 ]; then
-        debug_log "DEBUG" "Automatic internet configuration process completed." 
+        debug_log "DEBUG" "Automatic internet configuration process completed."
     else
         debug_log "DEBUG" "Automatic internet configuration process finished with errors or was unable to complete."
     fi
