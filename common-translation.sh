@@ -67,17 +67,32 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を�
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
 
 urlencode() {
-    printf '%s' "$1" | od -An -tx1 | tr -d ' \n' | \
-    awk '{
-        for(i=1;i<=length($0);i+=2){
-            hex=substr($0,i,2)
-            dec=strtonum("0x"hex)
-            c=dec>=32&&dec<=126?sprintf("%c",dec):""
-            if(c ~ /[a-zA-Z0-9.~_-]/) printf("%s",c)
-            else if(dec==32) printf("%%20")
-            else printf("%%%02X",dec)
+    local input="$1"
+    # hexdumpでバイト列→awkでURLエンコード
+    printf '%s' "$input" | hexdump -v -e '/1 "%02X"' | \
+    awk '
+    function chr2c(c) {
+        if (c ~ /^[0-9A-Fa-f]{2}$/) {
+            val = strtonum("0x" c)
+            if ((val >= 0x30 && val <= 0x39) ||    # 0-9
+                (val >= 0x41 && val <= 0x5A) ||    # A-Z
+                (val >= 0x61 && val <= 0x7A) ||    # a-z
+                val == 0x2E || val == 0x7E || val == 0x5F || val == 0x2D) # .~_-
+                return sprintf("%c", val)
+            else if (val == 0x20)
+                return "%20"
+            else
+                return sprintf("%%%02X", val)
         }
-        printf "\n"
+        return ""
+    }
+    {
+        out = ""
+        for (i = 1; i <= length($0); i += 2) {
+            c = substr($0, i, 2)
+            out = out chr2c(c)
+        }
+        print out
     }'
 }
 
