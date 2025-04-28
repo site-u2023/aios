@@ -2500,7 +2500,6 @@ OK_download() {
     return 0 # 成功時は 0 を返す
 }
 
-# download_parallel
 download_parallel() {
     # 時間計測の開始
     local start_time=$(date +%s)
@@ -2545,6 +2544,8 @@ download_parallel() {
             elapsed_seconds=$((end_time - start_time))
             printf "Download failed (directory creation) in %s seconds.\n" "$elapsed_seconds"
             
+            # 必ず下記のフラグをリセット
+            IN_PARALLEL_DOWNLOAD="false"
             return 1
         fi
     fi
@@ -2567,6 +2568,8 @@ download_parallel() {
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (script not found) in %s seconds.\n" "$elapsed_seconds"
         
+        # 必ず下記のフラグをリセット
+        IN_PARALLEL_DOWNLOAD="false"
         return 1
     fi
     # download_files()の各行を抜き出す (Keep original awk structure)
@@ -2585,6 +2588,8 @@ download_parallel() {
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (command extraction) in %s seconds.\n" "$elapsed_seconds"
         
+        # 必ず下記のフラグをリセット
+        IN_PARALLEL_DOWNLOAD="false"
         return 1
     fi
     if ! [ -s "$all_tasks_file" ]; then
@@ -2596,6 +2601,8 @@ download_parallel() {
         elapsed_seconds=$((end_time - start_time))
         printf "Download completed (no tasks) in %s seconds.\n" "$elapsed_seconds"
         
+        # 必ず下記のフラグをリセット
+        IN_PARALLEL_DOWNLOAD="false"
         return 0
     fi
 
@@ -2782,16 +2789,31 @@ download_parallel() {
     fi
 
     # --- DL完了後、ロード対象を親シェルでsource ---
-    # --- 変更点: ファイル確認を省略 ---
+    # --- 変更点: ファイル読み込み前に待機を追加 ---
     if [ $overall_status -eq 0 ] && [ -f "$load_targets_file" ]; then
         # スリープを維持（全体に対して1回のみ）
-        sleep 1
+        sleep 2
+        
+        # ★★★ 新規追加: 各ファイルが完全に書き込まれるのを確認 ★★★
+        sync
         
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
             local full_load_path="${BASE_DIR}/$load_file"
             
-            # ファイル読み込み（ファイル確認なし）
+            # ファイル存在確認を追加
+            if [ ! -f "$full_load_path" ]; then
+                debug_log "DEBUG" "Load target file not found: $full_load_path"
+                overall_status=1
+                # エラー情報を記録
+                if ! [ -f "$fail_flag_file" ]; then
+                    first_failed_task_name="source"
+                    first_error_message="Load target $load_file not found"
+                fi
+                break
+            fi
+            
+            # ファイル読み込み
             . "$full_load_path"
             local source_status=$?
             
