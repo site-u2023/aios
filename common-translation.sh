@@ -66,43 +66,10 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を�
 # --- Set MAX_PARALLEL_TASKS ---
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
 
-urlencode() {
-    local string="$1"
-    local encoded=""
-    local i=0
-    local length=${#string}
-    local char
-    local hex
-
-    while [ "$i" -lt "$length" ]; do
-        char="${string:$i:1}"
-        case "$char" in
-            [a-zA-Z0-9.~_-])
-                encoded="${encoded}$char"
-                ;;
-            " ")
-                encoded="${encoded}%20"
-                ;;
-            *)
-                # 1バイトずつ16進変換し%XX形式で連結（UTF-8多バイト対応）
-                hex=$(printf '%s' "$char" | hexdump -e '1/1 "%02X"')
-                j=0
-                hexlen=${#hex}
-                while [ "$j" -lt "$hexlen" ]; do
-                    encoded="${encoded}%${hex:$j:2}"
-                    j=$((j + 2))
-                done
-                ;;
-        esac
-        i=$((i + 1))
-    done
-    printf '%s\n' "$encoded"
-}
-
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
 # @stdout: URL-encoded string.
-OK_urlencode() {
+urlencode() {
     local string="$1"
     local encoded=""
     local char # This variable is no longer needed with the direct slicing
