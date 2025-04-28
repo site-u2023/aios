@@ -2521,6 +2521,13 @@ download_parallel() {
     # --- END ADDED ---
     local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE IN_PARALLEL_DOWNLOAD" # Added IN_PARALLEL_DOWNLOAD
 
+    # ----------------------------------------------------------------------------------
+    # 時間計測の開始
+    local start_time=$(date +%s)
+    local end_time=""
+    local elapsed_seconds=0
+    # ------------------------------------------------------------------------------------
+
     # --- 準備 ---
     max_parallel="${MAX_PARALLEL_TASKS:-1}"
     [ "$CORE_COUNT" -ge 4 ] && max_parallel=5
@@ -2562,7 +2569,6 @@ download_parallel() {
 
     # --- コマンド分割＆ロード対象記録（剰余演算子使用） ---
     total_lines=$(wc -l < "$all_tasks_file")
-    # ★★★ 変更点: 早期リターン前にリセット ★★★
     if [ "$total_lines" -eq 0 ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
         debug_log "DEBUG" "download_files() is empty"
@@ -2571,7 +2577,7 @@ download_parallel() {
         debug_log "DEBUG" "Reset IN_PARALLEL_DOWNLOAD=false before early return (empty tasks)."
         return 0 # Added cleanup
     fi
-    # ★★★ 変更点ここまで ★★★
+
     lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel )); [ "$lines_per_task" -eq 0 ] && lines_per_task=1
     debug_log "DEBUG" "Total tasks: $total_lines, Max parallel: $max_parallel, Approx lines per task file (for info only): $lines_per_task"
     rm -f "${task_file_prefix}"*.tmp 2>/dev/null; debug_log "DEBUG" "Removed existing task split files (${task_file_prefix}*.tmp) before splitting."
@@ -2810,11 +2816,9 @@ download_parallel() {
         # rm -rf "$tmp_dir" 2>/dev/null
         debug_log "DEBUG" "Temporary task directory retained (or originally not removed): $tmp_dir" # Adjusted log
 
-        # ★★★ 変更点: 正常終了する直前にリセット ★★★
         IN_PARALLEL_DOWNLOAD="false"
         debug_log "DEBUG" "Reset IN_PARALLEL_DOWNLOAD=false before returning from download_parallel (success)."
         return 0
-        # ★★★ 変更点ここまで ★★★
     else
         # --- MODIFIED: Format failure message using captured info or fallback ---
         # Fallback if specific info wasn't captured
@@ -2825,13 +2829,17 @@ download_parallel() {
         stop_spinner "$failure_message" "failure"
         debug_log "DEBUG" "Temporary task directory retained for debugging: $tmp_dir"
 
-        # ★★★ 変更点: 異常終了する直前にリセット ★★★
         IN_PARALLEL_DOWNLOAD="false"
         debug_log "DEBUG" "Reset IN_PARALLEL_DOWNLOAD=false before returning from download_parallel (failure)."
         return 1
-        # ★★★ 変更点ここまで ★★★
         # --- END MODIFIED ---
     fi
+
+    # ---------------------------------------------------------
+    end_time=$(date +%s)
+    elapsed_seconds=$((end_time - start_time))
+    printf "Download completed in %s seconds.\n" "$elapsed_seconds"
+    # ----------------------------------------------------------
 }
 
 # download_parallel
