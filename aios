@@ -786,6 +786,52 @@ get_commit_from_cache() {
     local file_path="$1"
     local force="$2"  # キャッシュ強制無視フラグ
     local cache_file="${COMMIT_CACHE_DIR}/$(echo "$file_path" | tr '/' '_').commit"
+    
+    # キャッシュスキップが有効またはforceフラグが指定されている場合はキャッシュを無視
+    if [ "$SKIP_CACHE" = "true" ] || [ "$force" = "true" ] || [ "$FORCE" = "true" ]; then
+        debug_log "DEBUG" "Skipping cache for $file_path (forced)"
+        return 1
+    fi
+    
+    # キャッシュファイルが存在しない場合
+    if [ ! -f "$cache_file" ]; then
+        debug_log "DEBUG" "No cache found for $file_path"
+        return 1
+    fi
+    
+    # キャッシュファイルから情報を読み込む
+    . "$cache_file"
+    
+    # 必須変数が設定されているか確認
+    if [ -z "$VERSION" ] || [ -z "$TIMESTAMP" ] || [ -z "$TTL" ]; then
+        debug_log "DEBUG" "Invalid cache file for $file_path"
+        return 1
+    fi
+    
+    # TTLが0の場合は常にキャッシュを無効とする
+    if [ "$TTL" = "0" ]; then
+        debug_log "DEBUG" "Cache TTL is set to 0, forcing refresh for $file_path"
+        return 1
+    fi
+    
+    # キャッシュが有効期限内かチェック
+    local current_time=$(date +%s)
+    if [ $(( current_time - TIMESTAMP )) -gt "$TTL" ]; then
+        debug_log "DEBUG" "Cache expired for $file_path ($(( (current_time - TIMESTAMP) / 60 )) minutes old)"
+        return 1
+    fi
+    
+    # キャッシュが有効な場合は結果を返す
+    debug_log "DEBUG" "Using cached commit info for $file_path: $VERSION (age: $(( (current_time - TIMESTAMP) / 60 )) minutes)"
+    echo "$VERSION $AUTH_METHOD"
+    return 0
+}
+
+# キャッシュからコミット情報を取得する関数
+OK_get_commit_from_cache() {
+    local file_path="$1"
+    local force="$2"  # キャッシュ強制無視フラグ
+    local cache_file="${COMMIT_CACHE_DIR}/$(echo "$file_path" | tr '/' '_').commit"
     local current_time=$(date +%s)
     
     # キャッシュスキップが有効またはforceフラグが指定されている場合はキャッシュを無視
