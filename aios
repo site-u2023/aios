@@ -2904,7 +2904,7 @@ download_parallel() {
     # --- 変更点: ファイル確認を省略 ---
     if [ $overall_status -eq 0 ] && [ -f "$load_targets_file" ]; then
         # スリープを維持（全体に対して1回のみ）
-        sleep 1
+        sleep 2
         
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
