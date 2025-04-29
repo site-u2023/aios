@@ -2108,14 +2108,7 @@ download() {
     local file_name="$1"
     shift
 
-    # download_parallel 内のサブシェルから呼び出されたかを示すフラグ
-    local suppress_message="false"
-    if [ "$IN_PARALLEL_DOWNLOAD" = "true" ]; then
-        suppress_message="true"
-        debug_log "DEBUG" "download: Running inside parallel task, suppressing individual success message for $file_name."
-    fi
-
-    # デフォルト設定
+    # デフォルト設定（local宣言は1回のみ！）
     local suppress_message="false"
     local chmod_mode="false"
     local force_mode="false"
@@ -2123,6 +2116,12 @@ download() {
     local quiet_mode="false"
     local interpreter_name=""
     local load_mode="false"
+
+    # download_parallel 内のサブシェルから呼び出されたかを示すフラグ
+    if [ "$IN_PARALLEL_DOWNLOAD" = "true" ]; then
+        suppress_message="true"
+        debug_log "DEBUG" "download: Running inside parallel task, suppressing individual success message for $file_name."
+    fi
 
     # オプション解析
     while [ $# -gt 0 ]; do
