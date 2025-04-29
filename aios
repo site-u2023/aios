@@ -1,5 +1,18 @@
 #!/bin/sh
 
+# =========================================================
+# aios - Command launcher for OpenWrt
+#
+# This script is designed for use on OpenWrt systems only.
+# POSIX-compliant and compatible with Almquist Shell (ash).
+#
+# Usage: aios [options]
+#
+# Version: 2025-04-29
+# License: CC0 (Public Domain)
+# Author: site-u2023
+# =========================================================
+
 BASE_DIR="/tmp/aios"
 BASE_FILE="aios.sh"
 BASE_PATH="$BASE_DIR/$BASE_FILE"
