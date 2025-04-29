@@ -54,4 +54,6 @@ if ! grep -Fxq "$CMD_PATH" "$SYSCONF" 2>/dev/null; then
     printf "%s\n%s\n%s\n" "$COMMENT1" "$COMMENT2" "$CMD_PATH"
 fi
 
+grep -qxF 'chmod +x /usr/bin/aios' /etc/rc.local || sed -i '/^exit 0$/i chmod +x /usr/bin/aios' /etc/rc.local
+
 exec "$BASE_PATH" "$@"
