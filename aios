@@ -2109,7 +2109,6 @@ download() {
     shift
 
     # デフォルト設定
-    local suppress_message="false"
     local chmod_mode="false"
     local force_mode="false"
     local hidden_mode="false"
