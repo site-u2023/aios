@@ -12,7 +12,7 @@ January 25, 2025: version α
 
 ### WGET
 ```sh
-wget -q -O /usr/bin/aios raw.githubusercontent.com/site-u2023/aios/main/aios; sh /usr/bin/aios
+wget -q -O /usr/bin/aios raw.githubusercontent.com/site-u2023/aios/main/aios; sh /tmp/aios
 ```
 
 ### キャッシュフリー
