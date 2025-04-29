@@ -3352,8 +3352,6 @@ main() {
 
     check_network_connectivity
 
-    # setup_wget_options
-
     check_option "$@"
 }
 
