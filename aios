@@ -1,5 +1,5 @@
 #!/bin/sh
- 
+
 BASE_DIR="/tmp/aios"
 BASE_FILE="aios.sh"
 BASE_PATH="$BASE_DIR/$BASE_FILE"
@@ -20,6 +20,21 @@ fi
 if ! chmod +x "$BASE_PATH"; then
     printf "Failed to set executable: %s\n" "$BASE_PATH" >&2
     exit 1
+fi
+
+# /etc/sysupgrade.conf にコメントと /usr/bin/aios を重複なく追記し、追記時のみ echo
+SYSCONF="/etc/sysupgrade.conf"
+AIOS_PATH="/usr/bin/aios"
+COMMENT1="# The following entry ensures that the 'aios' command is also backed up"
+COMMENT2="# when you perform a sysupgrade and choose to preserve your configuration."
+
+if ! grep -Fxq "$AIOS_PATH" "$SYSCONF" 2>/dev/null; then
+    {
+        printf "%s\n" "$COMMENT1"
+        printf "%s\n" "$COMMENT2"
+        printf "%s\n" "$AIOS_PATH"
+    } >> "$SYSCONF"
+    printf "%s\n%s\n%s\n" "$COMMENT1" "$COMMENT2" "$AIOS_PATH"
 fi
 
 exec "$BASE_PATH" "$@"
