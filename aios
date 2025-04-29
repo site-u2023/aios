@@ -2180,14 +2180,11 @@ download() {
         if [ "$chmod_mode" = "true" ]; then
             chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
         fi
-        
-        # ★★★ 追加: シングル時のみ最新版メッセージ出力 ★★★
+        # シングル時のみ最新版メッセージ出力（抑制/隠し/静音モード除外）
         if [ "$suppress_message" = "false" ] && [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
-            printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_UNNECESSARY")"
+            printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_UNNECESSARY" "f=$file_name" "v=$remote_version" "api=")"
         fi
-        # ★★★ 追加ここまで ★★★
-
-        # ★★★ 変更点: ファイルが最新でもload_modeが有効ならsourceする ★★★
+        # 最新でもload_modeが有効ならsourceする
         if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
             if [ -f "$file_path" ]; then
                 debug_log "DEBUG" "download: Sourcing existing file due to load option: $file_path"
@@ -2195,18 +2192,14 @@ download() {
                 local source_status=$?
                 if [ $source_status -ne 0 ]; then
                     debug_log "DEBUG" "download: Sourcing existing file failed with status $source_status: $file_path"
-                    # sourceに失敗しても download 自体は成功しているので成功扱いとする
                 fi
             fi
         fi
-        # ★★★ 変更点ここまで ★★★
-
-        return 0 # 成功時は 0 を返す
+        return 0
     fi
 
     # DL処理
     local api_status
-    # APIレートチェックは並列実行中は行わない（download_parallel開始時に行う想定）
     if [ "$suppress_message" = "false" ]; then
         api_status=$(check_api_rate_limit)
         debug_log "DEBUG" "download: API status: $api_status"
@@ -2214,15 +2207,13 @@ download() {
         api_status="(Checked)" # 並列中はチェック済みとして表示
     fi
 
-    # DL実行
     if ! download_fetch_file "$file_name" "$remote_version" "$chmod_mode"; then
         debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
-        return 1 # 失敗時は 1 を返す
+        return 1 # 失敗時は 1 を返す（失敗時メッセージは表示しない）
     fi
 
     # バージョンキャッシュ保存
     if [ -n "$remote_version" ]; then
-        # save_version_to_cache が失敗しても download 自体の成否には影響させない
         if ! save_version_to_cache "$file_name" "$remote_version" "${CACHE_DIR}/script.ch" "$auth_method"; then
             debug_log "DEBUG" "download: save_version_to_cache failed for $file_name, but download itself succeeded."
         fi
@@ -2233,12 +2224,12 @@ download() {
         chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed after download for $file_path"
     fi
 
-    # サイレント/隠しモードでなく、かつ並列実行中でない場合のみ、DL成功メッセージ表示
+    # シングル時のみDL成功メッセージ表示（抑制/隠し/静音モード除外）
     if [ "$suppress_message" = "false" ] && [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
         printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name" "v=$remote_version" "api=$api_status")"
     fi
 
-    # <<< Add: Source the file if load_mode is true after successful download
+    # load_modeが有効ならsource
     if [ "$load_mode" = "true" ] && [ "$IN_PARALLEL_DOWNLOAD" != "true" ]; then
         if [ -f "$file_path" ]; then
             debug_log "DEBUG" "download: Sourcing downloaded file due to load option: $file_path"
@@ -2246,12 +2237,11 @@ download() {
             local source_status=$?
             if [ $source_status -ne 0 ]; then
                 debug_log "DEBUG" "download: Sourcing downloaded file failed with status $source_status: $file_path"
-                # sourceに失敗しても download 自体は成功しているので成功扱いとする
             fi
         fi
     fi
 
-    return 0 # 成功時は 0 を返す
+    return 0
 }
 
 OK_download() {
