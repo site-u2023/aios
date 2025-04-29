@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.28-01-00"
+SCRIPT_VERSION="2025.04.29-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -3117,7 +3117,7 @@ check_update() {
     [ $# -gt 0 ] && has_args=1
     local filtered_args=""
 
-    # 引数フィルタリング
+    # 引数フィルタリング（従来通り）
     if [ $has_args -eq 1 ]; then
         while [ $# -gt 0 ]; do
             case "$1" in
@@ -3134,31 +3134,42 @@ check_update() {
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
 
-    # アップデート判定
-    local remote_version_info remote_version local_version
-    local script_file="${CACHE_DIR}/script.ch"
-    remote_version_info=$(get_commit_version "$BIN_FILE")
-    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "DEBUG" "check_update: Failed to get remote version for $BIN_FILE"
-        return 1
-    fi
-    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${BIN_FILE}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version=""
+    # --- ここから追加：自己アップデート判定 ---
+    if [ "$BIN_PATH" = "${AIOS_DIR}/${BIN_FILE}" ]; then
+        # バージョン取得
+        local remote_version_info local_version remote_version
+        local script_file="${CACHE_DIR}/script.ch"
+        remote_version_info=$(get_commit_version "$BIN_FILE")
+        if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+            debug_log "DEBUG" "check_update: Failed to get remote version for $BIN_FILE"
+            return 1
+        fi
+        remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+        if [ -f "$script_file" ]; then
+            local_version=$(grep "^${BIN_FILE}=" "$script_file" | cut -d'=' -f2)
+        fi
+        [ -z "$local_version" ] && local_version=""
 
-    if [ "$remote_version" = "$local_version" ] && [ -f "$BIN_PATH" ]; then
-        debug_log "DEBUG" "check_update: Local version up-to-date for $BIN_FILE ($local_version); skipping update."
+        # バージョン比較
+        if [ "$remote_version" = "$local_version" ] && [ -f "$BIN_PATH" ]; then
+            debug_log "DEBUG" "check_update: Local version up-to-date for $BIN_FILE ($local_version); skipping update."
+            return 0
+        fi
+
+        # 差分あり時のみDL＋exec
+        download "$BIN_FILE" "chmod"
+        MODE="full"
+
+        # 新しいファイルがあれば上書き
+        if [ -f "$BASE_DIR/$BIN_FILE" ]; then
+            mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
+        fi
+
+        exec "$BIN_PATH" "$lang_code" $filtered_args
+    else
+        debug_log "DEBUG" "check_update: Not in self-update path ($BIN_PATH != ${AIOS_DIR}/${BIN_FILE}), skipping update check."
         return 0
     fi
-
-    download "$BIN_FILE" "chmod"
-    MODE="full"
-    if [ -f "$BASE_DIR/$BIN_FILE" ]; then
-        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
-    fi
-    exec "$BIN_PATH" "$lang_code" $filtered_args
 }
 
 # 初期化処理のメイン
