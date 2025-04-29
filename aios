@@ -45,7 +45,7 @@ CMD_PATH="/usr/bin/aios"
 COMMENT1="# The following entry ensures that the 'aios' command is also backed up"
 COMMENT2="# when you perform a sysupgrade and choose to preserve your configuration."
 
-if ! grep -Fxq "$CMD_PATH "$SYSCONF" 2>/dev/null; then
+if ! grep -Fxq "$CMD_PATH" "$SYSCONF" 2>/dev/null; then
     {
         printf "%s\n" "$COMMENT1"
         printf "%s\n" "$COMMENT2"
