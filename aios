@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.29-00-00"
+SCRIPT_VERSION="2025.04.29-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -59,14 +59,14 @@ DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=�
 DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct)
 # DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # ダウンロード方式 (api/direct)
 
-# パス・ファイル関連
+# パス・ファイル関連（resolve_path対応版）
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
 AIOS_DIR="${AIOS_DIR:-/usr/bin}" 
-script_dir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd )"
-script_path="${script_dir}/$(basename "$0")"
+script_path=$(resolve_path "$0")
+script_dir=$(dirname "$script_path")
 BIN_DIR="$script_dir"    # ディレクトリの絶対パス
 BIN_PATH="$script_path"  # スクリプトファイルの絶対パス
-BIN_FILE="$(basename "$0")" # スクリプトファイル名
+BIN_FILE=$(basename "$script_path") # スクリプトファイル名
 
 # ベースディレクトリ設定
 BASE_DIR="${BASE_DIR:-/tmp/aios}"      # 基本ディレクトリ
@@ -3250,6 +3250,23 @@ make_directory() {
     return 0
 }
 
+# シンボリックリンク多段解決対応 resolve_path
+resolve_path() {
+    local target="$1"
+    local dir file
+    while [ -L "$target" ]; do
+        dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
+        target=$(readlink "$target")
+        case "$target" in
+            /*) ;; # 絶対パスならそのまま
+            *) target="$dir/$target" ;;
+        esac
+    done
+    dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
+    file=$(basename "$target")
+    printf "%s/%s" "$dir" "$file"
+}
+
 check_update() {
     local lang_code="$SELECTED_LANGUAGE"
     MODE="${MODE:-update}"
@@ -3275,13 +3292,19 @@ check_update() {
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
 
-    # --- 追加: BIN_PATHがAIOS_DIR/BIN_FILEと一致ならupdateスキップ ---
-    if [ "$BIN_PATH" = "${AIOS_DIR}/${BIN_FILE}" ]; then
-        debug_log "DEBUG" "check_update: Running from install path ($BIN_PATH). Skipping update."
+    # パス判定: 絶対パスで比較
+    local abs_bin_path
+    abs_bin_path=$(resolve_path "$0")
+    local expected_path="${AIOS_DIR}/${BIN_FILE}"
+
+    debug_log "DEBUG" "check_update: abs_bin_path=$abs_bin_path, expected_path=$expected_path"
+
+    if [ "$abs_bin_path" = "$expected_path" ]; then
+        debug_log "DEBUG" "check_update: Running from install path ($abs_bin_path). Skipping update."
         return 0
     fi
 
-    # --- それ以外は従来のupdate処理 ---
+    # --- ここから従来の自己アップデート処理 ---
     local remote_version_info local_version remote_version
     local script_file="${CACHE_DIR}/script.ch"
     remote_version_info=$(get_commit_version "$BIN_FILE")
@@ -3295,7 +3318,7 @@ check_update() {
     fi
     [ -z "$local_version" ] && local_version=""
 
-    if [ "$remote_version" = "$local_version" ] && [ -f "$BIN_PATH" ]; then
+    if [ "$remote_version" = "$local_version" ] && [ -f "$abs_bin_path" ]; then
         debug_log "DEBUG" "check_update: Local version up-to-date for $BIN_FILE ($local_version); skipping update."
         return 0
     fi
@@ -3304,10 +3327,10 @@ check_update() {
     MODE="full"
 
     if [ -f "$BASE_DIR/$BIN_FILE" ]; then
-        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
+        mv -f "$BASE_DIR/$BIN_FILE" "$abs_bin_path"
     fi
 
-    exec "$BIN_PATH" "$lang_code" $filtered_args
+    exec "$abs_bin_path" "$lang_code" $filtered_args
 }
 
 # 初期化処理のメイン
