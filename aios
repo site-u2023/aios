@@ -2852,7 +2852,7 @@ print_information() {
 check_option() {
     # デフォルト値の設定
     ORIGINAL_ARGS="$@"
-    MODE="${MODE:-update}"
+    MODE="full"
     SELECTED_LANGUAGE=""
     DEBUG_MODE="false"
     DEBUG_LEVEL="INFO"
@@ -3048,6 +3048,7 @@ check_common() {
             translate_main
             install_package update
             selector "$MAIN_MENU" 
+            return
             ;;
         full)
             check_update "$ORIGINAL_ARGS"
@@ -3059,9 +3060,11 @@ check_common() {
             translate_main
             install_package update
             selector "$MAIN_MENU"
+            return
             ;;
         update)
             check_update "$ORIGINAL_ARGS"
+            return
             ;;
         light)
             ;;
