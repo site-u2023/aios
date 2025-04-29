@@ -3248,26 +3248,6 @@ make_directory() {
     return 0
 }
 
-# シンボリックリンク多段解決対応 resolve_path
-resolve_path() {
-    local target="$1"
-    local dir file
-    while [ -L "$target" ]; do
-        dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
-        target=$(readlink "$target")
-        case "$target" in
-            /*) ;; # 絶対パスならそのまま
-            *) target="$dir/$target" ;;
-        esac
-    done
-    dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
-    file=$(basename "$target")
-    BIN_PATH="$dir/$file"
-    BIN_DIR="$dir"
-    BIN_FILE="$file"
-    printf "%s/%s" "$dir" "$file"
-}
-
 check_update() {
     local lang_code="$SELECTED_LANGUAGE"
     MODE="${MODE:-update}"
@@ -3334,6 +3314,26 @@ check_update() {
     exec "$abs_bin_path" "$lang_code" $filtered_args
 }
 
+# シンボリックリンク多段解決対応 resolve_path
+resolve_path() {
+    local target="$1"
+    local dir file
+    while [ -L "$target" ]; do
+        dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
+        target=$(readlink "$target")
+        case "$target" in
+            /*) ;; # 絶対パスならそのまま
+            *) target="$dir/$target" ;;
+        esac
+    done
+    dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
+    file=$(basename "$target")
+    BIN_PATH="$dir/$file"
+    BIN_DIR="$dir"
+    BIN_FILE="$file"
+    printf "%s/%s" "$dir" "$file"
+}
+
 # 初期化処理のメイン
 main() {
     # 実行権限を設定
@@ -3353,6 +3353,8 @@ main() {
     setup_wget_options
 
     check_option "$@"
+
+    resolve_path "$0"
 }
 
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
