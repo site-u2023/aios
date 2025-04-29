@@ -3336,6 +3336,8 @@ resolve_path() {
 
 # 初期化処理のメイン
 main() {
+    resolve_path "$0"
+
     # 実行権限を設定
     if ! chmod_aios; then
         debug_log "DEBUG" "Failed to set execute permission"
@@ -3350,11 +3352,9 @@ main() {
 
     check_network_connectivity
 
-    setup_wget_options
+    # setup_wget_options
 
     check_option "$@"
-
-    resolve_path "$0"
 }
 
 # 🔴　メイン　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
