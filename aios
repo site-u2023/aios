@@ -3262,6 +3262,9 @@ resolve_path() {
     done
     dir=$(cd "$(dirname "$target")" 2>/dev/null && pwd)
     file=$(basename "$target")
+    BIN_PATH="$dir/$file"
+    BIN_DIR="$dir"
+    BIN_FILE="$file"
     printf "%s/%s" "$dir" "$file"
 }
 
