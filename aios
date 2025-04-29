@@ -61,6 +61,7 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct
 
 # パス・ファイル関連
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
+AIOS_DIR="${AIOS_DIR:-/usr/bin}" 
 script_dir="$( cd "$(dirname "$0")" >/dev/null 2>&1 && pwd )"
 script_path="${script_dir}/$(basename "$0")"
 BIN_DIR="$script_dir"    # ディレクトリの絶対パス
