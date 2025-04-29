@@ -3108,31 +3108,21 @@ make_directory() {
     return 0
 }
 
-# オリジナルの check_update 関数
 check_update() {
-    # デフォルトモードの設定（引数がなくても動作するように）
     local lang_code="$SELECTED_LANGUAGE"
     MODE="${MODE:-update}"
-
-    # 全引数を処理
     local all_args="$@"
     local has_args=0
-
-    # 引数があるかチェック
     [ $# -gt 0 ] && has_args=1
-
-    # アップデート関連オプションのみをフィルタリング
     local filtered_args=""
 
-    # 引数がある場合のみ処理
+    # 引数フィルタリング（従来通り）
     if [ $has_args -eq 1 ]; then
         while [ $# -gt 0 ]; do
             case "$1" in
                 -u|--u|-update|--update)
-                    # アップデート関連オプションは除外
                     ;;
                 *)
-                    # その他のオプションは保持
                     filtered_args="${filtered_args:+$filtered_args }$1"
                     ;;
             esac
@@ -3143,16 +3133,42 @@ check_update() {
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
 
-    # ダウンロード実行
-    download "aios" "chmod"
-    MODE="full"
+    # --- ここから追加：自己アップデート判定 ---
+    if [ "$BIN_PATH" = "${AIOS_DIR}/${BIN_FILE}" ]; then
+        # バージョン取得
+        local remote_version_info local_version remote_version
+        local script_file="${CACHE_DIR}/script.ch"
+        remote_version_info=$(get_commit_version "$BIN_FILE")
+        if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
+            debug_log "DEBUG" "check_update: Failed to get remote version for $BIN_FILE"
+            return 1
+        fi
+        remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
+        if [ -f "$script_file" ]; then
+            local_version=$(grep "^${BIN_FILE}=" "$script_file" | cut -d'=' -f2)
+        fi
+        [ -z "$local_version" ] && local_version=""
 
-    # ファイルが存在する場合のみ移動してexec
-    if [ -f "$BASE_DIR/$BIN_FILE" ]; then
-        mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
+        # バージョン比較
+        if [ "$remote_version" = "$local_version" ] && [ -f "$BIN_PATH" ]; then
+            debug_log "DEBUG" "check_update: Local version up-to-date for $BIN_FILE ($local_version); skipping update."
+            return 0
+        fi
+
+        # 差分あり時のみDL＋exec
+        download "$BIN_FILE" "chmod"
+        MODE="full"
+
+        # 新しいファイルがあれば上書き
+        if [ -f "$BASE_DIR/$BIN_FILE" ]; then
+            mv -f "$BASE_DIR/$BIN_FILE" "$BIN_PATH"
+        fi
+
+        exec "$BIN_PATH" "$lang_code" $filtered_args
+    else
+        debug_log "DEBUG" "check_update: Not in self-update path ($BIN_PATH != ${AIOS_DIR}/${BIN_FILE}), skipping update check."
+        return 0
     fi
-
-    exec "$BIN_PATH" "$lang_code" $filtered_args
 }
 
 # 初期化処理のメイン
