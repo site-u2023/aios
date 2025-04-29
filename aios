@@ -3688,15 +3688,14 @@ check_update() {
     debug_log "DEBUG" "Original args: $all_args"
     debug_log "DEBUG" "Filtered args: $filtered_args"
 
-    # パス判定: 絶対パスで比較
+    # シンボリックリンク判定
     local abs_bin_path
     abs_bin_path=$(resolve_path "$0")
-    local expected_path="${AIOS_DIR}/${BIN_FILE}"
 
-    debug_log "DEBUG" "check_update: abs_bin_path=$abs_bin_path, expected_path=$expected_path"
+    debug_log "DEBUG" "check_update: abs_bin_path=$abs_bin_path"
 
-    if [ "$abs_bin_path" = "$expected_path" ]; then
-        debug_log "DEBUG" "check_update: Running from install path ($abs_bin_path). Skipping update."
+    if [ -L "$abs_bin_path" ]; then
+        debug_log "DEBUG" "check_update: abs_bin_path is a symlink; skipping update."
         return 0
     fi
 
