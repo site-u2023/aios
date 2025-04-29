@@ -3331,7 +3331,7 @@ resolve_path() {
     BIN_PATH="$dir/$file"
     BIN_DIR="$dir"
     BIN_FILE="$file"
-    printf "%s/%s" "$dir" "$file"
+    printf "%s/%s\n" "$dir" "$file"
 }
 
 # 初期化処理のメイン
