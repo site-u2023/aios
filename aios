@@ -62,11 +62,6 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct
 # パス・ファイル関連（resolve_path対応版）
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
 AIOS_DIR="${AIOS_DIR:-/usr/bin}" 
-script_path=$(resolve_path "$0")
-script_dir=$(dirname "$script_path")
-BIN_DIR="$script_dir"    # ディレクトリの絶対パス
-BIN_PATH="$script_path"  # スクリプトファイルの絶対パス
-BIN_FILE=$(basename "$script_path") # スクリプトファイル名
 
 # ベースディレクトリ設定
 BASE_DIR="${BASE_DIR:-/tmp/aios}"      # 基本ディレクトリ
