@@ -1,0 +1,25 @@
+#!/bin/sh
+ 
+BASE_DIR="/tmp/aios"
+BASE_FILE="aios.sh"
+BASE_PATH="$BASE_DIR/$BASE_FILE"
+BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main/$BASE_FILE"
+
+if [ ! -d "$BASE_DIR" ]; then
+    if ! mkdir -p "$BASE_DIR"; then
+        printf "Failed to create directory: %s\n" "$BASE_DIR" >&2
+        exit 1
+    fi
+fi
+
+if ! wget -q -O "$BASE_PATH" "$BASE_URL"; then
+    printf "Failed to download: %s\n" "$BASE_URL" >&2
+    exit 1
+fi
+
+if ! chmod +x "$BASE_PATH"; then
+    printf "Failed to set executable: %s\n" "$BASE_PATH" >&2
+    exit 1
+fi
+
+exec "$BASE_PATH" "$@"
