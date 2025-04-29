@@ -3699,7 +3699,7 @@ check_update() {
         return 0
     fi
 
-    # --- ここから従来の自己アップデート処理 ---
+    # --- ここから自己アップデート処理 ---
     local remote_version_info local_version remote_version
     local script_file="${CACHE_DIR}/script.ch"
     remote_version_info=$(get_commit_version "$BIN_FILE")
