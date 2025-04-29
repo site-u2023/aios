@@ -18,6 +18,11 @@ BASE_FILE="aios.sh"
 BASE_PATH="$BASE_DIR/$BASE_FILE"
 BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main/$BASE_FILE"
 
+if ! chmod +x "$0"; then
+    printf "Failed to set executable: %s\n" "$0" >&2
+    exit 1
+fi
+
 if [ ! -d "$BASE_DIR" ]; then
     if ! mkdir -p "$BASE_DIR"; then
         printf "Failed to create directory: %s\n" "$BASE_DIR" >&2
