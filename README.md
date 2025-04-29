@@ -12,26 +12,26 @@ January 25, 2025: version α
 
 ### WGET
 ```sh
-wget -q -O /tmp/aios raw.githubusercontent.com/site-u2023/aios/main/aios; sh /tmp/aios
+wget -q -O /usr/bin/aios raw.githubusercontent.com/site-u2023/aios/main/aios; sh /usr/bin/aios
 ```
 
 ### キャッシュフリー
 ```sh
-wget -q -O /tmp/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /tmp/aios
+wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios
 ```
 
 ### JP
 ```sh
-wget -q -O /tmp/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /tmp/aios JP
+wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios JP
 ```
 ### US
 ```sh
-wget -q -O /tmp/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /tmp/aios US
+wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios US
 ```
 
 ### デバッグモード
 ```sh
-wget -q -O /tmp/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /tmp/aios -d
+wget -q -O /usr/bin/aios "https://raw.githubusercontent.com/site-u2023/aios/main/aios?cache_bust=$(date +%s)"; sh /usr/bin/aios -d
 ```
 
 ### aios アップデート
