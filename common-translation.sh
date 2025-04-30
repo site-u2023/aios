@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-00-06"
+SCRIPT_VERSION="2025-05-01-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -91,7 +91,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-OK_translate_with_google() {
+translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
@@ -156,108 +156,6 @@ OK_translate_with_google() {
             }
             ')
                     
-                if [ -n "$translated_text" ]; then
-                    printf "%s\n" "$translated_text"
-                    return 0 # Success
-                fi
-            fi
-        else
-            # Log wget failure or empty response
-            if [ "$wget_exit_code" -ne 0 ]; then
-                debug_log "DEBUG" "translate_with_google: wget failed with exit code $wget_exit_code"
-            elif [ -z "$response_data" ]; then
-                 debug_log "DEBUG" "translate_with_google: wget succeeded (code 0) but response data is empty!"
-            fi
-            # Fall through to retry logic
-        fi
-
-        # --- Retry Logic ---
-        retry_count=$((retry_count + 1))
-        if [ $retry_count -lt $API_MAX_RETRIES ]; then
-            debug_log "DEBUG" "translate_with_google: Retrying in 1 second..."
-            sleep 1
-        fi
-    done
-
-    debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
-    printf "" # Output empty string on failure
-    return 1 # Failure
-}
-
-translate_with_google() {
-    local source_text="$1"
-    local target_lang_code="$2"
-    local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
-
-    # --- network.ch依存をip_type.chに変更 ---
-    local ip_type_file="${CACHE_DIR}/ip_type.ch"
-    local wget_options=""
-    local retry_count=0
-    # --- temp_file関連の変数は元から未使用 ---
-    local api_url=""
-    local translated_text=""
-    local wget_exit_code=0
-    local response_data="" # Variable to store wget output
-
-    # Ensure BASE_DIR exists (still needed for potential cache files, etc.)
-    mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
-
-    # --- IPバージョン判定（ip_type.chの内容をそのままwget_optionsに） ---
-    if [ ! -f "$ip_type_file" ]; then
-        # ▼▼▼ 修正: エラーメッセージを標準エラー出力へ ▼▼▼
-        echo "Network is not available. (ip_type.ch not found)" >&2
-        debug_log "DEBUG" "translate_with_google: ip_type.ch not found at $ip_type_file" # デバッグログ追加
-        return 1
-    fi
-    wget_options=$(cat "$ip_type_file" 2>/dev/null)
-    if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
-        # ▼▼▼ 修正: エラーメッセージを標準エラー出力へ ▼▼▼
-        echo "Network is not available. (ip_type.ch is unknown or empty)" >&2
-        debug_log "DEBUG" "translate_with_google: ip_type.ch is unknown or empty (value: '$wget_options')" # デバッグログ追加
-        return 1
-    fi
-
-    local encoded_text=$(urlencode "$source_text")
-    if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
-        debug_log "DEBUG" "translate_with_google: Source or target language code is empty (source='$source_lang', target='$target_lang_code')."
-        return 1
-    fi
-    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
-
-    # RES_OPTIONSによるDNSタイムアウト短縮（関数内限定）
-    export RES_OPTIONS="timeout:1 attempts:1"
-
-    # リトライループ
-    while [ $retry_count -lt $API_MAX_RETRIES ]; do
-        response_data=""
-        # ▼▼▼ 追加: wgetコマンドとRES_OPTIONSのデバッグ出力 ▼▼▼
-        debug_log "DEBUG" "translate_with_google: Attempting wget (Retry: $retry_count, RES_OPTIONS='$RES_OPTIONS'): wget -d --no-check-certificate $wget_options -T $API_TIMEOUT -q -O - --user-agent=\"Mozilla/5.0\" \"$api_url\""
-        # ▼▼▼ 修正: wgetに -d オプションを追加 ▼▼▼
-        response_data=$(wget -d --no-check-certificate $wget_options -T $API_TIMEOUT -q -O - --user-agent="Mozilla/5.0" "$api_url")
-        wget_exit_code=$?
-        # ▲▲▲ 修正: wgetに -d オプションを追加 ▲▲▲
-
-        if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
-            if echo "$response_data" | grep -q '^\s*\[\[\["'; then
-                translated_text=$(printf %s "$response_data" | awk '
-                BEGIN { out = "" }
-                /^\s*\[\[\["/ {
-                sub(/^\s*\[\[\["/, "")
-                split($0, a, /","/)
-                out = a[1]
-                gsub(/\\u003d/, "=", out)
-                gsub(/\\u003c/, "<", out)
-                gsub(/\\u003e/, ">", out)
-                gsub(/\\u0026/, "&", out)
-                gsub(/\\"/, "\"", out)
-                gsub(/\\n/, "\n", out)
-                gsub(/\\r/, "", out)
-                gsub(/\\\\/, "\\", out)
-                print out
-                exit
-            }
-            ')
-
                 if [ -n "$translated_text" ]; then
                     printf "%s\n" "$translated_text"
                     return 0 # Success
@@ -482,8 +380,66 @@ EOF
     return "$exit_status"
 }
 
-# Helper function (変更なし)
+# Helper function (Modified for strace debugging)
 translate_single_line() {
+    local line="$1"
+    local lang="$2"
+    local func="$3"
+
+    case "$line" in
+        *"|"*)
+            local line_content=${line#*|}
+            local key=${line_content%%=*}
+            local value=${line_content#*=}
+            local translated_text=""
+            local exit_code=1 # Initialize exit code
+
+            # Check if key is valid before creating strace log filename
+            if [ -z "$key" ]; then
+                debug_log "DEBUG" "translate_single_line: Skipping line with empty key: $line"
+                return # Skip processing this line
+            fi
+
+            # Create a safe filename from the key (replace non-alphanumeric)
+            local safe_key=$(printf "%s" "$key" | sed 's/[^a-zA-Z0-9_]/_/g')
+            local strace_log_file="/tmp/wget_strace_${safe_key}.log"
+
+            debug_log "DEBUG" "translate_single_line: Calling '$func' for key '$key' with strace. Log: $strace_log_file"
+
+            # ▼▼▼ 修正: 翻訳関数の呼び出しを strace でラップ ▼▼▼
+            # -o: 出力ファイル指定
+            # -f: 子プロセスもトレース (wget実行のため重要)
+            # -tt: 各行にマイクロ秒単位のタイムスタンプを追加 (オプション)
+            # -T: 各システムコールの実行時間を表示 (オプション)
+            translated_text=$(strace -o "$strace_log_file" -f -tt -T "$func" "$value" "$lang")
+            exit_code=$? # strace経由で実行された関数の終了コードを取得
+            # ▲▲▲ 修正: 翻訳関数の呼び出しを strace でラップ ▲▲▲
+
+            debug_log "DEBUG" "translate_single_line: '$func' finished for key '$key' with exit code $exit_code. Output length: ${#translated_text}"
+
+            # Use original value if translation failed or returned empty
+            # Use exit_code from the strace call to check success
+            if [ "$exit_code" -ne 0 ] || [ -z "$translated_text" ]; then
+                # If strace itself failed or the wrapped function failed, log it
+                if [ "$exit_code" -ne 0 ]; then
+                     debug_log "DEBUG" "translate_single_line: Translation function or strace failed for key '$key' (Exit Code: $exit_code). Using original value."
+                else
+                     debug_log "DEBUG" "translate_single_line: Translation function returned empty for key '$key'. Using original value."
+                fi
+                translated_text="$value"
+                # ここで exit_code を変更しない (printf の成否は別途ハンドリングしない)
+                # エラーがあったことはログに残し、出力は原文で行う
+            fi
+
+            # printf の結果はチェックしない (POSIX shでは$?の取得が難しい場合がある)
+            # 出力失敗は上位の関数で検知される想定
+            printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
+        ;;
+    esac
+}
+
+# Helper function (変更なし)
+OK_translate_single_line() {
     local line="$1"
     local lang="$2"
     local func="$3"
