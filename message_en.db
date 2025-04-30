@@ -154,6 +154,7 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 # =======================
 # aios
 # =======================
+en|MSG_CONFIRM_RESTART=Download failed. Do you want to stop the system? (y/n){;}
 en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
 en|DOWNLOAD_PARALLEL_START=Downloading essential files
 en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully{:} {s} seconds
