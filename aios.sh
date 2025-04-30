@@ -2278,15 +2278,22 @@ download_parallel() {
         return 1
     fi
 
-    # download_files()関数のコマンド部のみ抽出
-    cmd_list=""
-    add_cmd() { cmd_list="${cmd_list}$1"$'\n'; }
+    # download_files()関数のコマンド部のみ抽出（パイプなしで一時ファイルに保存）
+    local cmd_tmpfile load_tmpfile
+    cmd_tmpfile="${DL_DIR}/cmd_list_$$.txt"
+    load_tmpfile="${DL_DIR}/load_targets_$$.txt"
+    rm -f "$cmd_tmpfile" "$load_tmpfile" 2>/dev/null
+
     awk '
         BEGIN { in_func=0; }
         /^download_files\(\) *\{/ { in_func=1; next }
         /^}/ { if(in_func){in_func=0} }
         in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
-    ' "$script_path" | while IFS= read -r line; do
+    ' "$script_path" > "$cmd_tmpfile"
+
+    # コマンドリストをquiet化しつつ一時ファイルに保存
+    > "$cmd_tmpfile.quiet"
+    while IFS= read -r line; do
         [ -z "$line" ] && continue
         case "$line" in
             download*)
@@ -2295,42 +2302,45 @@ download_parallel() {
                 fi
                 ;;
         esac
-        add_cmd "$line"
-    done
+        printf "%s\n" "$line" >> "$cmd_tmpfile.quiet"
+    done < "$cmd_tmpfile"
+
+    mv "$cmd_tmpfile.quiet" "$cmd_tmpfile"
 
     # コマンドリストが空なら終了
-    if [ -z "$cmd_list" ]; then
+    if ! grep -q . "$cmd_tmpfile"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
         printf "Download completed (no tasks) in %s seconds.\n" "$elapsed_seconds"
+        rm -f "$cmd_tmpfile" "$load_tmpfile"
         return 0
     fi
 
     # ロード対象ファイル収集
-    load_targets=""
-    echo "$cmd_list" | while IFS= read -r command_line; do
+    > "$load_tmpfile"
+    while IFS= read -r command_line; do
         case "$command_line" in
-            download*'"load"')
+            *'"load"')
                 set -- $command_line
                 if [ "$#" -ge 2 ]; then
                     load_fname=$2
                     load_fname=${load_fname#\"}
                     load_fname=${load_fname%\"}
                     if [ -n "$load_fname" ]; then
-                        load_targets="${load_targets}${load_fname}"$'\n'
+                        printf "%s\n" "$load_fname" >> "$load_tmpfile"
                     fi
                 fi
                 ;;
         esac
-    done
+    done < "$cmd_tmpfile"
 
     eval "export $exported_vars"
     pids=""
     current_jobs=0
     job_index=0
 
-    echo "$cmd_list" | while IFS= read -r command_line; do
+    while IFS= read -r command_line || [ -n "$command_line" ]; do
         [ -z "$command_line" ] && continue
         job_index=$((job_index + 1))
         task_name=$(printf "%03d" "$job_index")
@@ -2361,10 +2371,10 @@ download_parallel() {
 
         # 並列数制御
         if [ "$current_jobs" -ge "$max_parallel" ]; then
-            wait -n 2>/dev/null || wait
-            current_jobs=$((current_jobs - 1))
+            wait
+            current_jobs=0
         fi
-    done
+    done < "$cmd_tmpfile"
 
     # 残りのジョブを待機
     for pid in $pids; do
@@ -2383,9 +2393,9 @@ download_parallel() {
     fi
 
     # ロード対象ファイルのsource
-    if [ $overall_status -eq 0 ] && [ -n "$load_targets" ]; then
+    if [ $overall_status -eq 0 ] && [ -s "$load_tmpfile" ]; then
         loaded_files=""
-        echo "$load_targets" | while IFS= read -r load_file; do
+        while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
             echo "$loaded_files" | grep -qxF "$load_file" && continue
             full_load_path="${BASE_DIR}/$load_file"
@@ -2413,8 +2423,10 @@ download_parallel() {
                 fi
                 break
             fi
-        done
+        done < "$load_tmpfile"
     fi
+
+    rm -f "$cmd_tmpfile" "$load_tmpfile"
 
     if [ $overall_status -eq 0 ]; then
         end_time=$(date +%s)
