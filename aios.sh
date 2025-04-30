@@ -2304,6 +2304,222 @@ download_parallel() {
         esac
         printf "%s\n" "$line" >> "$cmd_tmpfile.quiet"
     done < "$cmd_tmpfile"
+    mv "$cmd_tmpfile.quiet" "$cmd_tmpfile"
+
+    # コマンドリストが空なら終了
+    if ! grep -q . "$cmd_tmpfile"; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        printf "Download completed (no tasks) in %s seconds.\n" "$elapsed_seconds"
+        rm -f "$cmd_tmpfile" "$load_tmpfile"
+        return 0
+    fi
+
+    # ロード対象ファイル収集
+    > "$load_tmpfile"
+    while IFS= read -r command_line; do
+        case "$command_line" in
+            *'"load"')
+                set -- $command_line
+                if [ "$#" -ge 2 ]; then
+                    load_fname=$2
+                    load_fname=${load_fname#\"}
+                    load_fname=${load_fname%\"}
+                    if [ -n "$load_fname" ]; then
+                        printf "%s\n" "$load_fname" >> "$load_tmpfile"
+                    fi
+                fi
+                ;;
+        esac
+    done < "$cmd_tmpfile"
+
+    eval "export $exported_vars"
+    pids=""
+    job_index=0
+
+    # --- DL/LOAD共通: 3回リトライ＋YN判定ルーチン ---
+    retry_with_confirm() {
+        # $1: コマンド文字列 or ファイルパス
+        # $2: 最大リトライ回数
+        # $3: タイプ（"download" または "load"）
+        # $4: メインスクリプト引数（可変）
+
+        local cmd="$1"
+        local max_retry="$2"
+        local type="$3"
+        shift 3
+        local main_args="$@"
+        local retry_count=0
+        local success=1
+
+        while [ "$retry_count" -lt "$max_retry" ]; do
+            if [ "$type" = "download" ]; then
+                eval "$cmd"
+            else
+                . "$cmd"
+            fi
+            if [ $? -eq 0 ]; then
+                success=0
+                break
+            fi
+            retry_count=$((retry_count + 1))
+            debug_log "DEBUG" "$type failed for $cmd (retry $retry_count/$max_retry)"
+            sleep 1
+        done
+
+        if [ "$success" -ne 0 ]; then
+            stop_spinner "$(get_message 'MSG_CONFIRM_RESTART')" "failure"
+            if confirm "MSG_CONFIRM_RESTART"; then
+                exec "$0" $main_args
+            else
+                exit 1
+            fi
+        fi
+    }
+
+    # --- 並列DL ---
+    current_jobs=0
+    pids=""
+    job_index=0
+
+    while IFS= read -r command_line || [ -n "$command_line" ]; do
+        [ -z "$command_line" ] && continue
+        job_index=$((job_index + 1))
+        task_name=$(printf "%03d" "$job_index")
+        stdout_log="${log_file_prefix}${task_name}.stdout.log"
+        stderr_log="${log_file_prefix}${task_name}.stderr.log"
+
+        (
+            retry_with_confirm "$command_line" 3 "download" "$@"
+        ) >"$stdout_log" 2>"$stderr_log" &
+        pid=$!
+        pids="$pids $pid"
+        current_jobs=$((current_jobs + 1))
+
+        # max_parallel制御
+        set -- $pids
+        if [ "$current_jobs" -ge "$max_parallel" ]; then
+            wait "$1"
+            pids=""
+            shift
+            while [ $# -gt 0 ]; do
+                pids="$pids $1"
+                shift
+            done
+            current_jobs=${#pids}
+        fi
+    done < "$cmd_tmpfile"
+
+    # 残りのジョブを待機
+    for pid in $pids; do
+        wait "$pid" || overall_status=1
+    done
+
+    # ロード対象ファイルのsource（DL成功時のみ）
+    if [ $overall_status -eq 0 ] && [ -s "$load_tmpfile" ]; then
+        loaded_files=""
+        while IFS= read -r load_file; do
+            [ -z "$load_file" ] && continue
+            echo "$loaded_files" | grep -qxF "$load_file" && continue
+            full_load_path="${BASE_DIR}/$load_file"
+            retry_with_confirm "$full_load_path" 3 "load" "$@"
+            loaded_files="${loaded_files}${load_file}\n"
+        done < "$load_tmpfile"
+    fi
+
+    rm -f "$cmd_tmpfile" "$load_tmpfile"
+
+    if [ $overall_status -eq 0 ]; then
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}")"
+        stop_spinner "$success_message" "success"
+        return 0
+    else
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_command" "e=$first_error_message")"
+        stop_spinner "$failure_message" "failure"
+        printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_command" "$elapsed_seconds"
+        return 1
+    fi
+}
+
+OK2_download_parallel() {
+    local start_time end_time elapsed_seconds
+    local max_parallel current_jobs pids pid job_index
+    local overall_status fail_flag_file first_failed_command first_error_message
+    local script_path load_targets load_target retry
+    local exported_vars log_file_prefix stdout_log stderr_log error_info_file
+    local line command_line cmd_status
+    local loaded_files source_success source_status
+
+    start_time=$(date +%s)
+    end_time=""
+    elapsed_seconds=0
+
+    overall_status=0
+    fail_flag_file="${DL_DIR}/dl_failed_flag"
+    first_failed_command=""
+    first_error_message=""
+    script_path="$0"
+    exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE"
+    log_file_prefix="${LOG_DIR}/download_parallel_task_"
+
+    max_parallel="${MAX_PARALLEL_TASKS:-1}"
+    printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$MAX_PARALLEL_TASKS")")"
+    debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
+
+    if ! mkdir -p "$DL_DIR"; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        printf "Download failed (directory creation) in %s seconds.\n" "$elapsed_seconds"
+        return 1
+    fi
+    if ! mkdir -p "$LOG_DIR"; then
+        debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2
+    fi
+    rm -f "$fail_flag_file" 2>/dev/null
+
+    start_spinner "$(color blue "$(get_message 'DOWNLOAD_PARALLEL_START')")"
+
+    if [ ! -f "$script_path" ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
+        debug_log "DEBUG" "Script path '$script_path' is not found"
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        printf "Download failed (script not found) in %s seconds.\n" "$elapsed_seconds"
+        return 1
+    fi
+
+    # download_files()関数のコマンド部のみ抽出（パイプなしで一時ファイルに保存）
+    local cmd_tmpfile load_tmpfile
+    cmd_tmpfile="${DL_DIR}/cmd_list_$$.txt"
+    load_tmpfile="${DL_DIR}/load_targets_$$.txt"
+    rm -f "$cmd_tmpfile" "$load_tmpfile" 2>/dev/null
+
+    awk '
+        BEGIN { in_func=0; }
+        /^download_files\(\) *\{/ { in_func=1; next }
+        /^}/ { if(in_func){in_func=0} }
+        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
+    ' "$script_path" > "$cmd_tmpfile"
+
+    # コマンドリストをquiet化しつつ一時ファイルに保存
+    > "$cmd_tmpfile.quiet"
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        case "$line" in
+            download*)
+                if ! echo "$line" | grep -qw "quiet"; then
+                    line="$line quiet"
+                fi
+                ;;
+        esac
+        printf "%s\n" "$line" >> "$cmd_tmpfile.quiet"
+    done < "$cmd_tmpfile"
 
     mv "$cmd_tmpfile.quiet" "$cmd_tmpfile"
 
