@@ -289,7 +289,7 @@ create_language_db_parallel() {
             ;;
         *)
             # その他のOSはデフォルト設定
-            request_delay=0.5
+            request_delay=1
             debug_log "DEBUG" "OS version $osversion: Default throttling applied (delay=${request_delay}s)"
             ;;
     esac
