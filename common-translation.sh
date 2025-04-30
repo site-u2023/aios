@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-00-02"
+SCRIPT_VERSION="2025-05-01-00-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -188,6 +188,224 @@ translate_with_google() {
 # POSIX sh準拠の関数 (ash互換)
 
 create_language_db_parallel() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"  # Passed for logging/context
+    local domain_name="$3"       # Used for spinner message
+    local target_lang_code="$4"
+
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    # ▼▼▼ 追加: awk出力用の一時ファイルと部分出力ファイル ▼▼▼
+    local tmp_awk_output="${TR_DIR}/message_${target_lang_code}.awk.tmp"
+    local tmp_partial_output="${final_output_dir}/message_${target_lang_code}.db.partial"
+
+    # --- Time measurement variables ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+
+    # --- Spinner variables ---
+    local spinner_started="false"
+
+    # --- Marker Key ---
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+
+    # タスク制御用
+    local pids=""
+    local exit_status=0 # 0:success, 1:critical error, 2:partial success
+    # ▼▼▼ 追加: total_lines をここで宣言 ▼▼▼
+    local total_lines=0
+
+    # --- Pre-checks ---
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base DB file not found: $base_db"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
+        return 1
+    fi
+    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "Missing required arguments: AIP function name or target language code."
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
+        return 1
+    fi
+
+    # --- Prepare directories ---
+    # ▼▼▼ 修正: TR_DIRも作成 ▼▼▼
+    mkdir -p "$TR_DIR" || {
+        debug_log "DEBUG" "Failed to create temporary directory: $TR_DIR"
+        return 1
+    }
+    mkdir -p "$final_output_dir" || {
+        debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"
+        return 1
+    }
+
+    # --- Cleanup Trap ---
+    # ▼▼▼ 修正: 一時ファイルクリーンアップをtrapに追加 ▼▼▼
+    # shellcheck disable=SC2064
+    trap "debug_log 'DEBUG' 'Trap cleanup: Removing temporary files...'; rm -f \"$tmp_awk_output\" \"$tmp_partial_output\"" INT TERM EXIT
+
+    # --- Logging ---
+    debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
+    debug_log "DEBUG" "Base DB: $base_db"
+    debug_log "DEBUG" "Final output file: $final_output_file"
+    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
+
+    # --- Start Timing and Spinner ---
+    start_time=$(date +%s)
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name"
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    spinner_started="true"
+
+    # --- Main Processing ---
+    # ▼▼▼ 修正: 以前の関数(OK2_)と同じヘッダー書き込み形式を使用 ▼▼▼
+    cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+EOF
+    # ▲▲▲ 以前の関数(OK2_)と同じ形式 ▲▲▲
+
+    # ヘッダー書き込み失敗チェック
+    if ! :; then # この ':' は常に成功するコマンド。$? を直後にチェックするため。
+        # 上記 cat コマンドの終了ステータスを確認
+        if [ $? -ne 0 ]; then
+             debug_log "DEBUG" "Failed to write header to $final_output_file"
+             exit_status=1
+        fi
+    fi
+
+    # ヘッダー書き込みが成功した場合のみ続行
+    if [ "$exit_status" -eq 0 ]; then
+        # total_lines の計算 (ヘッダー書き込み後に行う)
+        total_lines=$(awk 'NR>1{c++} END{print c}' "$base_db")
+        if [ "$total_lines" -le 0 ]; then
+            debug_log "DEBUG" "No lines to translate (excluding header)."
+            # exit_status は 0 のまま
+        else
+            # ▼▼▼ 修正: awkの結果を一時ファイルに保存 ▼▼▼
+            if ! awk 'NR>1' "$base_db" > "$tmp_awk_output"; then
+                 debug_log "DEBUG" "Failed to create temporary awk output file: $tmp_awk_output"
+                 exit_status=1
+            else
+                # ▼▼▼ 修正: 一時ファイルから読み込む (サブシェル回避) ▼▼▼
+                while IFS= read -r line; do
+                    case "$line" in \#* | "") continue ;; esac
+
+                    # 並列タスクをBGで起動
+                    # ▼▼▼ 修正: 部分出力ファイル名を指定 ▼▼▼
+                    translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$tmp_partial_output" &
+                    local pid=$! # ループ内で宣言
+                    pids="$pids $pid"
+
+                    # 並列タスク数制限
+                    while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
+                        sleep 0.2
+                    done
+                done < "$tmp_awk_output" # ▲▲▲ 一時ファイルから読み込み ▲▲▲
+
+                # BGジョブ完了待機
+                local wait_failed=0
+                for pid_item in $pids; do # 変数名を変更
+                    if ! wait "$pid_item"; then
+                        wait_failed=1
+                        [ "$exit_status" -eq 0 ] && exit_status=2
+                    fi
+                done
+
+                # ▼▼▼ 修正: 部分出力を結合 ▼▼▼
+                if [ -f "$tmp_partial_output" ]; then
+                    if ! cat "$tmp_partial_output" >>"$final_output_file"; then
+                        debug_log "DEBUG" "Failed to append partial results to $final_output_file"
+                        [ "$exit_status" -eq 0 ] && exit_status=1
+                    fi
+                fi
+
+                # 完了マーカー付加 (致命的エラー時以外)
+                if [ "$exit_status" -ne 1 ]; then
+                    if ! printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"; then
+                         debug_log "DEBUG" "Failed to write completion marker to $final_output_file"
+                         [ "$exit_status" -eq 0 ] && exit_status=1
+                    fi
+                fi
+                # rm -f "$tmp_awk_output" # trapで削除されるので不要
+            fi # awk 成功チェックの終了
+        fi # total_lines > 0 の終了
+    fi # ヘッダー書き込み成功チェックの終了
+
+    # --- Stop Timing and Spinner ---
+    end_time=$(date +%s)
+    if [ -n "$start_time" ]; then
+        elapsed_seconds=$((end_time - start_time))
+    else
+        elapsed_seconds=0
+    fi
+
+    if [ "$spinner_started" = "true" ]; then
+        local final_message=""
+        local spinner_status="success"
+
+        # ▼▼▼ 修正: total_lines > 0 の条件を追加 (以前の関数に合わせる) ▼▼▼
+        if [ "$exit_status" -eq 0 ]; then
+             if [ "$total_lines" -gt 0 ]; then
+                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+             else
+                 # 以前の関数にこのメッセージキーがあったか不明だが、意味的に近いものを維持
+                 final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
+             fi
+        elif [ "$exit_status" -eq 2 ]; then
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning"
+        else # exit_status is 1
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
+            spinner_status="error"
+        fi
+        stop_spinner "$final_message" "$spinner_status"
+        debug_log "DEBUG" "Parallel translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+    else
+        # Fallback print (total_lines 条件追加)
+        if [ "$exit_status" -eq 0 ]; then
+             if [ "$total_lines" -gt 0 ]; then
+                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+             else
+                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")")"
+             fi
+        elif [ "$exit_status" -eq 2 ]; then
+             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+        else # exit_status is 1
+             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+        fi
+    fi
+
+    # trapで一時ファイルは削除される
+
+    return "$exit_status"
+}
+
+# Helper function (変更なし)
+translate_single_line() {
+    local line="$1"
+    local lang="$2"
+    local func="$3"
+
+    case "$line" in
+        *"|"*)
+            local line_content=${line#*|}
+            local key=${line_content%%=*}
+            local value=${line_content#*=}
+            local translated_text
+
+            translated_text=$("$func" "$value" "$lang")
+            # Use original value if translation is empty
+            [ -z "$translated_text" ] && translated_text="$value"
+
+            printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
+        ;;
+    esac
+}
+
+OK3_create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
     local domain_name="$3"       # Used for spinner message
