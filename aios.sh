@@ -2252,7 +2252,9 @@ download_parallel() {
     local loaded_files=""
     local task_line=""
     local task_list=""
-    local n_running=""
+    local i=""
+    locao pid=""
+    local n_running=0
 
     printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$MAX_PARALLEL_TASKS")")"
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
