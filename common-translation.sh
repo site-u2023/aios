@@ -184,6 +184,9 @@ translate_with_google() {
     return 1 # Failure
 }
 
+# shellcheck shell=sh
+# POSIX sh準拠の関数 (ash互換)
+
 create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
@@ -193,15 +196,24 @@ create_language_db_parallel() {
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+
+    # --- Time measurement variables ---
     local start_time=""
     local end_time=""
     local elapsed_seconds=""
+
+    # --- Spinner variables ---
     local spinner_started="false"
+
+    # --- Marker Key ---
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+
+    # タスク制御用
     local pids=""
     local pid=""
     local exit_status=0
 
+    # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
         debug_log "DEBUG" "Base DB file not found: $base_db"
         printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
@@ -213,21 +225,27 @@ create_language_db_parallel() {
         return 1
     fi
 
-    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"; return 1; }
+    # --- Prepare directories ---
+    mkdir -p "$final_output_dir" || {
+        debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"
+        return 1
+    }
 
+    # --- Logging ---
     debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
     debug_log "DEBUG" "Base DB: $base_db"
     debug_log "DEBUG" "Final output file: $final_output_file"
     debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
 
+    # --- Start Timing and Spinner ---
     start_time=$(date +%s)
     local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
     local spinner_default_msg="Currently translating: $domain_name"
     start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
     spinner_started="true"
 
-    # ヘッダーを書き込む
-    cat <<-EOF >"$final_output_file"
+    # ヘッダー部分を書き出し
+        cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
@@ -235,36 +253,42 @@ EOF
 
     if [ $? -ne 0 ]; then
         debug_log "DEBUG" "Failed to write header to $final_output_file"
-        return 1
-    fi
+        exit_status=1
+    else
+        # メイン処理: 行ベースで並列翻訳
+        # Base DBのヘッダーを除外 (NR>1)、空行/コメント行を除外
+        awk 'NR>1' "$base_db" | while IFS= read -r line; do
+            case "$line" in \#* | "") continue ;; esac
 
-    # 並列処理用ループ
-    awk 'NR>1' "$base_db" | while IFS= read -r line; do
-        # 空行やコメントをスキップ
-        case "$line" in \#* | "") continue ;; esac
+            # 並列タスクをBGで起動
+            translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
+            pid=$!
+            pids="$pids $pid"
 
-        # 並列タスクをBGで起動
-        translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
-        pid=$!
-        pids="$pids $pid"
-
-        # 並列タスク数制御
-        while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
-            sleep 0.2
+            # 並列タスク数制限
+            while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
+                sleep 0.2
+            done
         done
-    done
 
-    # BGジョブが全て完了するまで待機
-    for pid in $pids; do
-        wait "$pid" || exit_status=2
-    done
+        # BGジョブが全て完了するまで待機
+        for pid in $pids; do
+            wait "$pid" || exit_status=2
+        done
 
-    # 部分出力を統合
-    if [ -f "$final_output_file".partial ]; then
-        cat "$final_output_file".partial >>"$final_output_file"
-        rm -f "$final_output_file".partial
+        # 部分出力を結合
+        if [ -f "$final_output_file".partial ]; then
+            cat "$final_output_file".partial >>"$final_output_file"
+            rm -f "$final_output_file".partial
+        fi
+
+        if [ "$exit_status" -ne 1 ]; then
+            # 完了マーカーを付加
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+        fi
     fi
 
+    # --- Stop Timing and Spinner ---
     end_time=$(date +%s)
     elapsed_seconds=$((end_time - start_time))
 
@@ -296,6 +320,7 @@ EOF
     return "$exit_status"
 }
 
+# Helper function (変更なし)
 translate_single_line() {
     local line="$1"
     local lang="$2"
@@ -309,6 +334,7 @@ translate_single_line() {
             local translated_text
 
             translated_text=$("$func" "$value" "$lang")
+            # Use original value if translation is empty
             [ -z "$translated_text" ] && translated_text="$value"
 
             printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
