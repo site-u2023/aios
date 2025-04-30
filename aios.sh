@@ -2245,14 +2245,14 @@ download_parallel() {
     local max_parallel="${MAX_PARALLEL_TASKS:-1}"
     local pids=""
     local task_index=0
-    local total_tasks
+    local total_tasks=""
     local overall_status=0
     local first_failed_task_name=""
     local first_error_message=""
     local loaded_files=""
-    local task_line
-    local task_list=()
-    local i pid n_running
+    local task_line=""
+    local task_list=""
+    local n_running=""
 
     printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$MAX_PARALLEL_TASKS")")"
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
