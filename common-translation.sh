@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-01-04"
+SCRIPT_VERSION="2025-05-01-01-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -256,6 +256,7 @@ create_language_db_parallel() {
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local temp_line_file="${BASE_DIR}/temp_lines_$$.txt"
 
     # --- Time measurement variables ---
     local start_time=""
@@ -272,13 +273,26 @@ create_language_db_parallel() {
     local pids=""
     local pid=""
     local exit_status=0
-    local line_count=0
-    local processed_count=0
 
     # --- OS Version Detection ---
     local osversion
-    osversion=$(cat "${CACHE_DIR}/osversion.ch")
+    osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
     debug_log "DEBUG" "Read OS Version from '${CACHE_DIR}/osversion.ch': '$osversion'"
+    
+    # --- OSバージョンに応じたスロットリング設定 ---
+    local request_delay=0
+    case "$osversion" in
+        19*)
+            # OS=19の場合、強めのスロットリング
+            request_delay=3
+            debug_log "DEBUG" "OS version $osversion detected: Strong throttling applied (delay=${request_delay}s)"
+            ;;
+        *)
+            # その他のOSはデフォルト設定
+            request_delay=0.5
+            debug_log "DEBUG" "OS version $osversion: Default throttling applied (delay=${request_delay}s)"
+            ;;
+    esac
 
     # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
@@ -302,7 +316,8 @@ create_language_db_parallel() {
     debug_log "DEBUG" "Starting translation for language '$target_lang_code' using function '$aip_function_name'"
     debug_log "DEBUG" "Base DB: $base_db"
     debug_log "DEBUG" "Final output file: $final_output_file"
-    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS" 
+    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
+    debug_log "DEBUG" "Request delay: ${request_delay}s"
 
     # --- Start Timing and Spinner ---
     start_time=$(date +%s)
@@ -322,109 +337,144 @@ EOF
         debug_log "DEBUG" "Failed to write header to $final_output_file"
         exit_status=1
     else
-        # --- パイプラインを避けて処理（awk | while の代わりに） ---
-        # まず処理行を抽出 (base_dbから2行目以降をフィルタリング)
-        local tmp_lines_file="${BASE_DIR}/tmp_lines_$$.txt"
-        awk 'NR>1 && !(/^#/ || /^$/)' "$base_db" > "$tmp_lines_file"
-        
-        # 行数をカウント (処理状況表示用)
-        line_count=$(wc -l < "$tmp_lines_file")
-        debug_log "DEBUG" "Processing $line_count lines from base DB."
-        
-        if [ "$osversion" = "19" ]; then
-            # --- Sequential Execution for OS Version 19 ---
-            debug_log "DEBUG" "Running in sequential mode (OS Version '$osversion')."
-            
-            # 逐次処理：直接ファイルを読み込んで処理
-            while IFS= read -r line; do
-                local translated_line=""
-                translated_line=$(translate_single_line "$line" "$target_lang_code" "$aip_function_name")
-                local translate_status=$?
+        # --- パイプライン回避のためファイル経由で処理 ---
+        # 一時ファイルを作成し、ヘッダー以外の処理対象行を抽出
+        awk 'NR>1 && !(/^#/ || /^$/)' "$base_db" > "$temp_line_file"
+        if [ $? -ne 0 ]; then
+            debug_log "DEBUG" "Failed to prepare temporary line file"
+            exit_status=1
+        else
+            # 処理対象の行数をカウント
+            local total_lines=$(wc -l < "$temp_line_file")
+            local processed=0
+            debug_log "DEBUG" "Total lines to process: $total_lines"
 
-                if [ "$translate_status" -eq 0 ] && [ -n "$translated_line" ]; then
-                    printf "%s\n" "$translated_line" >> "$final_output_file"
-                    if [ $? -ne 0 ]; then
-                         debug_log "DEBUG" "Sequential write failed for line: $line"
-                         exit_status=1
-                         break
+            # --- OSバージョンに応じた処理分岐 ---
+            if [ "$osversion" = "19" ]; then
+                # --- Sequential Execution for OS Version 19 ---
+                debug_log "DEBUG" "Running in sequential mode with throttling for OS $osversion"
+                local partial_output=""
+
+                # ファイル読み込みループ（直接読み込み）
+                while IFS= read -r line; do
+                    # 進捗表示（10行ごと）
+                    processed=$((processed + 1))
+                    if [ $((processed % 10)) -eq 0 ]; then
+                        debug_log "DEBUG" "Processing line $processed of $total_lines (${processed}00/${total_lines}00%)"
                     fi
-                else
-                    debug_log "DEBUG" "Sequential translation failed for line: $line (status: $translate_status)"
+
+                    # 翻訳処理（スロットリング付き）
+                    local translated_line=""
+                    translated_line=$(translate_single_line "$line" "$target_lang_code" "$aip_function_name")
+                    local translate_status=$?
+
+                    if [ "$translate_status" -eq 0 ] && [ -n "$translated_line" ]; then
+                        # 成功した場合はファイルに追記
+                        printf "%s\n" "$translated_line" >> "$final_output_file"
+                        if [ $? -ne 0 ]; then
+                             debug_log "DEBUG" "Sequential write failed for line derived from: $line"
+                             exit_status=1 # 重大なエラー
+                             break
+                        fi
+                    else
+                        debug_log "DEBUG" "Translation failed for line $processed: $line (status: $translate_status)"
+                        # 元の値を使用して追記
+                        local fallback_line=""
+                        fallback_line=$(make_fallback_line "$line" "$target_lang_code")
+                        printf "%s\n" "$fallback_line" >> "$final_output_file"
+                        if [ $? -ne 0 ]; then
+                            debug_log "DEBUG" "Failed to write fallback line for: $line"
+                            exit_status=1
+                            break
+                        fi
+                        [ "$exit_status" -eq 0 ] && exit_status=2 # 部分的失敗
+                    fi
+
+                    # スロットリング（OSバージョンに応じた遅延）
+                    sleep "$request_delay"
+                done < "$temp_line_file"
+                
+                # 読み込みループのステータスチェック
+                if [ $? -ne 0 ] && [ "$exit_status" -ne 1 ]; then
+                    debug_log "DEBUG" "Error in read loop for sequential processing"
                     [ "$exit_status" -eq 0 ] && exit_status=2
                 fi
-                
-                processed_count=$((processed_count + 1))
-                if [ $((processed_count % 10)) -eq 0 ]; then
-                    debug_log "DEBUG" "Processed $processed_count/$line_count lines."
-                fi
-            done < "$tmp_lines_file"
-            
-            # Check read loop exit status
-            if [ $? -ne 0 ] && [ "$exit_status" -ne 1 ]; then
-                debug_log "DEBUG" "Error reading from temporary file in sequential mode."
-                exit_status=1
-            fi
-        else
-            # --- Parallel Execution for OS Version not 19 ---
-            debug_log "DEBUG" "Running in parallel mode (OS Version '$osversion')."
-            local partial_output_file="${final_output_file}.partial"
-            rm -f "$partial_output_file" # 部分ファイル初期化
-            
-            # 並列処理：直接ファイルを読み込んでバックグラウンドで処理
-            while IFS= read -r line; do
-                # 並列タスクをBGで起動
-                translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$partial_output_file" &
-                pid=$!
-                pids="$pids $pid"
+            else
+                # --- Parallel Execution for other OS versions ---
+                debug_log "DEBUG" "Running in parallel mode for OS $osversion"
+                local partial_output_file="${final_output_file}.partial"
+                rm -f "$partial_output_file" # 部分ファイルを初期化
 
-                # 並列タスク数制限
-                while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
-                    sleep 0.2
+                # 一時ファイルを行単位で読み込み、並列処理
+                while IFS= read -r line; do
+                    # 進捗表示（100行ごと）
+                    processed=$((processed + 1))
+                    if [ $((processed % 100)) -eq 0 ]; then
+                        debug_log "DEBUG" "Queued line $processed of $total_lines (${processed}00/${total_lines}00%)"
+                    fi
+
+                    # 翻訳処理を並列実行
+                    (
+                        # サブシェルでスロットリング付き翻訳実行
+                        translated_line=$(translate_single_line "$line" "$target_lang_code" "$aip_function_name")
+                        translate_status=$?
+
+                        if [ "$translate_status" -eq 0 ] && [ -n "$translated_line" ]; then
+                            printf "%s\n" "$translated_line" >> "$partial_output_file"
+                        else
+                            # 失敗時は元の値を使用
+                            fallback_line=$(make_fallback_line "$line" "$target_lang_code")
+                            printf "%s\n" "$fallback_line" >> "$partial_output_file"
+                        fi
+
+                        # OSバージョンに応じた遅延（並列処理でも最小限のスロットリング）
+                        sleep "$request_delay"
+                    ) &
+                    
+                    pid=$!
+                    pids="$pids $pid"
+
+                    # 並列タスク数制限
+                    while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
+                        sleep 1  # 少し長めの間隔で待機
+                    done
+                done < "$temp_line_file"
+
+                # 読み込みループのステータスチェック
+                if [ $? -ne 0 ]; then
+                    debug_log "DEBUG" "Error in read loop for parallel processing"
+                    [ "$exit_status" -eq 0 ] && exit_status=2
+                fi
+
+                # 全ジョブの完了を待機
+                local wait_failed=0
+                for pid in $pids; do
+                    if ! wait "$pid"; then
+                        debug_log "DEBUG" "Parallel job PID $pid failed."
+                        wait_failed=1
+                    fi
                 done
-                
-                processed_count=$((processed_count + 1))
-                if [ $((processed_count % 100)) -eq 0 ]; then
-                    debug_log "DEBUG" "Started processing $processed_count/$line_count lines."
+                [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ] && exit_status=2
+
+                # 部分出力を結合
+                if [ -f "$partial_output_file" ]; then
+                    if ! cat "$partial_output_file" >> "$final_output_file"; then
+                        debug_log "DEBUG" "Failed to append partial results"
+                        exit_status=1
+                    fi
+                    rm -f "$partial_output_file"
+                elif [ -n "$pids" ] && [ "$exit_status" -eq 0 ]; then
+                    debug_log "DEBUG" "No partial output file found though jobs were run"
+                    exit_status=2
                 fi
-            done < "$tmp_lines_file"
-            
-            # Check read loop exit status
-            if [ $? -ne 0 ]; then
-                debug_log "DEBUG" "Error reading from temporary file in parallel mode."
-                exit_status=1
             fi
 
-            # BGジョブが全て完了するまで待機
-            local wait_failed=0
-            for pid in $pids; do
-                if ! wait "$pid"; then
-                    debug_log "DEBUG" "Parallel job PID $pid failed."
-                    wait_failed=1
-                fi
-            done
-
-            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
-                 exit_status=2
-            fi
-
-            # 部分出力を結合
-            if [ -f "$partial_output_file" ]; then
-                if ! cat "$partial_output_file" >>"$final_output_file"; then
-                    debug_log "DEBUG" "Failed to append partial results from $partial_output_file"
-                    exit_status=1
-                fi
-                rm -f "$partial_output_file"
-            elif [ -n "$pids" ] && [ "$exit_status" -eq 0 ]; then
-                debug_log "DEBUG" "Partial output file not found, but jobs were expected."
-                exit_status=2
-            fi
+            # 一時ファイルの削除
+            rm -f "$temp_line_file"
         fi
-        
-        # 一時ファイル削除
-        rm -f "$tmp_lines_file"
-        
+
         # 完了マーカーを付加 (共通処理)
-        if [ "$exit_status" -ne 1 ]; then
+        if [ "$exit_status" -ne 1 ]; then # Add marker unless critical failure
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
              if [ $? -ne 0 ]; then
                   debug_log "DEBUG" "Failed to write completion marker to $final_output_file"
@@ -448,13 +498,11 @@ EOF
         else
             final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
             spinner_status="error"
-            # 重大なエラー時は不完全なファイルを削除
+            # 重大エラー時は不完全なファイルを削除
             rm -f "$final_output_file"
         fi
         stop_spinner "$final_message" "$spinner_status"
-        debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Final Status Code: ${exit_status}"
     else
-        # スピナーが起動しなかった場合のフォールバックメッセージ
         if [ "$exit_status" -eq 0 ]; then
             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
         elif [ "$exit_status" -eq 2 ]; then
@@ -466,6 +514,26 @@ EOF
     fi
 
     return "$exit_status"
+}
+
+# 失敗時の代替行を生成するヘルパー関数
+make_fallback_line() {
+    local line="$1"
+    local lang="$2"
+    
+    case "$line" in
+        *"|"*)
+            local line_content=${line#*|}
+            local key=${line_content%%=*}
+            local value=${line_content#*=}
+            
+            printf "%s|%s=%s\n" "$lang" "$key" "$value"
+        ;;
+        *)
+            # 予期しない形式の場合は空文字列を返す
+            printf ""
+        ;;
+    esac
 }
 
 # Helper function (変更なし)
@@ -570,7 +638,7 @@ EOF
 
             # 並列タスク数制限
             while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
-                sleep 0.2
+                sleep 1
             done
         done
 
@@ -741,7 +809,7 @@ EOF
             # ─────────────────────────────────────────────
             # ▼▼▼ 追加: 並列タスク数制限(類似ダウンロードsystem) ▼▼▼
             while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
-                sleep 0.5
+                sleep 1
             done
             # ─────────────────────────────────────────────
 
