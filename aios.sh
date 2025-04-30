@@ -3463,10 +3463,6 @@ check_option() {
                     exit 1
                 fi
                 ;;
-            -u|--u|-update|--update)
-                debug_log "DEBUG" "check_option: aios update"
-                MODE="update"
-                ;;
             -t|--t|-token|--token)
                 setup_github_token
                 exit 0
@@ -3601,7 +3597,6 @@ check_common() {
             return
             ;;
         full)
-            check_update "$ORIGINAL_ARGS"
             download_parallel
             print_banner
             print_information
@@ -3610,10 +3605,6 @@ check_common() {
             translate_main
             install_package update
             selector "$MAIN_MENU"
-            return
-            ;;
-        update)
-            check_update "$ORIGINAL_ARGS"
             return
             ;;
         light)
@@ -3626,15 +3617,6 @@ check_common() {
             ;;
     esac
     
-    return 0
-}
-
-# 実行権限の設定
-chmod_aios() {
-    if ! chmod +x "$BIN_PATH"; then
-        debug_log "DEBUG" "Failed to set execute permission"
-        return 1
-    fi
     return 0
 }
 
@@ -3662,57 +3644,6 @@ make_directory() {
     return 0
 }
 
-check_update() {
-    # aios.sh専用アップデート関数
-    local script_file="${CACHE_DIR}/script.ch"
-    local file_name="aios.sh"
-    local local_version=""
-    local remote_version=""
-    local remote_version_info=""
-
-    # ローカルバージョン取得
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-
-    # リモートバージョン取得
-    remote_version_info=$(get_commit_version "$file_name")
-    if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "check_update: Failed to get remote version for $file_name"
-        return 1
-    fi
-    remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-
-    # バージョン比較
-    if [ "$remote_version" = "$local_version" ] && [ -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "check_update: Local version up-to-date for $file_name ($local_version); skipping update."
-        return 0
-    fi
-
-    # アップデート実行
-    download "$file_name" "chmod"
-    if [ ! -f "${BASE_DIR}/$file_name" ]; then
-        debug_log "check_update: Download failed for $file_name"
-        return 1
-    fi
-
-    # 実行ファイルパスを再取得
-    local abs_bin_path
-    abs_bin_path=$(resolve_path "$0")
-
-    # DL後のバージョン再取得（安全対策）
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
-    fi
-
-    if [ "$remote_version" = "$local_version" ]; then
-        exec "$abs_bin_path" "$@"
-    else
-        debug_log "check_update: Update failed, version mismatch after download."
-        return 1
-    fi
-}
-
 # シンボリックリンク多段解決対応 resolve_path
 resolve_path() {
     local target="$1"
@@ -3730,18 +3661,12 @@ resolve_path() {
     BIN_PATH="$dir/$file"
     BIN_DIR="$dir"
     BIN_FILE="$file"
-    printf "%s/%s\n" "$dir" "$file"
+    # printf "%s/%s\n" "$dir" "$file"
 }
 
 # 初期化処理のメイン
 main() {
     resolve_path "$0"
-
-    # 実行権限を設定
-    if ! chmod_aios; then
-        debug_log "DEBUG" "Failed to set execute permission"
-        return 1
-    fi
 
     # 必要なディレクトリを作成
     if ! make_directory; then
