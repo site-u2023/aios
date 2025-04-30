@@ -184,9 +184,139 @@ translate_with_google() {
     return 1 # Failure
 }
 
-#!/bin/sh
-
 create_language_db_parallel() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"  # Passed for logging/context
+    local domain_name="$3"       # Used for spinner message
+    local target_lang_code="$4"
+
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+    local spinner_started="false"
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    local pids=""
+    local pid=""
+    local exit_status=0
+
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base DB file not found: $base_db"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
+        return 1
+    fi
+    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "Missing required arguments: AIP function name or target language code."
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
+        return 1
+    fi
+
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"; return 1; }
+
+    debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
+    debug_log "DEBUG" "Base DB: $base_db"
+    debug_log "DEBUG" "Final output file: $final_output_file"
+    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
+
+    start_time=$(date +%s)
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name"
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    spinner_started="true"
+
+    # ヘッダーを書き込む
+    cat <<-EOF >"$final_output_file"
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+EOF
+
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "Failed to write header to $final_output_file"
+        return 1
+    fi
+
+    # 並列処理用ループ
+    awk 'NR>1' "$base_db" | while IFS= read -r line; do
+        # 空行やコメントをスキップ
+        case "$line" in \#* | "") continue ;; esac
+
+        # 並列タスクをBGで起動
+        translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
+        pid=$!
+        pids="$pids $pid"
+
+        # 並列タスク数制御
+        while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
+            sleep 0.2
+        done
+    done
+
+    # BGジョブが全て完了するまで待機
+    for pid in $pids; do
+        wait "$pid" || exit_status=2
+    done
+
+    # 部分出力を統合
+    if [ -f "$final_output_file".partial ]; then
+        cat "$final_output_file".partial >>"$final_output_file"
+        rm -f "$final_output_file".partial
+    fi
+
+    end_time=$(date +%s)
+    elapsed_seconds=$((end_time - start_time))
+
+    if [ "$spinner_started" = "true" ]; then
+        local final_message=""
+        local spinner_status="success"
+
+        if [ "$exit_status" -eq 0 ]; then
+            final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+        elif [ "$exit_status" -eq 2 ]; then
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning"
+        else
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
+            spinner_status="error"
+        fi
+        stop_spinner "$final_message" "$spinner_status"
+        debug_log "DEBUG" "Parallel translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+    else
+        if [ "$exit_status" -eq 0 ]; then
+            printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+        elif [ "$exit_status" -eq 2 ]; then
+            printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+        else
+            printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+        fi
+    fi
+
+    return "$exit_status"
+}
+
+translate_single_line() {
+    local line="$1"
+    local lang="$2"
+    local func="$3"
+
+    case "$line" in
+        *"|"*)
+            local line_content=${line#*|}
+            local key=${line_content%%=*}
+            local value=${line_content#*=}
+            local translated_text
+
+            translated_text=$("$func" "$value" "$lang")
+            [ -z "$translated_text" ] && translated_text="$value"
+
+            printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
+        ;;
+    esac
+}
+
+OK2_create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
     local domain_name="$3"       # Used for spinner message
