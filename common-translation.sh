@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-01-03"
+SCRIPT_VERSION="2025-05-01-01-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -182,6 +182,69 @@ translate_with_google() {
     debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts."
     printf "" # Output empty string on failure
     return 1 # Failure
+}
+
+
+# Note: translate_single_line function is assumed to be defined elsewhere and remains unchanged.
+# Note: get_os_version function is assumed to be defined elsewhere (e.g., common-system.sh).
+# Note: color, get_message, start_spinner, stop_spinner, debug_log functions are assumed to be defined elsewhere.
+
+# Helper function (Modified for strace debugging)
+OK_translate_single_line() {
+    local line="$1"
+    local lang="$2"
+    local func="$3"
+
+    case "$line" in
+        *"|"*)
+            local line_content=${line#*|}
+            local key=${line_content%%=*}
+            local value=${line_content#*=}
+            local translated_text=""
+            local exit_code=1 # Initialize exit code
+
+            # Check if key is valid before creating strace log filename
+            if [ -z "$key" ]; then
+                debug_log "DEBUG" "translate_single_line: Skipping line with empty key: $line"
+                return # Skip processing this line
+            fi
+
+            # Create a safe filename from the key (replace non-alphanumeric)
+            local safe_key=$(printf "%s" "$key" | sed 's/[^a-zA-Z0-9_]/_/g')
+            local strace_log_file="/tmp/wget_strace_${safe_key}.log"
+
+            debug_log "DEBUG" "translate_single_line: Calling '$func' for key '$key' with strace. Log: $strace_log_file"
+
+            # ▼▼▼ 修正: 翻訳関数の呼び出しを strace でラップ ▼▼▼
+            # -o: 出力ファイル指定
+            # -f: 子プロセスもトレース (wget実行のため重要)
+            # -tt: 各行にマイクロ秒単位のタイムスタンプを追加 (オプション)
+            # -T: 各システムコールの実行時間を表示 (オプション)
+            translated_text=$(strace -o "$strace_log_file" -f -tt -T "$func" "$value" "$lang")
+            exit_code=$? # strace経由で実行された関数の終了コードを取得
+            # ▲▲▲ 修正: 翻訳関数の呼び出しを strace でラップ ▲▲▲
+
+            debug_log "DEBUG" "translate_single_line: '$func' finished for key '$key' with exit code $exit_code. Output length: ${#translated_text}"
+
+            # Use original value if translation failed or returned empty
+            # Use exit_code from the strace call to check success
+            if [ "$exit_code" -ne 0 ] || [ -z "$translated_text" ]; then
+                # If strace itself failed or the wrapped function failed, log it
+                if [ "$exit_code" -ne 0 ]; then
+                     debug_log "DEBUG" "translate_single_line: Translation function or strace failed for key '$key' (Exit Code: $exit_code). Using original value."
+                else
+                     debug_log "DEBUG" "translate_single_line: Translation function returned empty for key '$key'. Using original value."
+                fi
+                translated_text="$value"
+                # ここで exit_code を変更しない (printf の成否は別途ハンドリングしない)
+                # エラーがあったことはログに残し、出力は原文で行う
+            fi
+
+            # printf の結果はチェックしない (POSIX shでは$?の取得が難しい場合がある)
+            # 出力失敗は上位の関数で検知される想定
+            printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
+        ;;
+    esac
 }
 
 create_language_db_parallel() {
@@ -403,109 +466,6 @@ EOF
     fi
 
     return "$exit_status"
-}
-
-# Helper function (変更なし)
-translate_single_line() {
-    local line="$1"
-    local lang="$2"
-    local func="$3"
-    local exit_code=0 # Default to success
-
-    case "$line" in
-        *"|"*)
-            local line_content=${line#*|}
-            local key=${line_content%%=*}
-            local value=${line_content#*=}
-            local translated_text
-
-            # Execute the translation function passed as $func
-            translated_text=$("$func" "$value" "$lang")
-            local translate_status=$? # Capture status of the translation command itself
-
-            # Use original value if translation failed or returned empty
-            if [ "$translate_status" -ne 0 ] || [ -z "$translated_text" ]; then
-                debug_log "DEBUG" "Translation via '$func' failed (status $translate_status) or returned empty for key '$key'. Using original value."
-                translated_text="$value"
-                exit_code=1 # Indicate that translation failed, original used
-            fi
-
-            printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
-            # Check printf status? Usually not necessary unless disk full etc.
-            if [ $? -ne 0 ]; then
-                 debug_log "DEBUG" "printf failed in translate_single_line for key '$key'"
-                 return 2 # Indicate a write error
-            fi
-            return $exit_code # Return 0 if translation succeeded, 1 if original was used due to failure/empty
-        ;;
-        *)
-            # Handle lines not matching the expected format (e.g., log an error or skip)
-            debug_log "DEBUG" "Skipping line in translate_single_line due to unexpected format: $line"
-            return 3 # Indicate format error
-        ;;
-    esac
-}
-
-# Note: translate_single_line function is assumed to be defined elsewhere and remains unchanged.
-# Note: get_os_version function is assumed to be defined elsewhere (e.g., common-system.sh).
-# Note: color, get_message, start_spinner, stop_spinner, debug_log functions are assumed to be defined elsewhere.
-
-# Helper function (Modified for strace debugging)
-OK_translate_single_line() {
-    local line="$1"
-    local lang="$2"
-    local func="$3"
-
-    case "$line" in
-        *"|"*)
-            local line_content=${line#*|}
-            local key=${line_content%%=*}
-            local value=${line_content#*=}
-            local translated_text=""
-            local exit_code=1 # Initialize exit code
-
-            # Check if key is valid before creating strace log filename
-            if [ -z "$key" ]; then
-                debug_log "DEBUG" "translate_single_line: Skipping line with empty key: $line"
-                return # Skip processing this line
-            fi
-
-            # Create a safe filename from the key (replace non-alphanumeric)
-            local safe_key=$(printf "%s" "$key" | sed 's/[^a-zA-Z0-9_]/_/g')
-            local strace_log_file="/tmp/wget_strace_${safe_key}.log"
-
-            debug_log "DEBUG" "translate_single_line: Calling '$func' for key '$key' with strace. Log: $strace_log_file"
-
-            # ▼▼▼ 修正: 翻訳関数の呼び出しを strace でラップ ▼▼▼
-            # -o: 出力ファイル指定
-            # -f: 子プロセスもトレース (wget実行のため重要)
-            # -tt: 各行にマイクロ秒単位のタイムスタンプを追加 (オプション)
-            # -T: 各システムコールの実行時間を表示 (オプション)
-            translated_text=$(strace -o "$strace_log_file" -f -tt -T "$func" "$value" "$lang")
-            exit_code=$? # strace経由で実行された関数の終了コードを取得
-            # ▲▲▲ 修正: 翻訳関数の呼び出しを strace でラップ ▲▲▲
-
-            debug_log "DEBUG" "translate_single_line: '$func' finished for key '$key' with exit code $exit_code. Output length: ${#translated_text}"
-
-            # Use original value if translation failed or returned empty
-            # Use exit_code from the strace call to check success
-            if [ "$exit_code" -ne 0 ] || [ -z "$translated_text" ]; then
-                # If strace itself failed or the wrapped function failed, log it
-                if [ "$exit_code" -ne 0 ]; then
-                     debug_log "DEBUG" "translate_single_line: Translation function or strace failed for key '$key' (Exit Code: $exit_code). Using original value."
-                else
-                     debug_log "DEBUG" "translate_single_line: Translation function returned empty for key '$key'. Using original value."
-                fi
-                translated_text="$value"
-                # ここで exit_code を変更しない (printf の成否は別途ハンドリングしない)
-                # エラーがあったことはログに残し、出力は原文で行う
-            fi
-
-            # printf の結果はチェックしない (POSIX shでは$?の取得が難しい場合がある)
-            # 出力失敗は上位の関数で検知される想定
-            printf "%s|%s=%s\n" "$lang" "$key" "$translated_text"
-        ;;
-    esac
 }
 
 # Helper function (変更なし)
