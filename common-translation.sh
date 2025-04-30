@@ -184,103 +184,61 @@ translate_with_google() {
     return 1 # Failure
 }
 
+# Function to create language DB in parallel (or sequentially for OpenWrt 19)
+# Usage: create_language_db_parallel <target_lang_code> <base_db> <final_output_file> <aip_function_name> <api_endpoint_url> <domain_name>
 create_language_db_parallel() {
-    local aip_function_name="$1"
-    local api_endpoint_url="$2"  # Passed for logging/context
-    local domain_name="$3"       # Used for spinner message
-    local target_lang_code="$4"
-
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local final_output_dir="/tmp/aios"
-    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
-    local partial_output_file="${final_output_file}.partial" # Used only in parallel mode
-
-    # --- Time measurement variables ---
-    local start_time=""
-    local end_time=""
-    local elapsed_seconds=""
-
-    # --- Spinner variables ---
-    local spinner_started="false"
-
-    # --- Marker Key ---
-    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
-
-    # --- Task control variables ---
+    local target_lang_code="$1"
+    local base_db="$2"
+    local final_output_file="$3"
+    local aip_function_name="$4"
+    local api_endpoint_url="$5"
+    local domain_name="$6"
+    local exit_status=0
+    local start_time end_time elapsed_time
+    local spinner_pid
+    local partial_output_file="${final_output_file}.part"
     local pids=""
-    local pid=""
-    local exit_status=0 # 0:success, 1:critical error, 2:partial success/translation error
-    local line=""
-    local total_lines=0
 
-    # --- OS Version Detection ---
-    local os_version_string="" # Variable to store the actual version string
-    local is_openwrt_19="false" # Variable to store the boolean result ("true" or "false")
-    # Ensure get_os_version function is available before calling
-    if command -v get_os_version >/dev/null 2>&1; then
-        os_version_string=$(get_os_version)
-        case "$os_version_string" in
-            19.*) is_openwrt_19="true" ;; # Match any version starting with "19."
-            *) is_openwrt_19="false" ;;
-        esac
-        debug_log "DEBUG" "Detected OS Version: '$os_version_string'. OpenWrt 19 mode: $is_openwrt_19"
-    else
-        debug_log "DEBUG" "get_os_version function not found. Assuming not OpenWrt 19."
-        is_openwrt_19="false"
-    fi
+    start_time=$(date +%s)
+    start_spinner "Translating '$target_lang_code' ($domain_name)..."
+    spinner_pid=$!
+
+    # Cleanup trap
+    trap '
+        debug_log "DEBUG" "Trap caught signal in create_language_db_parallel for $target_lang_code."
+        # Ensure spinner stops even on error/interrupt
+        if [ -n "$spinner_pid" ] && kill -0 "$spinner_pid" 2>/dev/null; then
+            kill "$spinner_pid" 2>/dev/null
+            wait "$spinner_pid" 2>/dev/null # Wait briefly
+        fi
+        # Kill any remaining background translation jobs
+        if [ -n "$pids" ]; then
+            local pid_to_kill
+            for pid_to_kill in $pids; do
+                # Check if the process exists before trying to kill
+                if kill -0 "$pid_to_kill" 2>/dev/null; then
+                    debug_log "DEBUG" "Trap killing background job PID $pid_to_kill for $target_lang_code"
+                    kill "$pid_to_kill" 2>/dev/null
+                fi
+            done
+        fi
+        # Remove partial file if it exists
+        rm -f "$partial_output_file"
+        # Propagate original exit status if signal was TERM or INT? (Difficult in POSIX sh)
+        # Reset trap to default
+        trap - INT TERM EXIT HUP
+    ' INT TERM EXIT HUP
+
+    # --- OS Version Detection (Replaced as per user instruction) ---
+    local osversion
+    osversion=$(cat "${CACHE_DIR}/osversion.ch")
+    debug_log "DEBUG" "Read OS Version from '${CACHE_DIR}/osversion.ch': '$osversion'"
     # --- End OS Version Detection ---
 
-    # --- Pre-checks ---
-    if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "Base DB file not found: $base_db"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
-        return 1
-    fi
-    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
-        debug_log "DEBUG" "Missing required arguments: AIP function name or target language code."
-        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
-        return 1
-    fi
-
-    # --- Prepare directories ---
-    mkdir -p "$final_output_dir" || {
-        debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"
-        return 1
-    }
-    rm -f "$partial_output_file" # Remove partial file at the beginning
-
-    # --- Logging ---
-    if [ "$is_openwrt_19" = "true" ]; then
-        debug_log "DEBUG" "Starting SEQUENTIAL translation for language '$target_lang_code' (OpenWrt 19 detected)."
-    else
-        debug_log "DEBUG" "Starting PARALLEL translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
-        debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
-    fi
-    debug_log "DEBUG" "Base DB: $base_db"
-    debug_log "DEBUG" "Final output file: $final_output_file"
-
-    # --- Start Timing and Spinner ---
-    start_time=$(date +%s)
-    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
-    local spinner_default_msg="Currently translating: $domain_name"
-    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
-    spinner_started="true"
-
-    # --- Cleanup Trap ---
-    # shellcheck disable=SC2064
-    trap "debug_log 'DEBUG' 'Trap cleanup: Removing temporary partial file...'; rm -f \"$partial_output_file\"" INT TERM EXIT
-
     # Write header
-    cat > "$final_output_file" <<-EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name}
-# Target Language: ${target_lang_code}
-EOF
-    if ! :; then
-       if [ $? -ne 0 ]; then
-            debug_log "DEBUG" "Failed to write header to $final_output_file"
-            exit_status=1
-       fi
+    if ! write_db_header "$final_output_file" "$target_lang_code" "$domain_name"; then
+        debug_log "DEBUG" "CRITICAL: Failed to write header to $final_output_file."
+        exit_status=1
     fi
 
     # --- Main Processing Logic ---
@@ -290,11 +248,10 @@ EOF
 
         if [ "$total_lines" -gt 0 ]; then
             # --- Conditional Execution: Sequential or Parallel ---
-            if [ "$is_openwrt_19" = "true" ]; then
+            if [ "$osversion" = "19" ]; then
                 # --- Sequential Execution (OpenWrt 19) ---
-                debug_log "DEBUG" "Running in sequential mode."
+                debug_log "DEBUG" "Running in sequential mode (OS Version '$osversion')."
                 local line_count=0
-                # Read using awk pipe
                 awk 'NR>1' "$base_db" | while IFS= read -r line; do
                     case "$line" in \#* | "") continue ;; esac
                     line_count=$((line_count + 1))
@@ -302,46 +259,42 @@ EOF
 
                     local translation_output=""
                     local translation_status=0
-                    # Call translation function directly (synchronously)
                     translation_output=$(translate_single_line "$line" "$target_lang_code" "$aip_function_name")
                     translation_status=$?
 
-                    # Check translation result and append to final file
                     if [ "$translation_status" -ne 0 ] || [ -z "$translation_output" ]; then
                         debug_log "DEBUG" "Sequential translation failed or empty for line: $line (status: $translation_status). Using original."
-                        # Append original line content (ensure correct format)
-                        local original_key_value="${line#*|}" # Get content after first '|'
+                        local original_key_value="${line#*|}"
                         printf "%s|%s\n" "$target_lang_code" "$original_key_value" >> "$final_output_file"
-                        [ "$exit_status" -eq 0 ] && exit_status=2
+                        [ "$exit_status" -eq 0 ] && exit_status=2 # Mark as partial failure
                     else
-                        # Append successful translation
                         printf "%s\n" "$translation_output" >> "$final_output_file"
                     fi
 
-                    # Check write status
+                    # Check write status (simple check after printf)
                     if ! :; then
                         if [ $? -ne 0 ]; then
                              debug_log "DEBUG" "CRITICAL: Failed to write to $final_output_file in sequential mode."
                              exit_status=1
-                             break
+                             break # Exit the loop on critical write failure
                         fi
                     fi
                 done
-                # Check loop exit status (read error)
+                # Check awk/read loop exit status
                 if ! :; then
-                    if [ $? -ne 0 ] && [ "$exit_status" -ne 1 ]; then
+                    if [ $? -ne 0 ] && [ "$exit_status" -ne 1 ]; then # Don't overwrite critical write failure
                         debug_log "DEBUG" "Error reading from awk pipe in sequential mode."
                         exit_status=1
                     fi
                 fi
 
             else
-                # --- Parallel Execution (Other OS - OK3 logic) ---
-                debug_log "DEBUG" "Running in parallel mode."
+                # --- Parallel Execution (Other OS) ---
+                debug_log "DEBUG" "Running in parallel mode (OS Version '$osversion')."
                 awk 'NR>1' "$base_db" | while IFS= read -r line; do
                     case "$line" in \#* | "") continue ;; esac
 
-                    # Background job with output to partial file
+                    # Execute translation in background, appending to partial file
                     translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$partial_output_file" &
                     pid=$!
                     pids="$pids $pid"
@@ -351,7 +304,7 @@ EOF
                         sleep 0.2
                     done
                 done
-                # Check loop exit status (read error)
+                # Check awk/read loop exit status
                 if ! :; then
                     if [ $? -ne 0 ]; then
                         debug_log "DEBUG" "Error reading from awk pipe in parallel mode."
@@ -359,36 +312,38 @@ EOF
                     fi
                 fi
 
-                # Wait for background jobs (if no critical error)
+                # Wait for all background jobs if no critical error occurred
                 if [ "$exit_status" -ne 1 ]; then
                     debug_log "DEBUG" "Waiting for parallel jobs to complete: $pids"
                     local wait_failed_count=0
-                    for pid in $pids; do
-                        if ! wait "$pid"; then
+                    local current_pid
+                    for current_pid in $pids; do
+                        if ! wait "$current_pid"; then
                             wait_failed_count=$((wait_failed_count + 1))
-                            debug_log "DEBUG" "Parallel job PID $pid failed."
-                            [ "$exit_status" -eq 0 ] && exit_status=2
+                            debug_log "DEBUG" "Parallel job PID $current_pid failed for $target_lang_code."
+                            [ "$exit_status" -eq 0 ] && exit_status=2 # Mark as partial failure if not already critical
                         fi
                     done
-                    debug_log "DEBUG" "$wait_failed_count parallel jobs failed."
+                    debug_log "DEBUG" "$wait_failed_count parallel job(s) failed for $target_lang_code."
                 fi
 
-                # Combine partial results (if no critical error)
+                # Combine partial results if no critical error occurred
                 if [ "$exit_status" -ne 1 ]; then
                     if [ -f "$partial_output_file" ]; then
                         if ! cat "$partial_output_file" >>"$final_output_file"; then
                              debug_log "DEBUG" "CRITICAL: Failed to append partial results from $partial_output_file to $final_output_file."
                              exit_status=1
                         fi
-                        # Clean up partial file after successful append
+                        # Clean up partial file only if append was successful
                         if [ "$exit_status" -ne 1 ]; then
                              rm -f "$partial_output_file"
                         fi
                     else
-                         if [ -n "$pids" ] && [ "$exit_status" -eq 0 ]; then
-                              debug_log "DEBUG" "Partial output file '$partial_output_file' not found, but jobs were expected. Marking as partial failure."
-                              exit_status=2
-                         fi
+                        # If pids were launched but partial file is missing, it indicates a problem
+                        if [ -n "$pids" ] && [ "$exit_status" -eq 0 ]; then
+                             debug_log "DEBUG" "Partial output file '$partial_output_file' not found, but jobs were expected. Marking as partial failure for $target_lang_code."
+                             exit_status=2
+                        fi
                     fi
                 fi
                 # --- End Parallel Execution ---
@@ -399,60 +354,30 @@ EOF
         fi
     fi
 
-    # --- Final Steps (Marker, Timing, Spinner) ---
-    if [ "$exit_status" -ne 1 ]; then
-        if ! printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"; then
-             debug_log "DEBUG" "Failed to write completion marker to $final_output_file"
-             [ "$exit_status" -eq 0 ] && exit_status=1
-        fi
+    # --- Finalization ---
+    # Stop spinner
+    if [ -n "$spinner_pid" ] && kill -0 "$spinner_pid" 2>/dev/null; then
+        kill "$spinner_pid" 2>/dev/null
+        wait "$spinner_pid" 2>/dev/null
     fi
+    printf "\n" # Ensure newline after spinner
 
-    # --- Stop Timing and Spinner ---
+    # Reset trap
+    trap - INT TERM EXIT HUP
+
     end_time=$(date +%s)
-    if [ -n "$start_time" ]; then
-        elapsed_seconds=$((end_time - start_time))
+    elapsed_time=$((end_time - start_time))
+
+    # Report final status
+    if [ "$exit_status" -eq 0 ]; then
+        debug_log "INFO" "Successfully created language DB '$final_output_file' for '$target_lang_code' in ${elapsed_time}s."
+    elif [ "$exit_status" -eq 2 ]; then
+        debug_log "WARN" "Partially created language DB '$final_output_file' for '$target_lang_code' in ${elapsed_time}s (some translations failed or were missing)."
     else
-        elapsed_seconds="?"
+        debug_log "ERROR" "Failed to create language DB '$final_output_file' for '$target_lang_code' after ${elapsed_time}s."
+        # Attempt to remove potentially incomplete/corrupt final file on critical failure
+        rm -f "$final_output_file"
     fi
-
-    if [ "$spinner_started" = "true" ]; then
-        local final_message=""
-        local spinner_status="success"
-
-        # Determine final message based on exit_status and total_lines
-        if [ "$exit_status" -eq 0 ]; then
-             if [ "$total_lines" -gt 0 ]; then
-                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
-             else
-                 final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
-             fi
-        elif [ "$exit_status" -eq 2 ]; then
-            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
-            spinner_status="warning"
-        else # exit_status is 1
-            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
-            spinner_status="error"
-        fi
-        stop_spinner "$final_message" "$spinner_status"
-        debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
-    else
-        # Fallback if spinner wasn't started (shouldn't happen in normal flow)
-        if [ "$exit_status" -eq 0 ]; then
-             if [ "$total_lines" -gt 0 ]; then
-                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
-             else
-                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")")"
-             fi
-        elif [ "$exit_status" -eq 2 ]; then
-             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
-        else # exit_status is 1
-             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
-        fi
-    # ▼▼▼ 修正: ここにfiを追加 ▼▼▼
-    fi
-
-    # --- Final Cleanup of Trap ---
-    trap - INT TERM EXIT # Remove the trap explicitly
 
     return "$exit_status"
 }
