@@ -833,7 +833,8 @@ create_language_db_parallel() {
     # --- OS Version Detection ---
     local osversion
     osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
-    debug_log "DEBUG" "OS Version detected: '$osversion'"
+    local osversion_m="${osversion%%.*}"  # ピリオドより前の部分（メジャーバージョン）を抽出
+    debug_log "DEBUG" "OS Version detected: '$osversion''"
 
     # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
