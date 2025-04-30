@@ -2231,36 +2231,46 @@ download() {
 }
 
 download_parallel() {
-    local start_time=$(date +%s)
-    local end_time=""
-    local elapsed_seconds=0
-    local tmp_dir="${DL_DIR}"
-    local all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
-    local load_targets_file="${tmp_dir}/load_targets.tmp"
-    local fail_flag_file="${tmp_dir}/dl_failed_flag"
-    local error_info_file_prefix="${tmp_dir}/error_info_"
-    local log_file_prefix="${LOG_DIR}/download_parallel_task_"
-    local script_path="$0"
-    local exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE"
-    local max_parallel="${MAX_PARALLEL_TASKS:-1}"
-    local pids=""
-    local task_index=0
-    local total_tasks=""
-    local overall_status=0
-    local first_failed_task_name=""
-    local first_error_message=""
-    local loaded_files=""
-    local task_line=""
-    local task_list=""
-    local i=""
-    locao pid=""
-    local n_running=0
+    local start_time end_time elapsed_seconds
+    local total_lines lines_per_task task_count max_parallel
+    local pids overall_status tmp_dir all_tasks_file task_file_prefix load_targets_file
+    local pid job_index wait_pid proc_status task_file
+    local script_path task_base_name stdout_log stderr_log log_file_prefix
+    local fail_flag_file first_failed_task_name first_error_message error_info_file_prefix
+    local exported_vars
 
+    start_time=$(date +%s)
+    end_time=""
+    elapsed_seconds=0
+
+    overall_status=0
+    tmp_dir="${DL_DIR}"
+    all_tasks_file="${tmp_dir}/dl_all_tasks.tmp"
+    task_file_prefix="${tmp_dir}/dl_task_"
+    load_targets_file="${tmp_dir}/load_targets.tmp"
+    pid=""
+    job_index=0
+    wait_pid=""
+    proc_status=0
+    task_file=""
+    script_path="$0"
+    task_base_name=""
+    stdout_log=""
+    stderr_log=""
+    log_file_prefix="${LOG_DIR}/download_parallel_task_"
+    fail_flag_file="${tmp_dir}/dl_failed_flag"
+    first_failed_task_name=""
+    first_error_message=""
+    error_info_file_prefix="${tmp_dir}/error_info_"
+    exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE"
+
+    max_parallel="${MAX_PARALLEL_TASKS:-1}"
     printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$MAX_PARALLEL_TASKS")")"
+
     debug_log "DEBUG" "Effective max parallel download tasks: $max_parallel"
 
-    if ! mkdir -p "$tmp_dir"; then 
-        if [ ! -d "$tmp_dir" ]; then 
+    if ! mkdir -p "$tmp_dir"; then
+        if [ ! -d "$tmp_dir" ]; then
             debug_log "DEBUG" "Failed to create temporary directory for task definitions: $tmp_dir" >&2
             stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
             end_time=$(date +%s)
@@ -2269,12 +2279,16 @@ download_parallel() {
             return 1
         fi
     fi
-    if ! mkdir -p "$LOG_DIR"; then if [ ! -d "$LOG_DIR" ]; then debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2; fi; fi
+    if ! mkdir -p "$LOG_DIR"; then
+        if [ ! -d "$LOG_DIR" ]; then
+            debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2
+        fi
+    fi
     rm -f "$fail_flag_file" "$load_targets_file" "${error_info_file_prefix}"*.txt 2>/dev/null
 
     start_spinner "$(color blue "$(get_message 'DOWNLOAD_PARALLEL_START')")"
 
-    if [ ! -f "$script_path" ]; then 
+    if [ ! -f "$script_path" ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
         debug_log "DEBUG" "Script path '$script_path' is not found"
         end_time=$(date +%s)
@@ -2283,7 +2297,6 @@ download_parallel() {
         return 1
     fi
 
-    # download_files()の各行を抜き出す
     if ! awk '
         BEGIN { in_func=0; }
         /^download_files\(\) *\{/ { in_func=1; next }
@@ -2305,10 +2318,23 @@ download_parallel() {
         return 0
     fi
 
-    # タスクリストを配列に格納
-    total_tasks=0
+    total_lines=$(wc -l < "$all_tasks_file")
+    if [ "$total_lines" -eq 0 ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
+        rm -f "$all_tasks_file"
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        printf "Download completed (empty tasks) in %s seconds.\n" "$elapsed_seconds"
+        return 0
+    fi
+
+    lines_per_task=$(( (total_lines + max_parallel - 1) / max_parallel ))
+    [ "$lines_per_task" -eq 0 ] && lines_per_task=1
+    rm -f "${task_file_prefix}"*.tmp 2>/dev/null
+
+    line_index=0
     while IFS= read -r task_line || [ -n "$task_line" ]; do
-        # downloadコマンドかつquiet引数がなければquietを付与
+        local orig_line="$task_line"
         case "$task_line" in
             download*)
                 if ! echo "$task_line" | grep -qw "quiet"; then
@@ -2316,114 +2342,149 @@ download_parallel() {
                 fi
                 ;;
         esac
-        task_list[${total_tasks}]="$task_line"
-        total_tasks=$((total_tasks + 1))
+        task_file="${task_file_prefix}$(printf "%03d" $((line_index % max_parallel))).tmp"
+        echo "$task_line" >> "$task_file"
+        line_index=$((line_index + 1))
     done < "$all_tasks_file"
 
-    # ロード対象ファイル抽出
     > "$load_targets_file"
-    for ((i=0; i<total_tasks; i++)); do
-        line="${task_list[$i]}"
-        trimmed_line=${line#"${line%%[![:space:]]*}"}
+    i=0
+    while [ "$i" -lt "$total_lines" ]; do
+        task_line=$(sed -n "$((i + 1))p" "$all_tasks_file")
+        trimmed_line=${task_line#"${task_line%%[![:space:]]*}"}
         case "$trimmed_line" in
             download*)
                 case "$trimmed_line" in
                     *'"load"')
                         set -- $trimmed_line
                         if [ "$#" -ge 2 ]; then
-                           load_fname=$2
-                           load_fname=${load_fname#\"}
-                           load_fname=${load_fname%\"}
-                           if [ -n "$load_fname" ]; then
-                               echo "$load_fname" >> "$load_targets_file"
-                           fi
+                            load_fname=$2
+                            load_fname=${load_fname#\"}
+                            load_fname=${load_fname%\"}
+                            if [ -n "$load_fname" ]; then
+                                echo "$load_fname" >> "$load_targets_file"
+                            fi
                         fi
                         ;;
                 esac
                 ;;
         esac
+        i=$((i + 1))
     done
 
     rm -f "$all_tasks_file"
-    export $exported_vars
+    task_count=$(find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" -type f 2>/dev/null | wc -l)
+    if [ "$task_count" -eq 0 ]; then
+        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED' "param1=Failed to create task files")" "failure"
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
+        printf "Download failed (task creation) in %s seconds.\n" "$elapsed_seconds"
+        return 1
+    fi
 
-    # BGワーカー起動関数
-    _run_sub_task_line() {
-        local command_line="$1"
-        local task_num="$2"
-        local log_prefix="$3"
-        local stderr_log="${log_prefix}${task_num}.stderr.log"
-        local stdout_log="${log_prefix}${task_num}.stdout.log"
-        local error_info_file="${error_info_file_prefix}${task_num}.txt"
-        local eval_command
-        eval_command=$(echo "$command_line" | sed 's/"load"//g')
-        eval "$eval_command" >"$stdout_log" 2>"$stderr_log"
-        local cmd_status=$?
-        if [ "$cmd_status" -ne 0 ]; then
-            debug_log "DEBUG" "[$$][$task_num] Command failed with status $cmd_status: $command_line" >&2
+    pids=""
+    job_index=0
+    eval "export $exported_vars"
+
+    _run_sub_task_internal() {
+        local _task_file_path="$1"
+        local _stderr_log="$2"
+        local _error_info_file="$3"
+        local _task_base="$4"
+
+        local sub_task_failed=0
+        local failed_command=""
+        local line_num=0
+
+        while IFS= read -r command_line || [ -n "$command_line" ]; do
+            line_num=$((line_num + 1))
+            case "$command_line" in "" | \#*) continue ;; esac
+
+            local eval_command=$(echo "$command_line" | sed 's/"load"//g')
+
+            eval "$eval_command"
+            local cmd_status=$?
+
+            if [ "$cmd_status" -ne 0 ]; then
+                debug_log "DEBUG" "[$$][$_task_base] Command failed with status $cmd_status: $command_line" >&2
+                sub_task_failed=1
+                failed_command="$command_line"
+                break
+            fi
+        done < "$_task_file_path"
+
+        if [ "$sub_task_failed" -eq 1 ]; then
             local error_detail="Unknown error"
-            if [ -s "$stderr_log" ]; then
-                error_detail=$(grep -v '^[[:space:]]*$' "$stderr_log" | head -n 1)
-                if [ -z "$error_detail" ]; then error_detail=$(head -n 1 "$stderr_log"); fi
+            if [ -f "$_stderr_log" ] && [ -s "$_stderr_log" ]; then
+                error_detail=$(grep -v '^[[:space:]]*$' "$_stderr_log" | head -n 1)
+                if [ -z "$error_detail" ]; then error_detail=$(head -n 1 "$_stderr_log"); fi
             else
                 error_detail="No error output captured"
             fi
-            { echo "$command_line"; echo "$error_detail"; } > "$error_info_file" 2>/dev/null
+            [ -z "$error_detail" ] && error_detail="See $_stderr_log"
+            { echo "$_task_base"; echo "$error_detail"; } > "$_error_info_file" 2>/dev/null
             exit 1
+        else
+            exit 0
         fi
-        exit 0
     }
 
-    # 並列ループ型投入
-    task_index=0
-    pids=""
-    n_running=0
+    find "$tmp_dir" -name "$(basename "$task_file_prefix")*.tmp" -type f | sort | while IFS= read -r task_file; do
+        task_base_name=$(basename "$task_file" .tmp)
+        stdout_log="${log_file_prefix}${task_base_name}.stdout.log"
+        stderr_log="${log_file_prefix}${task_base_name}.stderr.log"
+        sub_error_info_file="${error_info_file_prefix}${task_base_name}.txt"
+        _run_sub_task_internal "$task_file" "$stderr_log" "$sub_error_info_file" "$task_base_name" > "$stdout_log" 2> "$stderr_log" &
+        pid=$!
+        pids="$pids $pid"
+        job_index=$((job_index + 1))
 
-    while [ $task_index -lt $total_tasks ]; do
-        # 現在のBGプロセス数を数える
-        n_running=0
-        for pid in $pids; do
-            if kill -0 "$pid" 2>/dev/null; then
-                n_running=$((n_running + 1))
+        if [ "$job_index" -ge "$max_parallel" ]; then
+            first_pid_in_batch=$(echo "$pids" | awk '{print $1}')
+            if [ -n "$first_pid_in_batch" ]; then
+                if wait "$first_pid_in_batch"; then
+                    :
+                else
+                    proc_status=$?
+                    debug_log "DEBUG" "Background task (PID $first_pid_in_batch) failed with status $proc_status" >&2
+                    touch "$fail_flag_file"
+                fi
+                pids=$(echo "$pids" | sed "s/^$first_pid_in_batch //; s/ $first_pid_in_batch / /; s/ $first_pid_in_batch$//")
+                job_index=$((job_index - 1))
+            else
+                sleep 1
             fi
-        done
-
-        if [ $n_running -lt $max_parallel ]; then
-            _run_sub_task_line "${task_list[$task_index]}" "$task_index" "$log_file_prefix" &
-            pid=$!
-            pids="$pids $pid"
-            task_index=$((task_index + 1))
-        else
-            # BGが埋まっている場合はいずれか1つ終了まで待つ
-            set -- $pids
-            wait "$1"
-            pids=$(echo "$pids" | sed "s/^$1 //; s/ $1 / /; s/ $1$//")
         fi
     done
 
-    # 残ったBGタスクの終了待ち
     for pid in $pids; do
-        wait "$pid" || touch "$fail_flag_file"
+        case "$pid" in *[!0-9]* | "" | 0) continue ;; esac
+        if wait "$pid"; then
+            :
+        else
+            proc_status=$?
+            debug_log "DEBUG" "Background task (PID $pid) failed with status $proc_status" >&2
+            touch "$fail_flag_file"
+        fi
     done
 
-    # エラー処理
     if [ -f "$fail_flag_file" ]; then
         overall_status=1
         first_error_file=$(find "$tmp_dir" -name "${error_info_file_prefix}*.txt" -type f -print 2>/dev/null | sort | head -n 1)
         if [ -n "$first_error_file" ] && [ -f "$first_error_file" ]; then
-             first_failed_task_name=$(head -n 1 "$first_error_file" 2>/dev/null)
-             first_error_message=$(sed -n '2p' "$first_error_file" 2>/dev/null)
-             if command -v printf >/dev/null; then first_error_message=$(printf '%s' "$first_error_message" | tr -cd '[:print:]\t' | head -c 100); else first_error_message=$(echo "$first_error_message" | tr -cd '[:print:]\t' | head -c 100); fi
+            first_failed_task_name=$(head -n 1 "$first_error_file" 2>/dev/null)
+            first_error_message=$(sed -n '2p' "$first_error_file" 2>/dev/null)
+            if command -v printf >/dev/null; then first_error_message=$(printf '%s' "$first_error_message" | tr -cd '[:print:]\t' | head -c 100); else first_error_message=$(echo "$first_error_message" | tr -cd '[:print:]\t' | head -c 100); fi
         fi
     fi
 
-    # DL完了後ロード対象一括source
     if [ $overall_status -eq 0 ] && [ -f "$load_targets_file" ]; then
         sleep 2
         loaded_files=""
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
             echo "$loaded_files" | grep -qxF "$load_file" && continue
+
             local full_load_path="${BASE_DIR}/$load_file"
             retry=1
             source_success=0
@@ -2450,6 +2511,8 @@ download_parallel() {
                 break
             fi
         done < "$load_targets_file"
+    elif [ $overall_status -eq 0 ]; then
+        :
     fi
 
     if [ $overall_status -eq 0 ]; then
@@ -2468,7 +2531,8 @@ download_parallel() {
         printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_task_name" "$elapsed_seconds"
         return 1
     fi
-}
+} 
+
 
 OK_download_parallel() {
     # 時間計測の開始
