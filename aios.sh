@@ -2510,7 +2510,7 @@ OK_download() {
     return 0 # 成功時は 0 を返す
 }
 
-download_parallel() {
+OK_download_parallel() {
     # 時間計測の開始
     local start_time=$(date +%s)
     local end_time=""
@@ -3128,36 +3128,20 @@ OK_download_parallel() {
 
     # --- 結果表示 ---
     if [ $overall_status -eq 0 ]; then
-        # Use original success message key
-        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')"
-        stop_spinner "$success_message" "success"
-
-        IN_PARALLEL_DOWNLOAD="false"
-        
-        # 時間計測（成功時）
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
-        printf "Download completed successfully in %s seconds.\n" "$elapsed_seconds"
-        
+        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}")"
+        stop_spinner "$success_message" "success"
         return 0
     else
-        # --- MODIFIED: Format failure message using captured info or fallback ---
-        # Fallback if specific info wasn't captured
         [ -z "$first_failed_task_name" ] && first_failed_task_name="Unknown task"
         [ -z "$first_error_message" ] && first_error_message="Check logs in $LOG_DIR"
-        # Use unified format f=... e=... for the message key
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_task_name" "e=$first_error_message")"
         stop_spinner "$failure_message" "failure"
-
-        IN_PARALLEL_DOWNLOAD="false"
-        
-        # 時間計測（失敗時）
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_task_name" "$elapsed_seconds"
-        
         return 1
-        # --- END MODIFIED ---
     fi
 }
 
