@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-01-02"
+SCRIPT_VERSION="2025-05-01-01-03"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -184,8 +184,6 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# Function to create language DB (parallel for most, sequential for OpenWrt 19)
-# Usage: create_language_db_parallel <aip_function_name> <api_endpoint_url> <domain_name> <target_lang_code>
 create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
@@ -211,12 +209,13 @@ create_language_db_parallel() {
     local pids=""
     local pid=""
     local exit_status=0
+    local line_count=0
+    local processed_count=0
 
-    # --- OS Version Detection (Added as per user instruction) ---
+    # --- OS Version Detection ---
     local osversion
     osversion=$(cat "${CACHE_DIR}/osversion.ch")
     debug_log "DEBUG" "Read OS Version from '${CACHE_DIR}/osversion.ch': '$osversion'"
-    # --- End OS Version Detection ---
 
     # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
@@ -237,10 +236,10 @@ create_language_db_parallel() {
     }
 
     # --- Logging ---
-    debug_log "DEBUG" "Starting translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name'). Mode determined by OS version '$osversion'." # Modified log
+    debug_log "DEBUG" "Starting translation for language '$target_lang_code' using function '$aip_function_name'"
     debug_log "DEBUG" "Base DB: $base_db"
     debug_log "DEBUG" "Final output file: $final_output_file"
-    debug_log "DEBUG" "Max parallel tasks (if applicable): $MAX_PARALLEL_TASKS" # Modified log
+    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS" 
 
     # --- Start Timing and Spinner ---
     start_time=$(date +%s)
@@ -250,7 +249,7 @@ create_language_db_parallel() {
     spinner_started="true"
 
     # ヘッダー部分を書き出し
-        cat > "$final_output_file" <<-EOF
+    cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
@@ -260,14 +259,21 @@ EOF
         debug_log "DEBUG" "Failed to write header to $final_output_file"
         exit_status=1
     else
-        # --- Conditional Execution: Sequential (19) or Parallel (Others) ---
+        # --- パイプラインを避けて処理（awk | while の代わりに） ---
+        # まず処理行を抽出 (base_dbから2行目以降をフィルタリング)
+        local tmp_lines_file="${BASE_DIR}/tmp_lines_$$.txt"
+        awk 'NR>1 && !(/^#/ || /^$/)' "$base_db" > "$tmp_lines_file"
+        
+        # 行数をカウント (処理状況表示用)
+        line_count=$(wc -l < "$tmp_lines_file")
+        debug_log "DEBUG" "Processing $line_count lines from base DB."
+        
         if [ "$osversion" = "19" ]; then
-            # --- Sequential Execution (OS Version 19) ---
+            # --- Sequential Execution for OS Version 19 ---
             debug_log "DEBUG" "Running in sequential mode (OS Version '$osversion')."
-            awk 'NR>1' "$base_db" | while IFS= read -r line; do
-                case "$line" in \#* | "") continue ;; esac
-
-                # 逐次処理：直接関数を呼び出し、結果を追記
+            
+            # 逐次処理：直接ファイルを読み込んで処理
+            while IFS= read -r line; do
                 local translated_line=""
                 translated_line=$(translate_single_line "$line" "$target_lang_code" "$aip_function_name")
                 local translate_status=$?
@@ -275,36 +281,34 @@ EOF
                 if [ "$translate_status" -eq 0 ] && [ -n "$translated_line" ]; then
                     printf "%s\n" "$translated_line" >> "$final_output_file"
                     if [ $? -ne 0 ]; then
-                         debug_log "DEBUG" "Sequential write failed for line derived from: $line"
-                         exit_status=1 # Treat write failure as critical
-                         break # Stop processing on critical write failure
+                         debug_log "DEBUG" "Sequential write failed for line: $line"
+                         exit_status=1
+                         break
                     fi
                 else
-                    debug_log "DEBUG" "Sequential translation failed or empty for line derived from: $line (status: $translate_status)"
-                    # 翻訳失敗時は元の行（キーと値）を言語コード付きで書き込む (translate_single_line 内で処理される想定だが念のため)
-                    # もし translate_single_line が失敗時に何も返さない場合、ここで元の値を加工して書き込む必要があるかもしれないが、
-                    # 現状の translate_single_line は失敗時に元の値を返すはずなので、ここでは exit_status の設定のみ行う。
-                    [ "$exit_status" -eq 0 ] && exit_status=2 # Mark as partial failure if not already critical
+                    debug_log "DEBUG" "Sequential translation failed for line: $line (status: $translate_status)"
+                    [ "$exit_status" -eq 0 ] && exit_status=2
                 fi
-            done
-            # Check awk/read loop exit status
-            if ! :; then
-                if [ $? -ne 0 ] && [ "$exit_status" -ne 1 ]; then # Don't overwrite critical write failure
-                    debug_log "DEBUG" "Error reading from awk pipe in sequential mode."
-                    exit_status=1
+                
+                processed_count=$((processed_count + 1))
+                if [ $((processed_count % 10)) -eq 0 ]; then
+                    debug_log "DEBUG" "Processed $processed_count/$line_count lines."
                 fi
+            done < "$tmp_lines_file"
+            
+            # Check read loop exit status
+            if [ $? -ne 0 ] && [ "$exit_status" -ne 1 ]; then
+                debug_log "DEBUG" "Error reading from temporary file in sequential mode."
+                exit_status=1
             fi
-            # --- End Sequential Execution ---
         else
-            # --- Parallel Execution (OS Version not 19) ---
+            # --- Parallel Execution for OS Version not 19 ---
             debug_log "DEBUG" "Running in parallel mode (OS Version '$osversion')."
-            local partial_output_file="${final_output_file}.partial" # Define partial file only for parallel
-            rm -f "$partial_output_file" # Ensure partial file does not exist initially
-
-            # メイン処理: 行ベースで並列翻訳 (元のロジック)
-            awk 'NR>1' "$base_db" | while IFS= read -r line; do
-                case "$line" in \#* | "") continue ;; esac
-
+            local partial_output_file="${final_output_file}.partial"
+            rm -f "$partial_output_file" # 部分ファイル初期化
+            
+            # 並列処理：直接ファイルを読み込んでバックグラウンドで処理
+            while IFS= read -r line; do
                 # 並列タスクをBGで起動
                 translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$partial_output_file" &
                 pid=$!
@@ -314,17 +318,21 @@ EOF
                 while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
                     sleep 0.2
                 done
-            done
-             # Check awk/read loop exit status
-            if ! :; then
-                if [ $? -ne 0 ]; then
-                    debug_log "DEBUG" "Error reading from awk pipe in parallel mode."
-                    exit_status=1
+                
+                processed_count=$((processed_count + 1))
+                if [ $((processed_count % 100)) -eq 0 ]; then
+                    debug_log "DEBUG" "Started processing $processed_count/$line_count lines."
                 fi
+            done < "$tmp_lines_file"
+            
+            # Check read loop exit status
+            if [ $? -ne 0 ]; then
+                debug_log "DEBUG" "Error reading from temporary file in parallel mode."
+                exit_status=1
             fi
 
-            # BGジョブが全て完了するまで待機 (元のロジック)
-            local wait_failed=0 # Flag for failed wait
+            # BGジョブが全て完了するまで待機
+            local wait_failed=0
             for pid in $pids; do
                 if ! wait "$pid"; then
                     debug_log "DEBUG" "Parallel job PID $pid failed."
@@ -332,34 +340,31 @@ EOF
                 fi
             done
 
-            # waitで失敗したジョブがあった場合、部分失敗とする
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                  exit_status=2
             fi
 
-            # 部分出力を結合 (元のロジック)
+            # 部分出力を結合
             if [ -f "$partial_output_file" ]; then
                 if ! cat "$partial_output_file" >>"$final_output_file"; then
                     debug_log "DEBUG" "Failed to append partial results from $partial_output_file"
-                    exit_status=1 # Critical failure if append fails
+                    exit_status=1
                 fi
                 rm -f "$partial_output_file"
             elif [ -n "$pids" ] && [ "$exit_status" -eq 0 ]; then
-                # ジョブは起動したが部分ファイルがない場合も部分失敗扱いにする
-                 debug_log "DEBUG" "Partial output file '$partial_output_file' not found, but jobs were expected. Marking as partial failure."
-                 exit_status=2
+                debug_log "DEBUG" "Partial output file not found, but jobs were expected."
+                exit_status=2
             fi
-            # --- End Parallel Execution ---
         fi
-        # --- End Conditional Execution ---
-
+        
+        # 一時ファイル削除
+        rm -f "$tmp_lines_file"
+        
         # 完了マーカーを付加 (共通処理)
-        if [ "$exit_status" -ne 1 ]; then # Add marker unless critical failure
+        if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
              if [ $? -ne 0 ]; then
                   debug_log "DEBUG" "Failed to write completion marker to $final_output_file"
-                  # Don't necessarily escalate to critical failure here, but log it.
-                  # If the file couldn't be written to before, exit_status would likely be 1 already.
              fi
         fi
     fi
@@ -380,20 +385,20 @@ EOF
         else
             final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
             spinner_status="error"
-            # Attempt removal of potentially incomplete file on critical failure
+            # 重大なエラー時は不完全なファイルを削除
             rm -f "$final_output_file"
         fi
         stop_spinner "$final_message" "$spinner_status"
-        debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Final Status Code: ${exit_status}" # Modified log
+        debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Final Status Code: ${exit_status}"
     else
-        # Fallback messages if spinner wasn't started (shouldn't normally happen here)
+        # スピナーが起動しなかった場合のフォールバックメッセージ
         if [ "$exit_status" -eq 0 ]; then
             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
         elif [ "$exit_status" -eq 2 ]; then
             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
         else
             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
-            rm -f "$final_output_file" # Also remove here on failure
+            rm -f "$final_output_file"
         fi
     fi
 
