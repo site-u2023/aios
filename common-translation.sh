@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-00-05"
+SCRIPT_VERSION="2025-05-01-00-06"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -91,7 +91,7 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
-translate_with_google() {
+OK_translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
@@ -286,7 +286,7 @@ translate_with_google() {
     return 1 # Failure
 }
 
-OK4_14_create_language_db_parallel() {
+create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
     local domain_name="$3"       # Used for spinner message
