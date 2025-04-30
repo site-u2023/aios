@@ -2780,11 +2780,10 @@ download_parallel() {
     fi
 
     if [ $overall_status -eq 0 ]; then
-        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')"
-        stop_spinner "$success_message" "success"
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
-        printf "Download completed successfully in %s seconds.\n" "$elapsed_seconds"
+        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}s")"
+        stop_spinner "$success_message" "success"
         return 0
     else
         [ -z "$first_failed_task_name" ] && first_failed_task_name="Unknown task"
