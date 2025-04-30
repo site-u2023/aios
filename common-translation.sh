@@ -381,7 +381,7 @@ EOF
 }
 
 # Helper function (Modified for strace debugging)
-translate_single_line() {
+OK_translate_single_line() {
     local line="$1"
     local lang="$2"
     local func="$3"
@@ -439,7 +439,7 @@ translate_single_line() {
 }
 
 # Helper function (変更なし)
-OK_translate_single_line() {
+translate_single_line() {
     local line="$1"
     local lang="$2"
     local func="$3"
