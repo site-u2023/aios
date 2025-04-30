@@ -128,7 +128,7 @@ translate_with_google() {
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
 
     # RES_OPTIONSによるDNSタイムアウト短縮（関数内限定）
-    export RES_OPTIONS="timeout:1 attempts:1"
+    # export RES_OPTIONS="timeout:1 attempts:1"
 
     # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
