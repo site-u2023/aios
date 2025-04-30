@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-04-28-00-01"
+SCRIPT_VERSION="2025-05-01-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -184,9 +184,221 @@ translate_with_google() {
     return 1 # Failure
 }
 
+#!/bin/sh
+
+create_language_db_parallel() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"  # Passed for logging/context
+    local domain_name="$3"       # Used for spinner message
+    local target_lang_code="$4"
+
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local tmp_input_prefix="${TR_DIR}/message_${target_lang_code}.tmp.in."
+    local tmp_output_prefix="${TR_DIR}/message_${target_lang_code}.tmp.out."
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+    local spinner_started="false"
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    local total_lines=0
+    local lines_per_task=0
+    local extra_lines=0
+    local i=0
+    local pids=""
+    local pid=""
+    local exit_status=0
+
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base DB file not found: $base_db"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
+        return 1
+    fi
+    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "Missing required arguments: AIP function name or target language code."
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
+        return 1
+    fi
+
+    mkdir -p "$TR_DIR" || { debug_log "DEBUG" "Failed to create temporary directory: $TR_DIR"; return 1; }
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"; return 1; }
+
+    trap "debug_log 'DEBUG' 'Trap cleanup: Removing temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*" INT TERM EXIT
+
+    debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
+    debug_log "DEBUG" "Base DB: $base_db"
+    debug_log "DEBUG" "Temporary file directory: $TR_DIR"
+    debug_log "DEBUG" "Final output file: $final_output_file"
+    debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
+
+    start_time=$(date +%s)
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name"
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    spinner_started="true"
+
+    total_lines=$(awk 'NR>1{c++} END{print c}' "$base_db")
+    if [ "$total_lines" -le 0 ]; then
+        debug_log "DEBUG" "No lines to translate (excluding header)."
+        cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+EOF
+        if [ $? -ne 0 ]; then
+             debug_log "DEBUG" "Failed to write header to $final_output_file"
+             exit_status=1
+        fi
+    else
+        lines_per_task=$((total_lines / MAX_PARALLEL_TASKS))
+        extra_lines=$((total_lines % MAX_PARALLEL_TASKS))
+        if [ "$lines_per_task" -eq 0 ] && [ "$total_lines" -gt 0 ]; then
+            lines_per_task=1
+            debug_log "DEBUG" "Fewer lines ($total_lines) than tasks ($MAX_PARALLEL_TASKS). Adjusting tasks."
+        fi
+
+        awk -v num_tasks="$MAX_PARALLEL_TASKS" \
+            -v prefix="$tmp_input_prefix" \
+            'NR > 1 {
+                task_num = (NR - 2) % num_tasks + 1;
+                print $0 >> (prefix task_num);
+            }' "$base_db"
+        if [ $? -ne 0 ]; then
+            debug_log "DEBUG" "Failed to split base DB using awk."
+            exit_status=1
+            if [ "$spinner_started" = "true" ]; then
+                stop_spinner "$(get_message "MSG_TRANSLATION_FAILED_SPLIT" "default=Translation failed during DB split.")" "error"
+            fi
+            return 1
+        fi
+        debug_log "DEBUG" "Base DB split complete."
+    fi
+
+    if [ "$exit_status" -eq 0 ] && [ "$total_lines" -gt 0 ]; then
+        debug_log "DEBUG" "Launching parallel translation tasks..."
+        i=1
+        while [ "$i" -le "$MAX_PARALLEL_TASKS" ]; do
+            local tmp_input_file="${tmp_input_prefix}${i}"
+            local tmp_output_file="${tmp_output_prefix}${i}"
+
+            if [ ! -f "$tmp_input_file" ]; then
+                 debug_log "DEBUG" "Temporary input file ${tmp_input_file} not found (likely no lines for this task), skipping task $i."
+                 i=$((i + 1))
+                 continue
+            fi
+            >"$tmp_output_file" || {
+                debug_log "DEBUG" "Failed to create temporary output file: $tmp_output_file"
+                exit_status=1
+                if [ "$spinner_started" = "true" ]; then
+                    stop_spinner "$(get_message "MSG_TRANSLATION_FAILED_TMPFILE" "default=Translation failed creating temporary file.")" "error"
+                fi
+                return 1
+            }
+
+            create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$aip_function_name" &
+            pid=$!
+            pids="$pids $pid"
+            debug_log "DEBUG" "Launched task $i (PID: $pid) for input $tmp_input_file"
+
+            # ─────────────────────────────────────────────
+            # ▼▼▼ 追加: 並列タスク数制限(類似ダウンロードsystem) ▼▼▼
+            while [ "$(jobs -p | wc -l)" -ge "$MAX_PARALLEL_TASKS" ]; do
+                sleep 0.5
+            done
+            # ─────────────────────────────────────────────
+
+            i=$((i + 1))
+        done
+
+        if [ -n "$pids" ]; then
+             debug_log "DEBUG" "Waiting for launched tasks to complete..."
+             for pid in $pids; do
+                 wait "$pid"
+                 local task_exit_status=$?
+                 if [ "$task_exit_status" -ne 0 ]; then
+                     if [ "$task_exit_status" -ne 2 ]; then
+                         debug_log "DEBUG" "Task with PID $pid failed with critical exit status $task_exit_status."
+                         exit_status=1
+                     else
+                          debug_log "DEBUG" "Task with PID $pid completed with partial success (exit status 2)."
+                          [ "$exit_status" -eq 0 ] && exit_status=2
+                     fi
+                 else
+                     debug_log "DEBUG" "Task with PID $pid completed successfully (exit status 0)."
+                 fi
+             done
+             debug_log "DEBUG" "All launched tasks completed (Overall status: $exit_status)."
+        else
+             debug_log "DEBUG" "No tasks were launched."
+        fi
+    fi
+
+    if [ "$exit_status" -ne 1 ]; then
+        if [ "$total_lines" -gt 0 ]; then
+            debug_log "DEBUG" "Combining results into final output file: $final_output_file"
+            cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+EOF
+            if [ $? -ne 0 ]; then
+                 debug_log "DEBUG" "Failed to write header to $final_output_file"
+                 exit_status=1
+            else
+                find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
+                if [ $? -ne 0 ]; then
+                     debug_log "DEBUG" "Failed to combine temporary output files into $final_output_file"
+                     [ "$exit_status" -eq 0 ] && exit_status=1
+                else
+                     debug_log "DEBUG" "Successfully combined results."
+                     printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+                     debug_log "DEBUG" "Completion marker added to ${final_output_file}"
+                fi
+            fi
+        elif [ "$exit_status" -eq 0 ]; then
+             debug_log "DEBUG" "No lines were translated, final file contains only header."
+        fi
+    fi
+
+    end_time=$(date +%s)
+    [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time))
+
+    if [ "$spinner_started" = "true" ]; then
+        local final_message=""
+        local spinner_status="success"
+
+        if [ "$exit_status" -eq 0 ]; then
+             if [ "$total_lines" -gt 0 ]; then
+                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+             else
+                 final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
+             fi
+        elif [ "$exit_status" -eq 2 ]; then
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning"
+        else
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
+            spinner_status="error"
+        fi
+        stop_spinner "$final_message" "$spinner_status"
+        debug_log "DEBUG" "Parallel translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+    else
+         if [ "$exit_status" -eq 0 ]; then
+             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+         elif [ "$exit_status" -eq 2 ]; then
+             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+         else
+             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+         fi
+    fi
+
+    return "$exit_status"
+}
+
 # Function to create language DB by processing base DB in parallel (with spinner and timing - Revised Spinner Keys)
 # Usage: create_language_db_parallel <aip_function_name> <api_endpoint_url> <domain_name> <target_lang_code>
-create_language_db_parallel() {
+OK_create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
     local domain_name="$3"       # Used for spinner message
