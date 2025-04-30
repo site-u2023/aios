@@ -2337,7 +2337,6 @@ download_parallel() {
 
     eval "export $exported_vars"
     pids=""
-    current_jobs=0
     job_index=0
 
     while IFS= read -r command_line || [ -n "$command_line" ]; do
@@ -2367,12 +2366,17 @@ download_parallel() {
         ) &
         pid=$!
         pids="$pids $pid"
-        current_jobs=$((current_jobs + 1))
 
-        # 並列数制御
-        if [ "$current_jobs" -ge "$max_parallel" ]; then
-            wait
-            current_jobs=0
+        # 並列数制御（max_parallelに達したら先頭のPIDをwaitしてリストから外す）
+        set -- $pids
+        if [ $# -ge "$max_parallel" ]; then
+            wait "$1"
+            pids=""
+            shift
+            while [ $# -gt 0 ]; do
+                pids="$pids $1"
+                shift
+            done
         fi
     done < "$cmd_tmpfile"
 
