@@ -2510,7 +2510,7 @@ OK_download() {
     return 0 # 成功時は 0 を返す
 }
 
-OK_download_parallel() {
+download_parallel() {
     # 時間計測の開始
     local start_time=$(date +%s)
     local end_time=""
