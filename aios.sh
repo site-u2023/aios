@@ -2239,6 +2239,9 @@ download_parallel() {
     local line command_line cmd_status
     local loaded_files source_success source_status
 
+    # ▼ 追加デバッグ ▼
+    debug_log "DEBUG" "Entering download_parallel()"
+
     start_time=$(date +%s)
     end_time=""
     elapsed_seconds=0
@@ -2260,6 +2263,7 @@ download_parallel() {
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (directory creation) in %s seconds.\n" "$elapsed_seconds"
+        debug_log "DEBUG" "Failed to create directory: $DL_DIR"
         return 1
     fi
     if ! mkdir -p "$LOG_DIR"; then
@@ -2291,7 +2295,6 @@ download_parallel() {
         in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
     ' "$script_path" > "$cmd_tmpfile"
 
-    # コマンドリストをquiet化しつつ一時ファイルに保存
     > "$cmd_tmpfile.quiet"
     while IFS= read -r line; do
         [ -z "$line" ] && continue
@@ -2306,17 +2309,16 @@ download_parallel() {
     done < "$cmd_tmpfile"
     mv "$cmd_tmpfile.quiet" "$cmd_tmpfile"
 
-    # コマンドリストが空なら終了
     if ! grep -q . "$cmd_tmpfile"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
         printf "Download completed (no tasks) in %s seconds.\n" "$elapsed_seconds"
         rm -f "$cmd_tmpfile" "$load_tmpfile"
+        debug_log "DEBUG" "No tasks found in download_files(). Exiting normally."
         return 0
     fi
 
-    # ロード対象ファイル収集
     > "$load_tmpfile"
     while IFS= read -r command_line; do
         case "$command_line" in
@@ -2343,7 +2345,7 @@ download_parallel() {
         # $1: コマンド文字列 or ファイルパス
         # $2: 最大リトライ回数
         # $3: タイプ（"download" または "load"）
-        # $4: メインスクリプト引数（可変）
+        # $4以降: メインスクリプト引数
 
         local cmd="$1"
         local max_retry="$2"
@@ -2353,26 +2355,35 @@ download_parallel() {
         local retry_count=0
         local success=1
 
+        # ▼ 追加デバッグ ▼
+        debug_log "DEBUG" "Entering retry_with_confirm with cmd=\"$cmd\", type=\"$type\", max_retry=$max_retry"
+
         while [ "$retry_count" -lt "$max_retry" ]; do
+            debug_log "DEBUG" "Retry attempt #$((retry_count+1)) for $type => $cmd"
             if [ "$type" = "download" ]; then
                 eval "$cmd"
             else
                 . "$cmd"
             fi
+
             if [ $? -eq 0 ]; then
                 success=0
+                debug_log "DEBUG" "Command succeeded on attempt #$((retry_count+1)): $cmd"
                 break
             fi
             retry_count=$((retry_count + 1))
-            debug_log "DEBUG" "$type failed for $cmd (retry $retry_count/$max_retry)"
+            debug_log "DEBUG" "$type failed for $cmd (retry=$retry_count)"
             sleep 1
         done
 
         if [ "$success" -ne 0 ]; then
+            debug_log "DEBUG" "All $max_retry retries failed for $type => $cmd. Asking user to confirm restart."
             stop_spinner "$(get_message 'MSG_CONFIRM_RESTART')" "failure"
             if confirm "MSG_CONFIRM_RESTART"; then
+                debug_log "DEBUG" "User chose to restart. Re-executing main script with args: $main_args"
                 exec "$0" $main_args
             else
+                debug_log "DEBUG" "User chose not to restart. Exiting with status 1."
                 exit 1
             fi
         fi
@@ -2391,7 +2402,9 @@ download_parallel() {
         stderr_log="${log_file_prefix}${task_name}.stderr.log"
 
         (
+            debug_log "DEBUG" "Starting parallel download task #$task_name => $command_line"
             retry_with_confirm "$command_line" 3 "download" "$@"
+            debug_log "DEBUG" "Finished parallel download task #$task_name => $command_line"
         ) >"$stdout_log" 2>"$stderr_log" &
         pid=$!
         pids="$pids $pid"
@@ -2400,6 +2413,7 @@ download_parallel() {
         # max_parallel制御
         set -- $pids
         if [ "$current_jobs" -ge "$max_parallel" ]; then
+            debug_log "DEBUG" "Waiting for first PID($1) to complete due to max_parallel=$max_parallel"
             wait "$1"
             pids=""
             shift
@@ -2413,6 +2427,7 @@ download_parallel() {
 
     # 残りのジョブを待機
     for pid in $pids; do
+        debug_log "DEBUG" "Waiting for PID($pid) to complete."
         wait "$pid" || overall_status=1
     done
 
@@ -2421,8 +2436,12 @@ download_parallel() {
         loaded_files=""
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
-            echo "$loaded_files" | grep -qxF "$load_file" && continue
-            full_load_path="${BASE_DIR}/$load_file"
+            if echo "$loaded_files" | grep -qxF "$load_file"; then
+                debug_log "DEBUG" "File '$load_file' already loaded. Skipping."
+                continue
+            fi
+            local full_load_path="${BASE_DIR}/$load_file"
+            debug_log "DEBUG" "Preparing to load file: $full_load_path"
             retry_with_confirm "$full_load_path" 3 "load" "$@"
             loaded_files="${loaded_files}${load_file}\n"
         done < "$load_tmpfile"
@@ -2433,15 +2452,20 @@ download_parallel() {
     if [ $overall_status -eq 0 ]; then
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
+        local success_message
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}")"
         stop_spinner "$success_message" "success"
+        debug_log "DEBUG" "All parallel tasks completed successfully in ${elapsed_seconds}s."
+        debug_log "DEBUG" "Exiting download_parallel() with overall_status=0"
         return 0
     else
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
+        local failure_message
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_command" "e=$first_error_message")"
         stop_spinner "$failure_message" "failure"
         printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_command" "$elapsed_seconds"
+        debug_log "DEBUG" "Exiting download_parallel() with overall_status=1"
         return 1
     fi
 }
