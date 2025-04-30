@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-02-00"
+SCRIPT_VERSION="2025-05-01-02-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -832,16 +832,8 @@ create_language_db_parallel() {
     
     # --- OS Version Detection ---
     local osversion
-    local original_max_tasks=$MAX_PARALLEL_TASKS
-    local adjusted_max_tasks=$MAX_PARALLEL_TASKS
     osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
     debug_log "DEBUG" "OS Version detected: '$osversion'"
-    
-    # Adjust MAX_PARALLEL_TASKS for OS=19
-    if [ "$osversion" = "19" ]; then
-        adjusted_max_tasks=2
-        debug_log "DEBUG" "OS=19 detected: Limiting parallel tasks to $adjusted_max_tasks (from $MAX_PARALLEL_TASKS)"
-    fi
 
     # --- Pre-checks ---
     if [ ! -f "$base_db" ]; then
@@ -862,10 +854,15 @@ create_language_db_parallel() {
     }
 
     # --- Logging ---
-    debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
+    debug_log "DEBUG" "Starting translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
     debug_log "DEBUG" "Base DB: $base_db"
     debug_log "DEBUG" "Final output file: $final_output_file"
-    debug_log "DEBUG" "Max parallel tasks: $adjusted_max_tasks"
+    
+    if [ "$osversion" = "19" ]; then
+        debug_log "DEBUG" "OS=19 detected: Using serial processing"
+    else
+        debug_log "DEBUG" "Max parallel tasks: $MAX_PARALLEL_TASKS"
+    fi
 
     # --- Start Timing and Spinner ---
     start_time=$(date +%s)
@@ -885,54 +882,66 @@ EOF
         debug_log "DEBUG" "Failed to write header to $final_output_file"
         exit_status=1
     else
-        # パイプラインの変数スコープ問題を解決するため、一時ファイルを使用
+        # OS=19対応: パイプライン問題を回避し直列処理
         if [ "$osversion" = "19" ]; then
-            # OS=19では一時ファイル経由で処理
+            debug_log "DEBUG" "Using serial processing for OS=19"
+            # 一時ファイル経由
             awk 'NR>1 && !(/^#/ || /^$/)' "$base_db" > "$temp_file"
+            
             if [ $? -ne 0 ]; then
                 debug_log "DEBUG" "Failed to extract lines to temporary file"
                 exit_status=1
             else
+                local line_count=0
+                local total_lines=$(wc -l < "$temp_file")
+                debug_log "DEBUG" "Total lines to translate: $total_lines"
+                
+                # 直列処理: バックグラウンドプロセス使用しない
                 while IFS= read -r line; do
-                    # 並列タスクをBGで起動
-                    translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
-                    pid=$!
-                    pids="$pids $pid"
+                    line_count=$((line_count + 1))
+                    if [ $((line_count % 5)) -eq 0 ]; then
+                        debug_log "DEBUG" "Processing line $line_count of $total_lines"
+                    fi
                     
-                    # 並列タスク数制限
-                    while [ "$(jobs -p | wc -l)" -ge "$adjusted_max_tasks" ]; do
-                        sleep 1
-                    done
+                    # 翻訳処理（直列処理: &なし）
+                    translated_line=$(translate_single_line "$line" "$target_lang_code" "$aip_function_name")
+                    if [ $? -eq 0 ] && [ -n "$translated_line" ]; then
+                        printf "%s\n" "$translated_line" >> "$final_output_file".partial
+                    else
+                        # 翻訳失敗の場合
+                        debug_log "DEBUG" "Translation failed for line: $line"
+                        [ "$exit_status" -eq 0 ] && exit_status=2  # 部分的失敗
+                    fi
                 done < "$temp_file"
                 
                 # 一時ファイル削除
                 rm -f "$temp_file"
             fi
         else
-            # 他のOSバージョンでは元のパイプライン処理を使用
+            # 他のOS: 元の並列処理を維持
             awk 'NR>1' "$base_db" | while IFS= read -r line; do
                 case "$line" in \#* | "") continue ;; esac
                 
                 # 並列タスクをBGで起動
-                translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
+                translate_single_line "$line" "$target_lang_code" "$aip_function_name" >> "$final_output_file".partial &
                 pid=$!
                 pids="$pids $pid"
                 
                 # 並列タスク数制限
-                while [ "$(jobs -p | wc -l)" -ge "$adjusted_max_tasks" ]; do
+                while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
                     sleep 1
                 done
             done
+            
+            # BGジョブが全て完了するまで待機
+            for pid in $pids; do
+                wait "$pid" || [ "$exit_status" -eq 0 ] && exit_status=2
+            done
         fi
-        
-        # BGジョブが全て完了するまで待機
-        for pid in $pids; do
-            wait "$pid" || [ "$exit_status" -eq 0 ] && exit_status=2
-        done
         
         # 部分出力を結合
         if [ -f "$final_output_file".partial ]; then
-            cat "$final_output_file".partial >>"$final_output_file"
+            cat "$final_output_file".partial >> "$final_output_file"
             rm -f "$final_output_file".partial
         fi
         
@@ -960,7 +969,7 @@ EOF
             spinner_status="error"
         fi
         stop_spinner "$final_message" "$spinner_status"
-        debug_log "DEBUG" "Parallel translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+        debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
     else
         if [ "$exit_status" -eq 0 ]; then
             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
