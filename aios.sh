@@ -2238,15 +2238,13 @@ download_parallel() {
     local max_parallel="${MAX_PARALLEL_TASKS:-1}"
     local script_path="$0"
     local tmp_dir="${DL_DIR}"
+    local task_list_file="${tmp_dir}/dl_task_list.tmp"
     local retry_map_file="${tmp_dir}/dl_retry_map"
-    local fail_map_file="${tmp_dir}/dl_fail_map"
     local load_targets_file="${tmp_dir}/load_targets.tmp"
     local fail_flag=0
-    local fail_list=""
-    local fail_map=""
     local running=0
     local pids=""
-    local pid task_args retry_count
+    local pid task_line retry_count
     local max_retry=3
     local overall_status=0
 
@@ -2281,22 +2279,19 @@ download_parallel() {
         return 1
     fi
 
-    # タスクリスト抽出（download_files()から各行を抜き、downloadなら除去）
-    local task_list_file="${tmp_dir}/dl_task_list.tmp"
+    # download_files()から各行を1行ずつ抽出し、downloadキーワードがあれば除去してタスクリストに保存
     awk '
         BEGIN { in_func=0; }
         /^download_files\(\) *\{/ { in_func=1; next }
         /^}/ { if(in_func){in_func=0} }
         in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
-    ' "$script_path" | \
-    while IFS= read -r line; do
+    ' "$script_path" | while IFS= read -r line; do
         # 空行・0はスキップ
         [ -z "$line" ] && continue
         [ "$line" = "0" ] && continue
         case "$line" in
             download\ *) line="${line#download }" ;;
         esac
-        # 再度空行・0はスキップ
         [ -z "$line" ] && continue
         [ "$line" = "0" ] && continue
         echo "$line"
@@ -2304,9 +2299,8 @@ download_parallel() {
 
     # ロード対象ファイル生成
     > "$load_targets_file"
-    while IFS= read -r task_args; do
-        # ファイル名抽出用: "xxx" "chmod" "load"
-        set -- $task_args
+    while IFS= read -r task_line; do
+        set -- $task_line
         for arg; do
             case "$arg" in
                 '"load"')
@@ -2319,12 +2313,12 @@ download_parallel() {
 
     # リトライマップ初期化
     > "$retry_map_file"
-    while IFS= read -r task_args; do
-        [ -z "$task_args" ] && continue
-        echo "$task_args:0" >> "$retry_map_file"
+    while IFS= read -r task_line; do
+        [ -z "$task_line" ] && continue
+        echo "$task_line:0" >> "$retry_map_file"
     done < "$task_list_file"
 
-    # --- メインDLループ（分割なしでMAX_PARALLEL_TASKS制御） ---
+    # --- メインDLループ ---
     while : ; do
         fail_flag=0
         fail_list=""
@@ -2332,22 +2326,21 @@ download_parallel() {
         running=0
         pids=""
 
-        while IFS= read -r task_args; do
-            [ -z "$task_args" ] && continue
-            retry_count=$(grep "^$task_args:" "$retry_map_file" | cut -d: -f2)
+        while IFS= read -r task_line; do
+            [ -z "$task_line" ] && continue
+            retry_count=$(grep "^$task_line:" "$retry_map_file" | cut -d: -f2)
             [ -z "$retry_count" ] && retry_count=0
             if [ "$retry_count" -ge "$max_retry" ]; then
                 continue
             fi
 
             (
-                download $task_args
+                download $task_line
             ) &
             pid=$!
-            pids="$pids $pid:$task_args"
+            pids="$pids $pid:$task_line"
             running=$((running + 1))
 
-            # 並列数制御
             if [ "$running" -ge "$max_parallel" ]; then
                 for pid_task in $pids; do
                     pid="${pid_task%%:*}"
