@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-01-05"
+SCRIPT_VERSION="2025-05-01-02-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -206,6 +206,7 @@ translate_single_line() {
     esac
 }
 
+# 24 OK / 19 NG
 OK3_11_create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
@@ -339,8 +340,8 @@ EOF
     return "$exit_status"
 }
 
-# OK2
-create_language_db_parallel() {
+# OK2 19 & 24 OK
+OK2_create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
     local domain_name="$3"       # Used for spinner message
@@ -798,6 +799,177 @@ EOF
          fi
     fi
     # -------------------------------
+
+    return "$exit_status"
+}
+
+create_language_db_parallel() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"  # Passed for logging/context
+    local domain_name="$3"       # Used for spinner message
+    local target_lang_code="$4"
+
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local temp_file="${BASE_DIR}/temp_lines_$$.txt"
+
+    # --- Time measurement variables ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=""
+
+    # --- Spinner variables ---
+    local spinner_started="false"
+
+    # --- Marker Key ---
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+
+    # タスク制御用
+    local pids=""
+    local pid=""
+    local exit_status=0
+    
+    # --- OS Version Detection ---
+    local osversion
+    local original_max_tasks=$MAX_PARALLEL_TASKS
+    local adjusted_max_tasks=$MAX_PARALLEL_TASKS
+    osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
+    debug_log "DEBUG" "OS Version detected: '$osversion'"
+    
+    # Adjust MAX_PARALLEL_TASKS for OS=19
+    if [ "$osversion" = "19" ]; then
+        adjusted_max_tasks=2
+        debug_log "DEBUG" "OS=19 detected: Limiting parallel tasks to $adjusted_max_tasks (from $MAX_PARALLEL_TASKS)"
+    fi
+
+    # --- Pre-checks ---
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "Base DB file not found: $base_db"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
+        return 1
+    fi
+    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "Missing required arguments: AIP function name or target language code."
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
+        return 1
+    fi
+
+    # --- Prepare directories ---
+    mkdir -p "$final_output_dir" || {
+        debug_log "DEBUG" "Failed to create final output directory: $final_output_dir"
+        return 1
+    }
+
+    # --- Logging ---
+    debug_log "DEBUG" "Starting parallel translation for language '$target_lang_code' using function '$aip_function_name' (API: '$api_endpoint_url', Domain: '$domain_name')."
+    debug_log "DEBUG" "Base DB: $base_db"
+    debug_log "DEBUG" "Final output file: $final_output_file"
+    debug_log "DEBUG" "Max parallel tasks: $adjusted_max_tasks"
+
+    # --- Start Timing and Spinner ---
+    start_time=$(date +%s)
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name"
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    spinner_started="true"
+
+    # ヘッダー部分を書き出し
+    cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+EOF
+
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "Failed to write header to $final_output_file"
+        exit_status=1
+    else
+        # パイプラインの変数スコープ問題を解決するため、一時ファイルを使用
+        if [ "$osversion" = "19" ]; then
+            # OS=19では一時ファイル経由で処理
+            awk 'NR>1 && !(/^#/ || /^$/)' "$base_db" > "$temp_file"
+            if [ $? -ne 0 ]; then
+                debug_log "DEBUG" "Failed to extract lines to temporary file"
+                exit_status=1
+            else
+                while IFS= read -r line; do
+                    # 並列タスクをBGで起動
+                    translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
+                    pid=$!
+                    pids="$pids $pid"
+                    
+                    # 並列タスク数制限
+                    while [ "$(jobs -p | wc -l)" -ge "$adjusted_max_tasks" ]; do
+                        sleep 1
+                    done
+                done < "$temp_file"
+                
+                # 一時ファイル削除
+                rm -f "$temp_file"
+            fi
+        else
+            # 他のOSバージョンでは元のパイプライン処理を使用
+            awk 'NR>1' "$base_db" | while IFS= read -r line; do
+                case "$line" in \#* | "") continue ;; esac
+                
+                # 並列タスクをBGで起動
+                translate_single_line "$line" "$target_lang_code" "$aip_function_name" >>"$final_output_file".partial &
+                pid=$!
+                pids="$pids $pid"
+                
+                # 並列タスク数制限
+                while [ "$(jobs -p | wc -l)" -ge "$adjusted_max_tasks" ]; do
+                    sleep 1
+                done
+            done
+        fi
+        
+        # BGジョブが全て完了するまで待機
+        for pid in $pids; do
+            wait "$pid" || [ "$exit_status" -eq 0 ] && exit_status=2
+        done
+        
+        # 部分出力を結合
+        if [ -f "$final_output_file".partial ]; then
+            cat "$final_output_file".partial >>"$final_output_file"
+            rm -f "$final_output_file".partial
+        fi
+        
+        if [ "$exit_status" -ne 1 ]; then
+            # 完了マーカーを付加
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+        fi
+    fi
+
+    # --- Stop Timing and Spinner ---
+    end_time=$(date +%s)
+    elapsed_seconds=$((end_time - start_time))
+
+    if [ "$spinner_started" = "true" ]; then
+        local final_message=""
+        local spinner_status="success"
+
+        if [ "$exit_status" -eq 0 ]; then
+            final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+        elif [ "$exit_status" -eq 2 ]; then
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning"
+        else
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
+            spinner_status="error"
+        fi
+        stop_spinner "$final_message" "$spinner_status"
+        debug_log "DEBUG" "Parallel translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+    else
+        if [ "$exit_status" -eq 0 ]; then
+            printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+        elif [ "$exit_status" -eq 2 ]; then
+            printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+        else
+            printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+        fi
+    fi
 
     return "$exit_status"
 }
