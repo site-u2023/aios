@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-01-00"
+SCRIPT_VERSION="2025-05-01-01-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -310,7 +310,6 @@ EOF
                     if [ "$translation_status" -ne 0 ] || [ -z "$translation_output" ]; then
                         debug_log "DEBUG" "Sequential translation failed or empty for line: $line (status: $translation_status). Using original."
                         # Append original line content (ensure correct format)
-                        # Assuming translate_single_line returns empty on failure, we need original key=value
                         local original_key_value="${line#*|}" # Get content after first '|'
                         printf "%s|%s\n" "$target_lang_code" "$original_key_value" >> "$final_output_file"
                         [ "$exit_status" -eq 0 ] && exit_status=2
@@ -437,12 +436,23 @@ EOF
         stop_spinner "$final_message" "$spinner_status"
         debug_log "DEBUG" "Translation task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
     else
-        # Fallback print (if spinner failed)
-        # ... (omitted for brevity, same logic as before) ...
+        # Fallback if spinner wasn't started (shouldn't happen in normal flow)
+        if [ "$exit_status" -eq 0 ]; then
+             if [ "$total_lines" -gt 0 ]; then
+                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+             else
+                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")")"
+             fi
+        elif [ "$exit_status" -eq 2 ]; then
+             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+        else # exit_status is 1
+             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+        fi
+    # ▼▼▼ 修正: ここにfiを追加 ▼▼▼
     fi
 
     # --- Final Cleanup of Trap ---
-    trap - INT TERM EXIT
+    trap - INT TERM EXIT # Remove the trap explicitly
 
     return "$exit_status"
 }
