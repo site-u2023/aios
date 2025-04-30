@@ -2230,7 +2230,7 @@ download() {
     return 0
 }
 
-download_parallel() {
+OK_RETRY_download_parallel() {
     local start_time end_time elapsed_seconds
     local max_parallel current_jobs pids pid job_index
     local overall_status fail_flag_file first_failed_command first_error_message
@@ -2470,7 +2470,7 @@ download_parallel() {
     fi
 }
 
-OK2_download_parallel() {
+download_parallel() {
     local start_time end_time elapsed_seconds
     local max_parallel current_jobs pids pid job_index
     local overall_status fail_flag_file first_failed_command first_error_message
