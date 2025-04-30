@@ -32,7 +32,7 @@ https://github.com/site-u2023/aios/blob/main/requirement-definition.md
 | MAX PARALLELE: 3  | 28            | 6             | 6             | 20            | 18            | 18            |
 | MAX PARALLELE: 4  | 7             | 6             | 17            | 17            | 18            | 22            |
 | MAX PARALLELE: 5  | 18            | 17            | 17            | 22            | 29            | 26            |
-| **OpenWrt NCP-HG100** |               |               |               |               |               |               |
+| **SONY NCP-HG100** |               |               |               |               |               |               |
 | MAX PARALLELE: 1  | 90            | 87            | 89            | 82            | 82            | 82            |
 | MAX PARALLELE: 2  | 49            | 49            | 48            | 54            | 60            | 59            |
 | MAX PARALLELE: 3  | 36            | 35            | 38            | 50            | 47            | 42            |
