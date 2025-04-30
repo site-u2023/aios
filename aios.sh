@@ -2479,7 +2479,6 @@ download_parallel() {
         loaded_files=""
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
-            # すでにsourceしたファイルはスキップ
             echo "$loaded_files" | grep -qxF "$load_file" && continue
 
             local full_load_path="${BASE_DIR}/$load_file"
