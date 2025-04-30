@@ -2292,7 +2292,7 @@ download_parallel() {
                         pids=$(echo "$pids" | sed "s/\b$pid\b//g")
                     fi
                 done
-                sleep 0.2
+                sleep 1
             done
 
             # サブシェル実行＋pid管理
