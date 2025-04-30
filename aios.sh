@@ -61,7 +61,6 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-api}" # ダウンロード方式 (api/direct
 
 # パス・ファイル関連（resolve_path対応版）
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
-AIOS_DIR="${AIOS_DIR:-/usr/bin}" 
 BIN_DIR=""
 BIN_PATH=""
 BIN_FILE=""
@@ -3664,70 +3663,54 @@ make_directory() {
 }
 
 check_update() {
-    local lang_code="$SELECTED_LANGUAGE"
-    MODE="${MODE:-update}"
-    local all_args="$@"
-    local has_args=0
-    [ $# -gt 0 ] && has_args=1
-    local filtered_args=""
-
-    # 引数フィルタリング
-    if [ $has_args -eq 1 ]; then
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                -u|--u|-update|--update)
-                    ;;
-                *)
-                    filtered_args="${filtered_args:+$filtered_args }$1"
-                    ;;
-            esac
-            shift
-        done
-    fi
-
-    debug_log "DEBUG" "Original args: $all_args"
-    debug_log "DEBUG" "Filtered args: $filtered_args"
-
-    # ファイル名で判定（aios.sh以外ならアップデート無効化などの運用も可能）
-    local abs_bin_path
-    abs_bin_path=$(resolve_path "$0")
-
-    debug_log "DEBUG" "check_update: abs_bin_path=$abs_bin_path"
-
-    # 例えば: ファイル名がaios.sh以外ならアップデートをスキップ（必要に応じて条件を変更）
-    local bin_filename
-    bin_filename=$(basename "$abs_bin_path")
-    if [ "$bin_filename" != "aios.sh" ]; then
-        debug_log "DEBUG" "check_update: Executable is not aios.sh; skipping update."
-        return 0
-    fi
-
-    # --- ここから自己アップデート処理 ---
-    local remote_version_info local_version remote_version
+    # aios.sh専用アップデート関数
     local script_file="${CACHE_DIR}/script.ch"
-    remote_version_info=$(get_commit_version "$BIN_FILE")
+    local file_name="aios.sh"
+    local local_version=""
+    local remote_version=""
+    local remote_version_info=""
+
+    # ローカルバージョン取得
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+
+    # リモートバージョン取得
+    remote_version_info=$(get_commit_version "$file_name")
     if [ $? -ne 0 ] || [ -z "$remote_version_info" ]; then
-        debug_log "DEBUG" "check_update: Failed to get remote version for $BIN_FILE"
+        debug_log "check_update: Failed to get remote version for $file_name"
         return 1
     fi
     remote_version=$(echo "$remote_version_info" | cut -d' ' -f1)
-    if [ -f "$script_file" ]; then
-        local_version=$(grep "^${BIN_FILE}=" "$script_file" | cut -d'=' -f2)
-    fi
-    [ -z "$local_version" ] && local_version=""
 
-    if [ "$remote_version" = "$local_version" ] && [ -f "$abs_bin_path" ]; then
-        debug_log "DEBUG" "check_update: Local version up-to-date for $BIN_FILE ($local_version); skipping update."
+    # バージョン比較
+    if [ "$remote_version" = "$local_version" ] && [ -f "${BASE_DIR}/$file_name" ]; then
+        debug_log "check_update: Local version up-to-date for $file_name ($local_version); skipping update."
         return 0
     fi
-    download "$BIN_FILE" "chmod"
-    MODE="full"
 
-    if [ -f "$BASE_DIR/$BIN_FILE" ]; then
-        mv -f "$BASE_DIR/$BIN_FILE" "$abs_bin_path"
+    # アップデート実行
+    download "$file_name" "chmod"
+    if [ ! -f "${BASE_DIR}/$file_name" ]; then
+        debug_log "check_update: Download failed for $file_name"
+        return 1
     fi
 
-    exec "$abs_bin_path" "$lang_code" $filtered_args
+    # 実行ファイルパスを再取得
+    local abs_bin_path
+    abs_bin_path=$(resolve_path "$0")
+
+    # DL後のバージョン再取得（安全対策）
+    if [ -f "$script_file" ]; then
+        local_version=$(grep "^${file_name}=" "$script_file" | cut -d'=' -f2)
+    fi
+
+    if [ "$remote_version" = "$local_version" ]; then
+        exec "$abs_bin_path" "$@"
+    else
+        debug_log "check_update: Update failed, version mismatch after download."
+        return 1
+    fi
 }
 
 # シンボリックリンク多段解決対応 resolve_path
