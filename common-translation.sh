@@ -39,9 +39,6 @@ SCRIPT_VERSION="2025-05-01-02-01"
 # 基本定数の設定
 BASE_WGET="wget --no-check-certificate -q"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-BIN_PATH="$(readlink -f "$0")"
-BIN_DIR="$(dirname "$BIN_PATH")"
-BIN_FILE="$(basename "$BIN_PATH")"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
 CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}" # Used for message.ch, network.ch etc.
@@ -833,7 +830,7 @@ create_language_db_parallel() {
     # --- OS Version Detection ---
     local osversion
     osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
-    local osversion_m="${osversion%%.*}"  # ピリオドより前の部分（メジャーバージョン）を抽出
+    osversion="${osversion%%.*}"  # ピリオドより前の部分（メジャーバージョン）を抽出
     debug_log "DEBUG" "OS Version detected: '$osversion''"
 
     # --- Pre-checks ---
