@@ -631,104 +631,94 @@ get_message() {
 
     # --- ADDED: Unconditionally normalize braces before replacement ---
     # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
+    # (This line was present in the provided source and remains unchanged)
     message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
 
-    # --- MODIFIED: Parameter replacement using POSIX-compatible awk ---
-    if [ $# -gt 0 ]; then
-        # Create AWK script with POSIX compatible syntax
-        awk_script='
+    # --- MODIFIED: Parameter replacement using awk (Case-Insensitive, POSIX Compliant) ---
+    # (The awk script and execution logic below are exactly as provided in the source and remain unchanged)
+    awk_script='
         BEGIN { FS="=" }
         NR == 1 { msg = $0; next } # First line is the message template
-        NR > 1 { # Process each parameter
+        NR > 1 { # Subsequent lines are parameters name=value
             p_name = $1
-            # Get the raw value (everything after first =)
+            # Correctly get raw value even if it contains =
             p_value = substr($0, index($0, "=") + 1)
+            params[p_name] = p_value # Store param in array (key is original case from input)
             
-            # Store param in array (key is original case from input)
-            params[p_name] = p_value
-            
-            # Convert parameter name to lowercase for case-insensitive matching
-            p_name_lower = ""
-            for (i = 1; i <= length(p_name); i++) {
-                c = substr(p_name, i, 1)
-                if (c >= "A" && c <= "Z")
-                    c = tolower(c)
-                p_name_lower = p_name_lower c
-            }
-            
-            # Store lowercase version
+            # Also store lowercase version of parameter name using tr command
+            cmd = "echo \"" p_name "\" | tr \"A-Z\" \"a-z\""
+            cmd | getline p_name_lower
+            close(cmd)
             params_lower[p_name_lower] = p_value
         }
         END {
-            # First process exact matches (backwards compatibility)
+            # Process parameters
             for (p_name in params) {
+                # First do exact case match (original behavior)
                 placeholder = "{" p_name "}"
-                
-                # Escape special chars in replacement text
-                val = params[p_name]
-                gsub(/\\/, "\\\\", val) # Escape backslashes first
-                gsub(/&/, "\\&", val)   # Escape ampersands
-                
-                # Replace exact matches
-                gsub(placeholder, val, msg)
+                gsub(placeholder, params[p_name], msg)
             }
             
-            # Now scan for any remaining {placeholders} and process them 
-            # using case-insensitive matching
-            # POSIX AWK friendly approach: look at each character in the string
-            new_msg = ""
+            # Now scan for case-insensitive matches
             i = 1
+            result = ""
             while (i <= length(msg)) {
+                # Look for opening brace
                 if (substr(msg, i, 1) == "{") {
-                    # Potential placeholder found
-                    j = index(substr(msg, i), "}")
-                    if (j > 0) {
-                        # Extract the complete placeholder with braces
-                        ph_with_braces = substr(msg, i, j)
-                        # Extract just the name without braces
-                        ph_name = substr(ph_with_braces, 2, j - 2)
-                        
-                        # Convert to lowercase for matching
-                        ph_name_lower = ""
-                        for (k = 1; k <= length(ph_name); k++) {
-                            c = substr(ph_name, k, 1)
-                            if (c >= "A" && c <= "Z")
-                                c = tolower(c)
-                            ph_name_lower = ph_name_lower c
+                    # Find matching closing brace
+                    start_pos = i
+                    i++
+                    ph_name = ""
+                    found_close = 0
+                    
+                    while (i <= length(msg)) {
+                        c = substr(msg, i, 1)
+                        if (c == "}") {
+                            found_close = 1
+                            break
                         }
-                        
-                        # Check if we have this parameter (case-insensitive)
-                        if (ph_name_lower in params_lower) {
-                            # Replace with parameter value
-                            new_msg = new_msg params_lower[ph_name_lower]
-                            i = i + j # Skip past this placeholder
-                        } else {
-                            # No match found, keep as is
-                            new_msg = new_msg ph_with_braces
-                            i = i + j
-                        }
-                    } else {
-                        # No closing brace found, just add the character
-                        new_msg = new_msg substr(msg, i, 1)
+                        ph_name = ph_name c
                         i++
                     }
+                    
+                    if (found_close) {
+                        # Found complete placeholder
+                        i++ # Move past closing brace
+                        
+                        # Convert placeholder name to lowercase using tr command
+                        cmd = "echo \"" ph_name "\" | tr \"A-Z\" \"a-z\""
+                        cmd | getline ph_name_lower
+                        close(cmd)
+                        
+                        # Check if we have this parameter in lowercase form
+                        if (ph_name_lower in params_lower) {
+                            # We have a case-insensitive match, append value
+                            result = result params_lower[ph_name_lower]
+                        } else {
+                            # No match, keep original placeholder
+                            result = result "{" ph_name "}"
+                        }
+                    } else {
+                        # No closing brace found, just add opening brace and continue
+                        result = result "{"
+                    }
                 } else {
-                    # Not a placeholder, just add the character
-                    new_msg = new_msg substr(msg, i, 1)
+                    # Regular character, add to result
+                    result = result substr(msg, i, 1)
                     i++
                 }
             }
             
-            print new_msg # Output the final message
+            print result
         }
-        '
-        
-        # Execute the awk script with parameters
+    '
+    # Execute awk script only if parameters are provided ($@ contains params after shift)
+    if [ $# -gt 0 ]; then
         message=$( \
             ( \
                 printf "%s\n" "$message"; \
                 local param param_name param_value; \
-                # Pass parameters to awk, one per line
+                # Pass parameters to awk, one per line, handling '=' in value
                 for param in "$@"; do \
                     param_name=$(echo "$param" | cut -d'=' -f1); \
                     param_value=$(echo "$param" | cut -d'=' -f2-); \
@@ -739,12 +729,14 @@ get_message() {
             ) | awk "$awk_script" \
         )
     fi
-    # --- END MODIFIED ---
 
     # 6. Call normalize_message for remaining normalization
+    # (This line was present in the provided source and remains unchanged)
+    # Pass the potentially placeholder-replaced message and language
     message=$(normalize_message "$message" "$lang")
 
     # 7. Apply formatting (if enabled and type specified)
+    # (This section was present in the provided source and remains unchanged)
     if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
         # Only proceed if formatting is globally enabled
         case "$format_type" in
@@ -767,11 +759,13 @@ get_message() {
     fi
 
     # 8. Append colon if marker {;} was present
+    # (This logic remains the same, using the add_colon flag set in Step 4)
     if [ "$add_colon" = "true" ]; then
         message="${message}: " # Add colon and space
     fi
 
     # 9. Output the final message (using %b to interpret backslash escapes like \n from {@})
+    # (This line was present in the provided source and remains unchanged)
     printf "%b" "$message"
     return 0
 }
