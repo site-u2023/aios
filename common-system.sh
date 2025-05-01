@@ -502,7 +502,6 @@ debug_info() {
 # メイン処理
 common_system_main() {
     detect_cpu_cores
-    init_device_cache
     get_usb_devices
     detect_and_save_package_manager
 }
