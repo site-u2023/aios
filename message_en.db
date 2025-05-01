@@ -157,12 +157,14 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 en|MSG_DOWNLOAD_SUMMARY=Max threads: {m} Files: {c}/{t} Time: {s}s API: {api}
 
 en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
-en|MSG_DOWNLOAD_SUMMARY=Download: {c}/{t} Time: {s} seconds
-en|MSG_DOWNLOAD_GITHUB=Github: {u}
+en|MSG_DOWNLOAD_SUMMARY=Download: {c}/{t} Time: {s} seconds # display_detected_download() 利用時
+en|MSG_DOWNLOAD_GITHUB=Github: {u} # display_detected_download() 利用時
 
 en|MSG_CONFIRM_RESTART=Download failed. Do you want to stop the system? (y/n){;}
 en|DOWNLOAD_PARALLEL_START=Downloading essential files{:} {c}/{t}
-en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully
+en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully{:} {s} seconds
+# en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully # display_detected_download() 利用時
+
 en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}{:}
 en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:} {f} {v} {api}
 en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:} {f} {v} {api}
