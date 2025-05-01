@@ -4134,6 +4134,8 @@ main() {
         return 1
     fi
 
+    init_device_cache
+    
     check_network_connectivity
 
     check_option "$@"
