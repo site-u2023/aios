@@ -315,7 +315,7 @@ create_language_db_parallel() {
     return "$exit_status"
 }
 
-# --- OpenWrt 19 専用の実装関数 (旧 OK2 ベース、スピナー処理削除) ---
+# --- OpenWrt 19 専用の実装関数 ---
 create_language_db_19() {
     # 引数受け取り
     local aip_function_name="$1"
@@ -325,12 +325,12 @@ create_language_db_19() {
 
     # 変数定義
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local final_output_dir="/tmp/aios" # Note: Should this be TR_DIR or BASE_DIR? Using /tmp/aios as per original OK2
+    local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local tmp_input_prefix="${TR_DIR}/message_${target_lang_code}.tmp.in."
     local tmp_output_prefix="${TR_DIR}/message_${target_lang_code}.tmp.out."
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
-    local total_lines=0 # この関数内でも行数計算は必要
+    local total_lines=0
     local i=0
     local pids=""
     local pid=""
@@ -343,37 +343,30 @@ create_language_db_19() {
     # shellcheck disable=SC2064
     trap "debug_log 'DEBUG' 'Trap cleanup (19): Removing temporary files...'; rm -f ${tmp_input_prefix}* ${tmp_output_prefix}*" INT TERM EXIT
 
-    # --- Logging ---
+    # --- Logging & 並列数設定 ---
     debug_log "DEBUG" "create_language_db_19: Starting parallel translation for language '$target_lang_code'."
-    # MAX_PARALLEL_TASKS の調整 (例: 19 では 4 に制限)
-    local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-4}" # デフォルト4
-    if [ "$current_max_parallel_tasks" -gt 4 ]; then
-        debug_log "DEBUG" "create_language_db_19: Limiting parallel tasks to 4 for OS version 19 (Original: $current_max_parallel_tasks)."
-        current_max_parallel_tasks=4
-    fi
-    debug_log "DEBUG" "create_language_db_19: Max parallel tasks: $current_max_parallel_tasks"
+    # OpenWrt 19 では CPU コア数を直接使用
+    local core_count
+    core_count=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
+    # core_count が 0 以下になることは通常ないが、念のため 1 以上を保証
+    [ "$core_count" -lt 1 ] && core_count=1
+    local current_max_parallel_tasks="$core_count"
+    debug_log "DEBUG" "create_language_db_19: Max parallel tasks set to CPU core count: $current_max_parallel_tasks"
 
     # --- Split Base DB ---
-    total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db") # コメント/空行除外
+    total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
     if [ "$total_lines" -le 0 ]; then
         debug_log "DEBUG" "create_language_db_19: No lines to translate."
-        # ヘッダーのみ書き込み
         cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
 # Method: create_language_db_19
 EOF
-        if [ $? -ne 0 ]; then
-             debug_log "DEBUG" "create_language_db_19: Failed to write header to $final_output_file"
-             exit_status=1
-        fi
-        # 行がない場合は成功(0)またはヘッダー書き込み失敗(1)で終了
-        # trap は自動実行される
+        if [ $? -ne 0 ]; then exit_status=1; fi
         return "$exit_status"
     fi
 
-    # awk splitting logic
     debug_log "DEBUG" "create_language_db_19: Splitting $total_lines lines into $current_max_parallel_tasks tasks..."
     awk -v num_tasks="$current_max_parallel_tasks" \
         -v prefix="$tmp_input_prefix" \
@@ -385,8 +378,6 @@ EOF
         }' "$base_db"
     if [ $? -ne 0 ]; then
         debug_log "DEBUG" "create_language_db_19: Failed to split base DB using awk."
-        exit_status=1
-        # trap がクリーンアップ
         return 1 # 致命的エラー
     fi
     debug_log "DEBUG" "create_language_db_19: Base DB split complete."
@@ -399,25 +390,20 @@ EOF
         local tmp_output_file="${tmp_output_prefix}${i}"
 
         if [ ! -f "$tmp_input_file" ]; then
-             # 分割ファイルが存在しない = このタスクに割り当てられた行がない
              i=$((i + 1))
              continue
         fi
-        # 出力ファイル作成試行
         >"$tmp_output_file" || {
             debug_log "DEBUG" "create_language_db_19: Failed to create temporary output file: $tmp_output_file"
-            exit_status=1
-            # trap がクリーンアップ
             return 1 # 致命的エラー
         }
 
-        # create_language_db をバックグラウンドで実行
         create_language_db "$tmp_input_file" "$tmp_output_file" "$target_lang_code" "$aip_function_name" &
         pid=$!
         pids="$pids $pid"
         debug_log "DEBUG" "create_language_db_19: Launched task $i (PID: $pid)"
 
-        # ▼▼▼ 並列タスク数制限 ▼▼▼
+        # ▼▼▼ 並列タスク数制限 (CPUコア数を使用) ▼▼▼
         while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
             sleep 1
         done
@@ -435,14 +421,13 @@ EOF
              if [ "$task_exit_status" -ne 0 ]; then
                  if [ "$task_exit_status" -eq 1 ]; then
                      debug_log "DEBUG" "create_language_db_19: Task PID $pid failed critically (status 1)."
-                     exit_status=1 # 致命的エラーに設定
-                     # Optionally kill remaining pids and break
+                     exit_status=1
                  elif [ "$task_exit_status" -eq 2 ]; then
                      debug_log "DEBUG" "create_language_db_19: Task PID $pid completed partially (status 2)."
-                     [ "$exit_status" -eq 0 ] && exit_status=2 # 部分的成功に設定
+                     [ "$exit_status" -eq 0 ] && exit_status=2
                  else
                      debug_log "DEBUG" "create_language_db_19: Task PID $pid failed unexpectedly (status $task_exit_status)."
-                     [ "$exit_status" -eq 0 ] && exit_status=1 # 予期せぬエラーは致命的扱い
+                     [ "$exit_status" -eq 0 ] && exit_status=1
                  fi
              else
                  debug_log "DEBUG" "create_language_db_19: Task PID $pid completed successfully."
@@ -454,10 +439,8 @@ EOF
     fi
 
     # --- Combine results ---
-    # exit_status が 1 (致命的エラー) でない場合のみ結合
     if [ "$exit_status" -ne 1 ]; then
         debug_log "DEBUG" "create_language_db_19: Combining results..."
-        # ヘッダー書き込み
         cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
@@ -468,25 +451,22 @@ EOF
              debug_log "DEBUG" "create_language_db_19: Failed to write header."
              exit_status=1
         else
-            # find + xargs で結合 (-r オプションは入力がなくてもエラーにならない)
             find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
             if [ $? -ne 0 ]; then
                  debug_log "DEBUG" "create_language_db_19: Failed to combine results."
                  exit_status=1
             else
                  debug_log "DEBUG" "create_language_db_19: Results combined successfully."
-                 # 完了マーカーを追加
                  printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
                  debug_log "DEBUG" "create_language_db_19: Completion marker added."
             fi
         fi
     fi
 
-    # trap が自動でクリーンアップを実行
     return "$exit_status"
 }
 
-# --- OpenWrt 19 以外のバージョン用実装関数 (旧 OK3 ベース、スピナー処理削除) ---
+# --- OpenWrt 19 以外のバージョン用実装関数 ---
 create_language_db_all() {
     # 引数受け取り
     local aip_function_name="$1"
@@ -496,17 +476,18 @@ create_language_db_all() {
 
     # 変数定義
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local final_output_dir="/tmp/aios" # Note: Same dir as _19
+    local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
     local pids=""
     local pid=""
     local exit_status=0 # 0:success, 1:critical error, 2:partial success
 
-    # --- Logging ---
+    # --- Logging & 並列数設定 ---
     debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line) for language '$target_lang_code'."
-    # MAX_PARALLEL_TASKS はグローバル変数をそのまま使用
-    debug_log "DEBUG" "create_language_db_all: Max parallel tasks: ${MAX_PARALLEL_TASKS:-4}"
+    # グローバル変数 MAX_PARALLEL_TASKS を使用。未定義の場合は安全策として 1 にフォールバック。
+    local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
+    debug_log "DEBUG" "create_language_db_all: Max parallel tasks from global setting: $current_max_parallel_tasks"
 
     # --- ヘッダー部分を書き出し ---
     cat > "$final_output_file" <<-EOF
@@ -521,42 +502,35 @@ EOF
         exit_status=1 # 致命的エラー
     else
         # --- メイン処理: 行ベースで並列翻訳 ---
-        # awk でフィルタリングし、while ループで読み込む
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line; do
             # --- 並列タスクをBGで起動 ---
-            # translate_single_line の出力を一時ファイルに追記
             translate_single_line "$line" "$target_lang_code" "$aip_function_name" >> "$final_output_file".partial &
             pid=$!
             pids="$pids $pid"
 
-            # --- 並列タスク数制限 ---
-            while [ "$(jobs -p | wc -l)" -ge "${MAX_PARALLEL_TASKS:-4}" ]; do
+            # --- 並列タスク数制限 (グローバル設定を使用) ---
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
                 sleep 1
             done
         done
-        # パイプラインの終了ステータスを確認 (特に awk が失敗した場合など)
-        # bash では $PIPESTATUS を使うが、POSIX sh では最後のコマンドの終了ステータスしか $? で取れない。
-        # awk の失敗を検知するのは難しいが、ここでは while ループ自体の失敗は $? で判定可能。
+        # パイプラインの終了ステータス確認
         if [ $? -ne 0 ] && [ "$exit_status" -eq 0 ]; then
              debug_log "DEBUG" "create_language_db_all: Error during awk/while processing."
              exit_status=1 # 致命的エラー
         fi
 
         # --- BGジョブが全て完了するまで待機 ---
-        # exit_status がまだ 0 または 2 の場合のみ待機
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Waiting for background tasks..."
             local wait_failed=0
             for pid in $pids; do
                 if wait "$pid"; then
-                    : # 成功時は何もしない
+                    :
                 else
-                    # wait が失敗した場合 (子プロセスが非0で終了)
                     wait_failed=1
                     debug_log "DEBUG" "create_language_db_all: Task PID $pid failed."
                 fi
             done
-            # いずれかの wait が失敗したら、全体ステータスを部分的失敗(2)にする
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                 exit_status=2
             fi
@@ -564,7 +538,6 @@ EOF
         fi
 
         # --- 部分出力を結合 ---
-        # exit_status が 1 (致命的エラー) でない場合のみ結合
         if [ "$exit_status" -ne 1 ]; then
             if [ -f "$final_output_file".partial ]; then
                 debug_log "DEBUG" "create_language_db_all: Combining partial results..."
@@ -581,14 +554,12 @@ EOF
         fi
 
         # --- 完了マーカーを付加 ---
-        # exit_status が 1 (致命的エラー) でない場合のみ付加
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             debug_log "DEBUG" "create_language_db_all: Completion marker added."
         fi
     fi # ヘッダー書き込み成功チェックの終わり
 
-    # 終了ステータスを返す
     return "$exit_status"
 }
 
