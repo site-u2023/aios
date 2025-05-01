@@ -8,7 +8,7 @@ January 25, 2025: version α
 
 ![2025-03-15 133725](https://github.com/user-attachments/assets/e3c7cef3-140d-4583-ae63-378e6e40d83d)
 
-### aios アップデート
+### aios update
 ```sh
 aios -u
 ```
@@ -18,7 +18,7 @@ aios -u
 aios -t
 ```
 
-### 並列処理 テストデータ
+### Parallel Processing Test Data
 
 | Device / Parallel | Download 1 (s) | Download 2 (s) | Download 3 (s) | Lang Gen 1 (s) | Lang Gen 2 (s) | Lang Gen 3 (s) |
 |-------------------|---------------|---------------|---------------|---------------|---------------|---------------|
@@ -37,6 +37,6 @@ aios -t
 | MAX PARALLELE: 5  | 10            | 10            | 9             | 25            | 23            | 23            |
 | Current Specifications: 5 | 11            | 19            | 25            | 12            | 12            | 13            |
 
-## 要件定義書
+## Requirement Document
 
 https://github.com/site-u2023/aios/blob/main/requirement-definition.md
