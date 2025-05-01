@@ -114,6 +114,10 @@ MSG_MEMORY=""
 MSG_MEMORY_INITIALIZED="false"
 MSG_MEMORY_LANG=""
 
+# API設定 (Global defaults)
+API_TIMEOUT="${API_TIMEOUT:-5}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-3}"
+
 # GitHub APIレート制限情報
 API_REMAINING=""       # 残りAPI呼び出し回数
 API_LIMIT=""           # APIレート制限値
