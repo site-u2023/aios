@@ -154,14 +154,12 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 # =======================
 # aios
 # =======================
-en|MSG_DOWNLOAD_SUMMARY=Max threads: {m} Files: {c}/{t} Time: {s}s API: {api}
-
 en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
 en|MSG_DOWNLOAD_SUMMARY=Download: {c}/{t} Time: {s} seconds # display_detected_download() 利用時
 en|MSG_DOWNLOAD_GITHUB=Github: {u} # display_detected_download() 利用時
 
-en|MSG_CONFIRM_RESTART=Download failed. Do you want to stop the system? (y/n){;}
 en|DOWNLOAD_PARALLEL_START=Downloading essential files{:} {c}/{t}
+en|MSG_CONFIRM_RESTART=Download failed. Do you want to stop the system? (y/n){;}
 en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully{:} {s} seconds
 # en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully # display_detected_download() 利用時
 
