@@ -2810,6 +2810,96 @@ download_fetch_file() {
     local chmod_mode="$3"
     local install_path="${BASE_DIR}/$file_name"
     local script_file="${CACHE_DIR}/script.ch"
+    local remote_url="${BASE_URL}/$file_name"
+    local wget_options=""
+    local ip_type_file="${CACHE_DIR}/ip_type.ch"
+    local retry_count=0
+    # API_MAX_RETRIES を使用し、未設定の場合はデフォルトで3回試行
+    local max_retries="${API_MAX_RETRIES:-3}"
+    local wget_exit_code=1 # wget の終了コードを保持 (デフォルトは失敗)
+
+    debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: $max_retries"
+
+    # キャッシュバスティングの適用
+    if [ "$FORCE" = "true" ] || echo "$clean_remote_version" | grep -q "direct"; then
+        remote_url="${remote_url}${CACHE_BUST}"
+    fi
+    debug_log "DEBUG" "Downloading from ${remote_url} to ${install_path}"
+
+    # IPバージョン判定（ip_type.ch利用、unknownや空ならエラー終了）
+    if [ ! -f "$ip_type_file" ]; then
+        debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch not found)" >&2
+        return 1
+    fi
+    wget_options=$(cat "$ip_type_file" 2>/dev/null)
+    if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
+        debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch is unknown or empty)" >&2
+        return 1
+    fi
+
+    # --- wget リトライロジック開始 ---
+    while [ "$retry_count" -lt "$max_retries" ]; do
+        if [ "$retry_count" -gt 0 ]; then
+            debug_log "DEBUG" "download_fetch_file: Retrying download for $file_name (Attempt $((retry_count + 1))/$max_retries)..."
+            sleep 1 # リトライ前に1秒待機
+        fi
+
+        # BusyBox wget向けに最適化した明示的なコマンド構文
+        # API_TIMEOUT を使用し、未設定の場合はデフォルトで5秒
+        wget --no-check-certificate $wget_options -T "${API_TIMEOUT:-5}" -q -O "$install_path" "$remote_url" 2>/dev/null
+        wget_exit_code=$?
+
+        if [ "$wget_exit_code" -eq 0 ]; then
+            # wget 成功
+            debug_log "DEBUG" "download_fetch_file: wget command successful for $file_name."
+            break # ループを抜ける
+        else
+            # wget 失敗
+            debug_log "DEBUG" "download_fetch_file: wget command failed for $file_name with exit code $wget_exit_code."
+        fi
+        retry_count=$((retry_count + 1))
+    done
+    # --- wget リトライロジック終了 ---
+
+    # --- 結果判定 ---
+    if [ "$wget_exit_code" -ne 0 ]; then
+        debug_log "DEBUG" "download_fetch_file: Download failed for $file_name after $max_retries attempts."
+        # 失敗した場合、不完全なファイルが残っている可能性があるので削除
+        rm -f "$install_path" 2>/dev/null
+        return 1
+    fi
+
+    # --- ファイル検証 (wget成功時のみ) ---
+    if [ ! -f "$install_path" ]; then
+        debug_log "DEBUG" "download_fetch_file: Downloaded file not found after successful wget: $file_name"
+        return 1
+    fi
+    if [ ! -s "$install_path" ]; then
+        debug_log "DEBUG" "download_fetch_file: Downloaded file is empty after successful wget: $file_name"
+        # 空ファイルも削除
+        rm -f "$install_path" 2>/dev/null
+        return 1
+    fi
+    debug_log "DEBUG" "download_fetch_file: File successfully downloaded and verified: ${install_path}"
+
+    # --- 権限設定 (成功時のみ) ---
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$install_path"
+        debug_log "DEBUG" "download_fetch_file: chmod +x applied to $file_name"
+    fi
+
+    # --- バージョン情報をキャッシュに保存 (成功時のみ) ---
+    save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
+
+    return 0
+}
+
+OK_download_fetch_file() {
+    local file_name="$1"
+    local clean_remote_version="$2"
+    local chmod_mode="$3"
+    local install_path="${BASE_DIR}/$file_name"
+    local script_file="${CACHE_DIR}/script.ch"
     
     debug_log "DEBUG" "download_fetch_file called for ${file_name}"
     
