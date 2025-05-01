@@ -2501,7 +2501,14 @@ download_parallel() {
     # この関数内で使用する実際の並列数を決定
     if [ "$osversion" = "19" ]; then
         # OpenWrt 19.x の場合は CORE_COUNT を使用
-        max_parallel="$CORE_COUNT"download_parallel() {
+        max_parallel="$CORE_COUNT"
+        debug_log "DEBUG" "Detected OpenWrt 19.x (Major version '$osversion'). Setting max parallel tasks to CORE_COUNT ($max_parallel)."
+    else
+        # それ以外の場合はグローバル変数 MAX_PARALLEL_TASKS を使用
+        max_parallel="$MAX_PARALLEL_TASKS"
+        debug_log "DEBUG" "Detected OS Major version '$osversion' (Not 19). Setting max parallel tasks using global MAX_PARALLEL_TASKS ($max_parallel)."
+    fi
+    
     local start_time end_time elapsed_seconds
     local max_parallel current_jobs pids pid job_index # max_parallel をローカル変数として宣言
     local overall_status fail_flag_file first_failed_command first_error_message
