@@ -115,7 +115,7 @@ MSG_MEMORY_INITIALIZED="false"
 MSG_MEMORY_LANG=""
 
 # API設定 (Global defaults)
-API_TIMEOUT="${API_TIMEOUT:-3}"
+API_TIMEOUT="${API_TIMEOUT:-8}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-5}"
 
 # GitHub APIレート制限情報
@@ -128,7 +128,7 @@ API_CACHE_TTL="60"     # APIキャッシュ有効期間（秒）
 
 # コミット情報キャッシュ関連
 COMMIT_CACHE_DIR="${CACHE_DIR}/commits" # コミット情報キャッシュディレクトリ
-COMMIT_CACHE_TTL="0" # コミットキャッシュ有効期間（30分=1800秒）
+COMMIT_CACHE_TTL="1800" # コミットキャッシュ有効期間（30分=1800秒）
 SKIP_CACHE="false"     # キャッシュスキップフラグ（true=キャッシュ無視）
 
 # 🔵　エラー・デバッグ　ここから　🔵-------------------------------------------------------------------------------------------------------------------------------------------
