@@ -24,6 +24,8 @@ https://github.com/site-u2023/aios/blob/main/requirement-definition.md
 
 ## テストデータ
 
+### 並列処理
+
 | Device / Parallel | Download 1 (s) | Download 2 (s) | Download 3 (s) | Lang Gen 1 (s) | Lang Gen 2 (s) | Lang Gen 3 (s) |
 |-------------------|---------------|---------------|---------------|---------------|---------------|---------------|
 | [**Linksys Velop WRT Pro 7**](https://qiita.com/site_u/items/aa619d4330a4f206d16b) |               |               |               |               |               |               |
