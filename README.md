@@ -22,14 +22,14 @@ aios -t
 
 | Device / Parallel | Download 1 (s) | Download 2 (s) | Download 3 (s) | Lang Gen 1 (s) | Lang Gen 2 (s) | Lang Gen 3 (s) |
 |-------------------|---------------|---------------|---------------|---------------|---------------|---------------|
-| [**Linksys Velop WRT Pro 7**](https://qiita.com/site_u/items/aa619d4330a4f206d16b) |               |               |               |               |               |               |
+| [**Velop WRT Pro 7 19.07**](https://qiita.com/site_u/items/aa619d4330a4f206d16b) |               |               |               |               |               |               |
 | MAX PARALLELE: 1  | 73            | 66            | 70            | 50            | 51            | 49            |
 | MAX PARALLELE: 2  | 37            | 38            | 36            | 29            | 25            | 24            |
 | MAX PARALLELE: 3  | 28            | 6             | 6             | 20            | 18            | 18            |
 | MAX PARALLELE: 4  | 7             | 6             | 17            | 17            | 18            | 22            |
 | MAX PARALLELE: 5  | 18            | 17            | 17            | 22            | 29            | 26            |
 | Current Specifications: 4 | 3             | 11            | 18            | 21            | 21            | 18            |
-| [**SONY NCP-HG100**](https://qiita.com/site_u/items/e07cd5b6326039e45fde) |               |               |               |               |               |               |
+| [**NCP-HG100 24.10**](https://qiita.com/site_u/items/e07cd5b6326039e45fde) |               |               |               |               |               |               |
 | MAX PARALLELE: 1  | 90            | 87            | 89            | 82            | 82            | 82            |
 | MAX PARALLELE: 2  | 49            | 49            | 48            | 54            | 60            | 59            |
 | MAX PARALLELE: 3  | 36            | 35            | 38            | 50            | 47            | 42            |
