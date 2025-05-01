@@ -50,7 +50,7 @@ TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # API設定 (Global defaults)
-API_TIMEOUT="${API_TIMEOUT:-3}"
+API_TIMEOUT="${API_TIMEOUT:-8}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-5}"
 # AI_TRANSLATION_FUNCTIONS should be defined globally (e.g., in main script or config)
 # Example: AI_TRANSLATION_FUNCTIONS="translate_with_google translate_with_lingva"
