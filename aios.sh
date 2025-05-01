@@ -612,11 +612,12 @@ get_message() {
 
     message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
 
+    # --- ここから修正: プレースホルダー内部の文字・パラメータ名のみ小文字化 ---
     awk_script='
-        function tolower_str(str,   i, c, out) {
+        function tolower_str(s,    i, c, out) {
             out = ""
-            for (i = 1; i <= length(str); i++) {
-                c = substr(str, i, 1)
+            for (i=1; i<=length(s); i++) {
+                c = substr(s, i, 1)
                 if (c >= "A" && c <= "Z") {
                     out = out "" sprintf("%c", ord(c) + 32)
                 } else {
@@ -625,9 +626,7 @@ get_message() {
             }
             return out
         }
-        function ord(str) {
-            return index("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", str)
-        }
+        function ord(str) { return index("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", str) }
         BEGIN { FS="=" }
         NR == 1 { msg = $0; next }
         NR > 1 {
@@ -636,12 +635,10 @@ get_message() {
             params[tolower_str(p_name)] = p_value
         }
         END {
+            # すべての {param} を小文字化して置換
             for (p_name in params) {
                 regex = "\\{" p_name "\\}"
-                current_value = params[p_name]
-                gsub(/\\/, "\\\\", current_value)
-                gsub(/&/, "\\&", current_value)
-                gsub(regex, current_value, msg)
+                gsub(regex, params[p_name], msg)
             }
             print msg
         }
