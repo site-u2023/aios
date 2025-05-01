@@ -616,6 +616,182 @@ get_message() {
         message="$key"
     fi
 
+    # 4. Detect and handle various colon markers (e.g. {;} -> add_colon="true")
+    case "$message" in
+        *'{;}'*|*'{؛}'*|*'｛;｝'*|*'｛؛｝'*)
+            message="${message//\{;\}/}"
+            message="${message//\{؛\}/}"
+            message="${message//｛;｝/}"
+            message="${message//｛；｝/}"
+            add_colon="true"
+            ;;
+    esac
+
+    # 5. Unconditionally normalize braces from full-width ｛｝ to half-width {}
+    message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
+
+    # --- ここが大文字小文字を区別しない置換の要となる awk_script ---
+    awk_script='
+    BEGIN { FS="=" }
+    NR == 1 { msg = $0; next } # First line is the message template
+    NR > 1 {
+        p_name = $1
+        # Correctly get raw value even if it contains =
+        p_value = substr($0, index($0, "=") + 1)
+        params[p_name] = p_value # Store param in array
+    }
+    END {
+        # Iterate through parameters to perform replacements
+        for (p_name in params) {
+            # Build case-insensitive regex: for each char in p_name, create [xX] pattern if letter
+            regex_ci = "\\{"
+            for (i = 1; i <= length(p_name); ++i) {
+                char = substr(p_name, i, 1)
+                lc = tolower(char)
+                uc = toupper(char)
+                if (lc == uc) {
+                    # Non-letter char, possibly escape if needed
+                    if (char == "\\") {
+                        regex_ci = regex_ci "\\\\"
+                    } else if (char == "[") {
+                        regex_ci = regex_ci "\\["
+                    } else if (char == "]") {
+                        regex_ci = regex_ci "\\]"
+                    } else {
+                        regex_ci = regex_ci char
+                    }
+                } else {
+                    regex_ci = regex_ci "[" lc uc "]"
+                }
+            }
+            regex_ci = regex_ci "\\}"
+
+            current_value = params[p_name]
+            gsub(/\\/, "\\\\", current_value)
+            gsub(/&/, "\\&", current_value)
+
+            # Perform case-insensitive substitution using the dynamic regex
+            gsub(regex_ci, current_value, msg)
+        }
+        print msg
+    }'
+
+    # 6. Execute the awk script only if we have $@ (parameters)
+    if [ $# -gt 0 ]; then
+        message=$(
+            (
+                printf "%s\n" "$message"
+                local param param_name param_value
+                for param in "$@"; do
+                    param_name=$(echo "$param" | cut -d'=' -f1)
+                    param_value=$(echo "$param" | cut -d'=' -f2-)
+                    if [ -n "$param_name" ]; then
+                        printf "%s=%s\n" "$param_name" "$param_value"
+                    fi
+                done
+            ) | awk "$awk_script"
+        )
+    fi
+
+    # 7. 最終的にnormalize_message()へ回す
+    message=$(normalize_message "$message" "$lang")
+
+    # 8. Apply optional formatting (upper, capitalize) if globally enabled
+    if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        case "$format_type" in
+            "upper")
+                if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
+                    message=$(format_string "upper" "$message")
+                fi
+                ;;
+            "capitalize")
+                if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
+                    message=$(format_string "capitalize" "$message")
+                fi
+                ;;
+            "none"|*)
+                ;;
+        esac
+    fi
+
+    # 9. Append colon if needed
+    if [ "$add_colon" = "true" ]; then
+        message="${message}: "
+    fi
+
+    # 10. Print final (with %b to interpret \n)
+    printf "%b" "$message"
+    return 0
+}
+
+# --- get_message function (Handles message retrieval, normalization, and formatting) ---
+# Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
+# format_type: "upper", "capitalize", "none" (default)
+# Reads global variables: DEFAULT_LANGUAGE, CACHE_DIR, MSG_MEMORY_INITIALIZED, MSG_MEMORY_LANG, MSG_MEMORY,
+#                         GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
+OK_get_message() {
+    local key="$1"
+    local format_type="none" # Default format type
+    local shift_count=1      # Default shift count (only key)
+    local awk_script         # Local variable for awk script
+
+    # Check if the second argument is a format type specifier
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                format_type="$2"
+                shift_count=2
+                ;;
+        esac
+    fi
+
+    # Shift arguments based on whether format type was provided
+    shift "$shift_count"
+
+    local lang="$DEFAULT_LANGUAGE"
+    local message=""
+    local add_colon="false" # Initialize flag for adding colon
+
+    # Get language code (assuming CACHE_DIR is defined)
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+    fi
+
+    # 1. Get message from DB file cache
+    local db_file="$(check_message_cache "$lang")" # Assumes check_message_cache exists
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        # Retrieve message for the specific language and key
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        # Fallback to default language if message not found for current language
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 2. Try memory cache if DB file cache failed
+    if [ -z "$message" ]; then
+        # Initialize memory cache if needed (assuming into_memory_message exists)
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        # Retrieve message from memory cache
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            # Fallback to default language in memory cache
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    # 3. Fallback to key itself if message not found
+    if [ -z "$message" ]; then
+        message="$key"
+    fi
+
     # --- MODIFIED: Step 4: Detect and handle various colon markers ---
     # Handles {;}, {؛}, ｛;｝, and ｛؛｝ for multi-language and full-width support.
     case "$message" in
