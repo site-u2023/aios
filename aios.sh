@@ -548,12 +548,153 @@ normalize_message() {
     return 0
 }
 
+get_message() {
+    local key="$1"
+    local format_type="none"
+    local shift_count=1
+    local awk_script
+
+    if [ $# -ge 2 ]; then
+        case "$2" in
+            upper|capitalize|none)
+                format_type="$2"
+                shift_count=2
+                ;;
+        esac
+    fi
+
+    shift "$shift_count"
+
+    local lang="$DEFAULT_LANGUAGE"
+    local message=""
+    local add_colon="false"
+
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang=$(cat "${CACHE_DIR}/message.ch")
+    fi
+
+    local db_file="$(check_message_cache "$lang")"
+    if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+            local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
+            if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
+                message=$(grep "^${DEFAULT_LANGUAGE}|${key}=" "$default_db_file" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    if [ -z "$message" ]; then
+        if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
+            into_memory_message
+        fi
+        if [ -n "$MSG_MEMORY" ]; then
+            message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
+                 message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            fi
+        fi
+    fi
+
+    if [ -z "$message" ]; then
+        message="$key"
+    fi
+
+    case "$message" in
+        *'{;}'*|*'{؛}'*|*'｛;｝'*|*'｛؛｝'*)
+            message="${message//\{;\}/}"
+            message="${message//\{؛\}/}"
+            message="${message//｛;｝/}"
+            message="${message//｛؛｝/}"
+            add_colon="true"
+            ;;
+    esac
+
+    message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
+
+    awk_script='
+        function tolower_str(str,   i, c, out) {
+            out = ""
+            for (i = 1; i <= length(str); i++) {
+                c = substr(str, i, 1)
+                if (c >= "A" && c <= "Z") {
+                    out = out "" sprintf("%c", ord(c) + 32)
+                } else {
+                    out = out "" c
+                }
+            }
+            return out
+        }
+        function ord(str) {
+            return index("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", str)
+        }
+        BEGIN { FS="=" }
+        NR == 1 { msg = $0; next }
+        NR > 1 {
+            p_name = $1
+            p_value = substr($0, index($0, "=") + 1)
+            params[tolower_str(p_name)] = p_value
+        }
+        END {
+            for (p_name in params) {
+                regex = "\\{" p_name "\\}"
+                current_value = params[p_name]
+                gsub(/\\/, "\\\\", current_value)
+                gsub(/&/, "\\&", current_value)
+                gsub(regex, current_value, msg)
+            }
+            print msg
+        }
+    '
+    if [ $# -gt 0 ]; then
+        message=$(
+            (
+                printf "%s\n" "$message"
+                local param param_name param_value
+                for param in "$@"; do
+                    param_name=$(echo "$param" | cut -d'=' -f1)
+                    param_value=$(echo "$param" | cut -d'=' -f2-)
+                    if [ -n "$param_name" ]; then
+                        printf "%s=%s\n" "$param_name" "$param_value"
+                    fi
+                done
+            ) | awk "$awk_script"
+        )
+    fi
+
+    message=$(normalize_message "$message" "$lang")
+
+    if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        case "$format_type" in
+            "upper")
+                if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
+                    message=$(format_string "upper" "$message")
+                fi
+                ;;
+            "capitalize")
+                if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
+                    message=$(format_string "capitalize" "$message")
+                fi
+                ;;
+            "none"|*)
+                ;;
+        esac
+    fi
+
+    if [ "$add_colon" = "true" ]; then
+        message="${message}: "
+    fi
+
+    printf "%b" "$message"
+    return 0
+}
+
 # --- get_message function (Handles message retrieval, normalization, and formatting) ---
 # Usage: get_message <key> [format_type] [param1=value1] [param2=value2] ...
 # format_type: "upper", "capitalize", "none" (default)
 # Reads global variables: DEFAULT_LANGUAGE, CACHE_DIR, MSG_MEMORY_INITIALIZED, MSG_MEMORY_LANG, MSG_MEMORY,
 #                         GET_MESSAGE_FORMATTING_ENABLED, FORMAT_TYPE_UPPER_ENABLED, FORMAT_TYPE_CAPITALIZE_ENABLED
-get_message() {
+OK_get_message() {
     local key="$1"
     local format_type="none" # Default format type
     local shift_count=1      # Default shift count (only key)
