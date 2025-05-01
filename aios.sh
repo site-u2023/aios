@@ -550,10 +550,11 @@ normalize_message() {
 
 get_message() {
     local key="$1"
-    local format_type="none"
-    local shift_count=1
-    local awk_script
+    local format_type="none" # Default format type
+    local shift_count=1      # Default shift count (only key)
+    local awk_script         # Local variable for awk script
 
+    # Check if the second argument is a format type specifier
     if [ $# -ge 2 ]; then
         case "$2" in
             upper|capitalize|none)
@@ -563,19 +564,24 @@ get_message() {
         esac
     fi
 
+    # Shift arguments based on whether format type was provided
     shift "$shift_count"
 
     local lang="$DEFAULT_LANGUAGE"
     local message=""
-    local add_colon="false"
+    local add_colon="false" # Initialize flag for adding colon
 
+    # Get language code (assuming CACHE_DIR is defined)
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang=$(cat "${CACHE_DIR}/message.ch")
     fi
 
-    local db_file="$(check_message_cache "$lang")"
+    # 1. Get message from DB file cache
+    local db_file="$(check_message_cache "$lang")" # Assumes check_message_cache exists
     if [ -n "$db_file" ] && [ -f "$db_file" ]; then
+        # Retrieve message for the specific language and key
         message=$(grep "^${lang}|${key}=" "$db_file" 2>/dev/null | cut -d'=' -f2-)
+        # Fallback to default language if message not found for current language
         if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
             local default_db_file="$(check_message_cache "$DEFAULT_LANGUAGE")"
             if [ -n "$default_db_file" ] && [ -f "$default_db_file" ]; then
@@ -584,104 +590,166 @@ get_message() {
         fi
     fi
 
+    # 2. Try memory cache if DB file cache failed
     if [ -z "$message" ]; then
+        # Initialize memory cache if needed (assuming into_memory_message exists)
         if [ "$MSG_MEMORY_INITIALIZED" != "true" ] || [ "$MSG_MEMORY_LANG" != "$lang" ]; then
             into_memory_message
         fi
+        # Retrieve message from memory cache
         if [ -n "$MSG_MEMORY" ]; then
             message=$(echo "$MSG_MEMORY" | grep "^${lang}|${key}=" 2>/dev/null | cut -d'=' -f2-)
+            # Fallback to default language in memory cache
             if [ -z "$message" ] && [ "$lang" != "$DEFAULT_LANGUAGE" ]; then
                  message=$(echo "$MSG_MEMORY" | grep "^${DEFAULT_LANGUAGE}|${key}=" 2>/dev/null | cut -d'=' -f2-)
             fi
         fi
     fi
 
+    # 3. Fallback to key itself if message not found
     if [ -z "$message" ]; then
         message="$key"
     fi
 
+    # --- MODIFIED: Step 4: Detect and handle various colon markers ---
+    # Handles {;}, {؛}, ｛;｝, and ｛؛｝ for multi-language and full-width support.
     case "$message" in
         *'{;}'*|*'{؛}'*|*'｛;｝'*|*'｛؛｝'*)
+            # Found one of the markers. Remove all possible occurrences.
+            # Remove standard half-width marker
             message="${message//\{;\}/}"
+            # Remove Arabic semicolon marker
             message="${message//\{؛\}/}"
+            # Remove full-width brace + half-width semicolon marker
             message="${message//｛;｝/}"
+            # Remove full-width brace + Arabic semicolon marker
             message="${message//｛؛｝/}"
             add_colon="true"
             ;;
     esac
+    # --- END MODIFIED ---
 
+    # --- ADDED: Unconditionally normalize braces before replacement ---
+    # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
     message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
 
-    # --- ここから修正: プレースホルダー内部の文字・パラメータ名のみ小文字化 ---
-    awk_script='
-        function tolower_str(s,    i, c, out) {
-            out = ""
-            for (i=1; i<=length(s); i++) {
-                c = substr(s, i, 1)
-                if (c >= "A" && c <= "Z") {
-                    out = out "" sprintf("%c", ord(c) + 32)
-                } else {
-                    out = out "" c
-                }
-            }
-            return out
-        }
-        function ord(str) { return index("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", str) }
+    # --- MODIFIED: Parameter replacement using awk with case-insensitive key handling ---
+    if [ $# -gt 0 ]; then
+        # Create modified awk script with verified case-insensitive matching
+        awk_script='
         BEGIN { FS="=" }
-        NR == 1 { msg = $0; next }
-        NR > 1 {
+        NR == 1 { msg = $0; next } # First line is the message template
+        NR > 1 { # Subsequent lines are parameters name=value
             p_name = $1
+            # Get the raw value (everything after first =)
             p_value = substr($0, index($0, "=") + 1)
-            params[tolower_str(p_name)] = p_value
+            
+            # --- NEW: Convert parameter name to lowercase for case-insensitive matching ---
+            p_name_lower = ""
+            for (i = 1; i <= length(p_name); i++) {
+                c = substr(p_name, i, 1)
+                if (c >= "A" && c <= "Z")
+                    p_name_lower = p_name_lower tolower(c)
+                else
+                    p_name_lower = p_name_lower c
+            }
+            
+            # Store parameters with both original and lowercase keys
+            params[p_name] = p_value
+            params_lower[p_name_lower] = p_value
         }
         END {
-            # すべての {param} を小文字化して置換
+            # First pass: exact case matching (original behavior)
             for (p_name in params) {
-                regex = "\\{" p_name "\\}"
-                gsub(regex, params[p_name], msg)
+                placeholder = "{" p_name "}"
+                gsub(placeholder, params[p_name], msg)
             }
-            print msg
+            
+            # Second pass: case-insensitive matching for remaining placeholders
+            # This finds any {Name} not already replaced, converts to lowercase for matching
+            while (match(msg, /{[^{}]+}/)) {
+                # Extract the placeholder with braces
+                ph_with_braces = substr(msg, RSTART, RLENGTH)
+                # Extract name without braces
+                ph_name = substr(ph_with_braces, 2, length(ph_with_braces) - 2)
+                # Convert to lowercase for matching
+                ph_name_lower = ""
+                for (i = 1; i <= length(ph_name); i++) {
+                    c = substr(ph_name, i, 1)
+                    if (c >= "A" && c <= "Z")
+                        ph_name_lower = ph_name_lower tolower(c)
+                    else
+                        ph_name_lower = ph_name_lower c
+                }
+                
+                # If we have this parameter in lowercase form, replace it
+                if (ph_name_lower in params_lower) {
+                    # Escape special characters in replacement string
+                    val = params_lower[ph_name_lower]
+                    gsub(/\\/, "\\\\", val) # Escape backslashes first
+                    gsub(/&/, "\\&", val)   # Escape ampersands
+                    
+                    # Replace this specific occurrence
+                    sub(ph_with_braces, val, msg)
+                } else {
+                    # No match found, break to avoid infinite loop
+                    break
+                }
+            }
+            
+            print msg # Output the final message
         }
-    '
-    if [ $# -gt 0 ]; then
-        message=$(
-            (
-                printf "%s\n" "$message"
-                local param param_name param_value
-                for param in "$@"; do
-                    param_name=$(echo "$param" | cut -d'=' -f1)
-                    param_value=$(echo "$param" | cut -d'=' -f2-)
-                    if [ -n "$param_name" ]; then
-                        printf "%s=%s\n" "$param_name" "$param_value"
-                    fi
-                done
-            ) | awk "$awk_script"
+        '
+        
+        # Execute the awk script with parameters
+        message=$( \
+            ( \
+                printf "%s\n" "$message"; \
+                local param param_name param_value; \
+                # Pass parameters to awk, one per line
+                for param in "$@"; do \
+                    param_name=$(echo "$param" | cut -d'=' -f1); \
+                    param_value=$(echo "$param" | cut -d'=' -f2-); \
+                    if [ -n "$param_name" ]; then \
+                        printf "%s=%s\n" "$param_name" "$param_value"; \
+                    fi; \
+                done \
+            ) | awk "$awk_script" \
         )
     fi
+    # --- END MODIFIED ---
 
+    # 6. Call normalize_message for remaining normalization
     message=$(normalize_message "$message" "$lang")
 
+    # 7. Apply formatting (if enabled and type specified)
     if [ "$GET_MESSAGE_FORMATTING_ENABLED" = "true" ]; then
+        # Only proceed if formatting is globally enabled
         case "$format_type" in
             "upper")
+                # Check if 'upper' format type is enabled
                 if [ "$FORMAT_TYPE_UPPER_ENABLED" = "true" ]; then
-                    message=$(format_string "upper" "$message")
+                    message=$(format_string "upper" "$message") # Assumes format_string exists
                 fi
                 ;;
             "capitalize")
+                # Check if 'capitalize' format type is enabled
                 if [ "$FORMAT_TYPE_CAPITALIZE_ENABLED" = "true" ]; then
-                    message=$(format_string "capitalize" "$message")
+                    message=$(format_string "capitalize" "$message") # Assumes format_string exists
                 fi
                 ;;
             "none"|*)
+                # Do nothing for "none" or unknown types
                 ;;
         esac
     fi
 
+    # 8. Append colon if marker {;} was present
     if [ "$add_colon" = "true" ]; then
-        message="${message}: "
+        message="${message}: " # Add colon and space
     fi
 
+    # 9. Output the final message (using %b to interpret backslash escapes like \n from {@})
     printf "%b" "$message"
     return 0
 }
