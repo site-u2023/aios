@@ -80,9 +80,10 @@ ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # --- Set MAX_PARALLEL_TASKS ---
 # MAX_PARALLEL_TASKS="$(c=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1); calculated_tasks=$((c + 1)); if [ "$calculated_tasks" -gt 5 ]; then echo 5; else echo "$calculated_tasks"; fi)"
-PARALLEL_LIMIT="5"
+PARALLEL_LIMIT="6"
+PARALLEL_PLUS="2"
 CORE_COUNT=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
-MAX_PARALLEL_TASKS=$(( (CORE_COUNT + 1 > PARALLEL_LIMIT) * PARALLEL_LIMIT + (CORE_COUNT + 1 <= PARALLEL_LIMIT) * (CORE_COUNT + 1) ))
+MAX_PARALLEL_TASKS=$(( (CORE_COUNT + PARALLEL_PLUS > PARALLEL_LIMIT) * PARALLEL_LIMIT + (CORE_COUNT + PARALLEL_PLUS <= PARALLEL_LIMIT) * (CORE_COUNT + PARALLEL_PLUS) ))
 
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
