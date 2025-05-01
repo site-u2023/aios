@@ -1,44 +1,35 @@
 SCRIPT_VERSION="2025-03-31-00-00"
 
-# =======================
+# debug_test
+en|MSG_UNDER_TEST=👽 test
+
 # internet-map-e-nuro.sh
-# =======================
 en|MSG_NURO_APPLY_SUCCESS=NURO MAP-E configuration completed. Please reboot the system.
 en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix.
 
-# =======================
 # internet-map-e.sh
-# =======================
 en|MSG_MAPE_APPLY_SUCCESS=MAP-E configuration completed. Please reboot the system
 en|MSG_MAPE_IPV6_PREFIX_FAILED=Failed to get IPv6 prefix
 
-# =======================
 # internet-ds-lite.sh
-# =======================
 en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {sp}
 en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
 en|MSG_DSLITE_AUTO_DETECT_FAILED=Provider detection failed
 en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {rsn}
 
-# =======================
 # menu.db
-# =======================
 en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE
 en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
 en|MENU_INTERNET_NURO_MAPE=MAP-E{:} NURO
 en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
 en|MENU_INTERNET_PPPOE=PPPoE
 
-# =======================
 # internet-auto-config.sh
-# =======================
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {sp} ({tp})
 en|MSG_AUTO_CONFIG_CONFIRM=Apply these settings {yn}{;}
 en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as} unsupported{:} Manual setup required
 
-# =======================
 # common-information.sh
-# ======================= 
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
 en|MSG_ISP_INFO_SUCCESS=ISP information retrieved successfully
 en|MSG_ISP_INFO_FAILED=Failed to retrieve ISP informatio
@@ -48,9 +39,7 @@ en|MSG_QUERY_INFO=Querying {t}{:} {a} via {n}
 en|MSG_LOCATION_RESULT=Location information retrieved {s}
 en|MSG_TIMEZONE_API=Zone Source{:} {a}
 
-# =======================
 # common-translation.sh
-# =======================
 en|MSG_TRANSLATING_CURRENTLY=Currently translating: {api}
 en|MSG_TRANSLATING_CREATED=Language file created successfully{:} {s} seconds
 en|MSG_TRANSLATION_FAILED=Translation process failed
@@ -61,9 +50,7 @@ en|MSG_LANGUAGE_SOURCE=Original language code{:} {i}
 en|MSG_LANGUAGE_CODE=Translation language code{:} {i}
 en|MSG_TRANSLATION_SUCCESS=Translation completed
 
-# =======================
 # package_auto.sh
-# =======================
 en|MENU_PACKAGE_STANDARD=Standard Installation (Recommended)
 en|MENU_PACKAGE_MINIMAL=Minimal Installation (Essential Only)
 en|MENU_PACKAGE_FULL=Full Installation (All Features)
@@ -76,9 +63,7 @@ en|MSG_PACKAGE_AUTO_SKIPPED=Package installation was skipped
 en|MSG_INSTALLING_PACKAGES=Installing packages...
 en|MSG_INSTALL_COMPLETED=Package installation completed successfully
 
-# =======================
 # package-manual.sh
-# =======================
 en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package {yn}{;}
 en|PKG_SECTION_BASIC=Basic System Functions
 en|PKG_SECTION_SYSADMIN=System Administration
@@ -92,18 +77,14 @@ en|PKG_SECTION_ADDITION=Additional Features
 en|PKG_SECTION_USB=USB Storage
 en|PKG_SECTION_SAMBA=File Sharing
 
-# =======================
 # common-system.sh
-# =======================
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{:} {info}
 en|MSG_DETECTED_ISP=ISP Provider{:}
 en|MSG_ISP_AS=Autonomous System Number{:}
 en|MSG_ISP_ORG=Organization{:}
 en|MSG_ISP_SUCCESS=ISP information detection completed successfully
 
-# =======================
 # common-menu.sh
-# =======================
 en|MENU_PACKAGES_AUTO_INSTALL=Automatic installation of packages
 en|MENU_PACKAGES_MANUAL_INSTALL=Manual installation of packages
 en|MENU_PACKAGES_SAMBA=Install SAMBA4 file sharing
@@ -136,9 +117,7 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 # en|CONFIG_MAIN_SELECT_PROMPT=Please select a number (1-{0}, 10, 00){;} 
 # en|CONFIG_SUB_SELECT_PROMPT=Please select a number (1-{0}, 0, 10){;} 
 
-# =======================
-# aios
-# =======================
+# aios.sh
 en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
 en|MSG_DOWNLOAD_SUMMARY=Download: {c}/{t} Time: {s} seconds # display_detected_download() 利用時
 en|MSG_DOWNLOAD_GITHUB=Github: {u} # display_detected_download() 利用時
@@ -191,9 +170,7 @@ en|MSG_CACHE_ENABLED=Cache enabled: Using cached version information when availa
 
 # en|MSG_BANNER_DISCLAIMER=WARNING{:} This script is used at your own risk
 
-# =======================
 # common-country.sh
-# =======================
 en|MSG_CONFIRM_USE_SETTINGS_SHORT=Use these location settings {yn}{:}
 en|MSG_CONFIRM_USE_SETTINGS=Do you want to use these location and timezone settings?
 en|MSG_CONFIRM_DEFAULT=Confirm {yn}{;}
@@ -223,9 +200,7 @@ en|MSG_SELECTED_ITEM=Selected{:} {item}
 en|MSG_SELECT_TIMEZONE=Please select your zone from the list
 en|ERR_FILE_NOT_FOUND=Error{:} File not found{:} {file}
 
-# =======================
 # common-package.sh
-# =======================
 en|MSG_RUNNING_UPDATE=Updating package list
 en|MSG_UPDATE_FAILED=Update failed. Check the logs for details
 en|MSG_UPDATE_SUCCESS=Package list has been updated to the latest version
@@ -238,9 +213,7 @@ en|MSG_ERROR_NO_PACKAGE_MANAGER=No package manager found in cache
 en|MSG_CONFIRM_INSTALL=Package{:} {pkg}{@}Install this package {yn}{;}
 en|MSG_CONFIRM_INSTALL_WITH_DESC=Package{:} {pkg}{@}Description{:} {desc}{@}Install this package {yn}{;}
 
-# =======================
 # system-config.sh
-# =======================
 en|MSG_INFO_NET_COUNTRY=IP location
 en|MSG_INFO_NETWORK=IP Type{:} {i}
 en|MSG_INFO_CPUCORE=CPU Core Count{:} {i}
@@ -307,8 +280,3 @@ en|MSG_GENERATING_REPORT=Generating system report...
 en|MSG_REPORT_GENERATED=System report generated{:} {file}
 en|MSG_DEBUG_INFO_HEADER=System Debug Information
 en|MSG_DEBUG_INFO_FOOTER=End of Debug Information
-
-# =======================
-# end marker
-# =======================
-# en|AIOS_TRANSLATION_COMPLETE_MARKER=EOF
