@@ -28,14 +28,14 @@ aios -t
 | MAX PARALLELE: 3  | 28            | 6             | 6             | 20            | 18            | 18            |
 | MAX PARALLELE: 4  | 7             | 6             | 17            | 17            | 18            | 22            |
 | MAX PARALLELE: 5  | 18            | 17            | 17            | 22            | 29            | 26            |
-| Current Specifications | 3             | 11            | 18            | 21            | 21            | 18            |
+| Current Specifications: 4 | 3             | 11            | 18            | 21            | 21            | 18            |
 | [**SONY NCP-HG100**](https://qiita.com/site_u/items/e07cd5b6326039e45fde) |               |               |               |               |               |               |
 | MAX PARALLELE: 1  | 90            | 87            | 89            | 82            | 82            | 82            |
 | MAX PARALLELE: 2  | 49            | 49            | 48            | 54            | 60            | 59            |
 | MAX PARALLELE: 3  | 36            | 35            | 38            | 50            | 47            | 42            |
 | MAX PARALLELE: 4  | 30            | 31            | 30            | 31            | 31            | 32            |
 | MAX PARALLELE: 5  | 10            | 10            | 9             | 25            | 23            | 23            |
-| Current Specifications | 11            | 19            | 25            | 12            | 12            | 13            |
+| Current Specifications: 5 | 11            | 19            | 25            | 12            | 12            | 13            |
 
 ## 要件定義書
 
