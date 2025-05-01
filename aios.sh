@@ -2478,6 +2478,7 @@ download_parallel() {
     local exported_vars log_file_prefix stdout_log stderr_log error_info_file
     local line command_line cmd_status
     local loaded_files source_success source_status
+    local osversion # OSバージョン用ローカル変数
 
     start_time=$(date +%s)
     end_time=""
@@ -2492,50 +2493,12 @@ download_parallel() {
     log_file_prefix="${LOG_DIR}/download_parallel_task_"
 
     # --- OS Version Detection ---
-    local osversion
     # osversion.ch から読み込み、最初の '.' より前の部分を抽出
     osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
     osversion="${osversion%%.*}"
     debug_log "DEBUG" "download_parallel: Detected OS major version: '$osversion'"
 
-    # この関数内で使用する実際の並列数を決定
-    if [ "$osversion" = "19" ]; then
-        # OpenWrt 19.x の場合は CORE_COUNT を使用
-        max_parallel="$CORE_COUNT"
-        debug_log "DEBUG" "Detected OpenWrt 19.x (Major version '$osversion'). Setting max parallel tasks to CORE_COUNT ($max_parallel)."
-    else
-        # それ以外の場合はグローバル変数 MAX_PARALLEL_TASKS を使用
-        max_parallel="$MAX_PARALLEL_TASKS"
-        debug_log "DEBUG" "Detected OS Major version '$osversion' (Not 19). Setting max parallel tasks using global MAX_PARALLEL_TASKS ($max_parallel)."
-    fi
-    
-    local start_time end_time elapsed_seconds
-    local max_parallel current_jobs pids pid job_index # max_parallel をローカル変数として宣言
-    local overall_status fail_flag_file first_failed_command first_error_message
-    local script_path load_targets load_target retry
-    local exported_vars log_file_prefix stdout_log stderr_log error_info_file
-    local line command_line cmd_status
-    local loaded_files source_success source_status
-
-    start_time=$(date +%s)
-    end_time=""
-    elapsed_seconds=0
-
-    overall_status=0
-    fail_flag_file="${DL_DIR}/dl_failed_flag"
-    first_failed_command=""
-    first_error_message=""
-    script_path="$0"
-    exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE"
-    log_file_prefix="${LOG_DIR}/download_parallel_task_"
-
-    # --- OS Version Detection ---
-    local osversion
-    # osversion.ch から読み込み、最初の '.' より前の部分を抽出
-    osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
-    osversion="${osversion%%.*}"
-    debug_log "DEBUG" "download_parallel: Detected OS major version: '$osversion'"
-
+    # --- OSバージョンに応じた最大並列タスク数の設定 ---
     # この関数内で使用する実際の並列数を決定
     if [ "$osversion" = "19" ]; then
         # OpenWrt 19.x の場合は CORE_COUNT を使用
@@ -2730,213 +2693,7 @@ download_parallel() {
 
     rm -f "$cmd_tmpfile" "$load_tmpfile"
 
-    if [ $overall_status -eq 0 ]; then
-        end_time=$(date +%s)
-        elapsed_seconds=$((end_time - start_time))
-        success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}")"
-        stop_spinner "$success_message" "success"
-        return 0
-    else
-        [ -z "$first_failed_command" ] && first_failed_command="Unknown task"
-        [ -z "$first_error_message" ] && first_error_message="Check logs in $LOG_DIR"
-        failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_command" "e=$first_error_message")"
-        stop_spinner "$failure_message" "failure"
-        end_time=$(date +%s)
-        elapsed_seconds=$((end_time - start_time))
-        printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_command" "$elapsed_seconds"
-        return 1
-    fi
-}
-        debug_log "DEBUG" "Detected OpenWrt 19.x (Major version '$osversion'). Setting max parallel tasks to CORE_COUNT ($max_parallel)."
-    else
-        # それ以外の場合はグローバル変数 MAX_PARALLEL_TASKS を使用
-        max_parallel="$MAX_PARALLEL_TASKS"
-        debug_log "DEBUG" "Detected OS Major version '$osversion' (Not 19). Setting max parallel tasks using global MAX_PARALLEL_TASKS ($max_parallel)."
-    fi
-    # --- OSバージョンに応じた最大並列タスク数の設定ここまで ---
-
-    # 決定された並列数を表示
-    printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$max_parallel")")"
-    debug_log "DEBUG" "Effective max parallel download tasks set to: $max_parallel"
-
-    # --- 以下、既存の処理 ---
-    if ! mkdir -p "$DL_DIR"; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
-        end_time=$(date +%s)
-        elapsed_seconds=$((end_time - start_time))
-        printf "Download failed (directory creation) in %s seconds.\n" "$elapsed_seconds"
-        return 1
-    fi
-    if ! mkdir -p "$LOG_DIR"; then
-        debug_log "DEBUG" "Failed to create log directory: $LOG_DIR" >&2
-    fi
-    rm -f "$fail_flag_file" 2>/dev/null
-
-    start_spinner "$(color blue "$(get_message 'DOWNLOAD_PARALLEL_START')")"
-
-    if [ ! -f "$script_path" ]; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
-        debug_log "DEBUG" "Script path '$script_path' is not found"
-        end_time=$(date +%s)
-        elapsed_seconds=$((end_time - start_time))
-        printf "Download failed (script not found) in %s seconds.\n" "$elapsed_seconds"
-        return 1
-    fi
-
-    # download_files()関数のコマンド部のみ抽出（パイプなしで一時ファイルに保存）
-    local cmd_tmpfile load_tmpfile
-    cmd_tmpfile="${DL_DIR}/cmd_list_$$.txt"
-    load_tmpfile="${DL_DIR}/load_targets_$$.txt"
-    rm -f "$cmd_tmpfile" "$load_tmpfile" 2>/dev/null
-
-    awk '
-        BEGIN { in_func=0; }
-        /^download_files\(\) *\{/ { in_func=1; next }
-        /^}/ { if(in_func){in_func=0} }
-        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
-    ' "$script_path" > "$cmd_tmpfile"
-
-    # コマンドリストをquiet化しつつ一時ファイルに保存
-    > "$cmd_tmpfile.quiet"
-    while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        case "$line" in
-            download*)
-                if ! echo "$line" | grep -qw "quiet"; then
-                    line="$line quiet"
-                fi
-                ;;
-        esac
-        printf "%s\n" "$line" >> "$cmd_tmpfile.quiet"
-    done < "$cmd_tmpfile"
-
-    mv "$cmd_tmpfile.quiet" "$cmd_tmpfile"
-
-    # コマンドリストが空なら終了
-    if ! grep -q . "$cmd_tmpfile"; then
-        stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
-        end_time=$(date +%s)
-        elapsed_seconds=$((end_time - start_time))
-        printf "Download completed (no tasks) in %s seconds.\n" "$elapsed_seconds"
-        rm -f "$cmd_tmpfile" "$load_tmpfile"
-        return 0
-    fi
-
-    # ロード対象ファイル収集
-    > "$load_tmpfile"
-    while IFS= read -r command_line; do
-        case "$command_line" in
-            *'"load"')
-                set -- $command_line
-                if [ "$#" -ge 2 ]; then
-                    load_fname=$2
-                    load_fname=${load_fname#\"}
-                    load_fname=${load_fname%\"}
-                    if [ -n "$load_fname" ]; then
-                        printf "%s\n" "$load_fname" >> "$load_tmpfile"
-                    fi
-                fi
-                ;;
-        esac
-    done < "$cmd_tmpfile"
-
-    eval "export $exported_vars"
-    pids=""
-    job_index=0
-
-    while IFS= read -r command_line || [ -n "$command_line" ]; do
-        [ -z "$command_line" ] && continue
-        job_index=$((job_index + 1))
-        task_name=$(printf "%03d" "$job_index")
-        stdout_log="${log_file_prefix}${task_name}.stdout.log"
-        stderr_log="${log_file_prefix}${task_name}.stderr.log"
-        error_info_file="${DL_DIR}/error_info_${task_name}.txt"
-
-        (
-            eval "$command_line" >"$stdout_log" 2>"$stderr_log"
-            cmd_status=$?
-            if [ $cmd_status -ne 0 ]; then
-                debug_log "DEBUG" "[$$][$task_name] Command failed: $command_line"
-                {
-                    echo "$command_line"
-                    if [ -s "$stderr_log" ]; then
-                        grep -v '^[[:space:]]*$' "$stderr_log" | head -n 1
-                    else
-                        echo "No error output captured"
-                    fi
-                } >"$error_info_file"
-                exit 1
-            fi
-            exit 0
-        ) &
-        pid=$!
-        pids="$pids $pid"
-
-        # 並列数制御（決定された max_parallel を使用）
-        set -- $pids
-        if [ $# -ge "$max_parallel" ]; then
-            wait "$1"
-            pids=""
-            shift
-            while [ $# -gt 0 ]; do
-                pids="$pids $1"
-                shift
-            done
-        fi
-    done < "$cmd_tmpfile"
-
-    # 残りのジョブを待機
-    for pid in $pids; do
-        wait "$pid" || overall_status=1
-    done
-
-    # エラー処理
-    if ls "$DL_DIR"/error_info_*.txt 2>/dev/null | grep -q .; then
-        overall_status=1
-        first_error_file=$(ls "$DL_DIR"/error_info_*.txt 2>/dev/null | sort | head -n 1)
-        if [ -n "$first_error_file" ]; then
-            first_failed_command=$(head -n 1 "$first_error_file" 2>/dev/null)
-            first_error_message=$(sed -n '2p' "$first_error_file" 2>/dev/null)
-            first_error_message=$(printf '%s' "$first_error_message" | tr -cd '[:print:]\t' | head -c 100)
-        fi
-    fi
-
-    # ロード対象ファイルのsource
-    if [ $overall_status -eq 0 ] && [ -s "$load_tmpfile" ]; then
-        loaded_files=""
-        while IFS= read -r load_file; do
-            [ -z "$load_file" ] && continue
-            echo "$loaded_files" | grep -qxF "$load_file" && continue
-            full_load_path="${BASE_DIR}/$load_file"
-            retry=1
-            source_success=0
-            while [ $retry -le 3 ]; do
-                . "$full_load_path"
-                source_status=$?
-                if [ $source_status -eq 0 ]; then
-                    source_success=1
-                    break
-                else
-                    debug_log "DEBUG" "Source '$full_load_path' failed (attempt $retry)"
-                    sleep 1
-                fi
-                retry=$((retry + 1))
-            done
-            loaded_files="${loaded_files}${load_file}\n"
-            if [ $source_success -ne 1 ]; then
-                debug_log "DEBUG" "Failed to source '$full_load_path' after 3 tries" >&2
-                overall_status=1
-                if [ -z "$first_failed_command" ]; then
-                    first_failed_command="source"
-                    first_error_message="Failed to source $load_file"
-                fi
-                break
-            fi
-        done < "$load_tmpfile"
-    fi
-
-    rm -f "$cmd_tmpfile" "$load_tmpfile"
-
+    # --- 最終ステータス判定と終了処理 ---
     if [ $overall_status -eq 0 ]; then
         end_time=$(date +%s)
         elapsed_seconds=$((end_time - start_time))
