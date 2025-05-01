@@ -633,71 +633,93 @@ get_message() {
     # Ensures full-width braces ｛｝ become half-width {} for awk compatibility
     message=$(echo "$message" | sed 's/｛/{/g; s/｝/}/g')
 
-    # --- MODIFIED: Parameter replacement using awk with case-insensitive key handling ---
+    # --- MODIFIED: Parameter replacement using POSIX-compatible awk ---
     if [ $# -gt 0 ]; then
-        # Create modified awk script with verified case-insensitive matching
+        # Create AWK script with POSIX compatible syntax
         awk_script='
         BEGIN { FS="=" }
         NR == 1 { msg = $0; next } # First line is the message template
-        NR > 1 { # Subsequent lines are parameters name=value
+        NR > 1 { # Process each parameter
             p_name = $1
             # Get the raw value (everything after first =)
             p_value = substr($0, index($0, "=") + 1)
             
-            # --- NEW: Convert parameter name to lowercase for case-insensitive matching ---
+            # Store param in array (key is original case from input)
+            params[p_name] = p_value
+            
+            # Convert parameter name to lowercase for case-insensitive matching
             p_name_lower = ""
             for (i = 1; i <= length(p_name); i++) {
                 c = substr(p_name, i, 1)
                 if (c >= "A" && c <= "Z")
-                    p_name_lower = p_name_lower tolower(c)
-                else
-                    p_name_lower = p_name_lower c
+                    c = tolower(c)
+                p_name_lower = p_name_lower c
             }
             
-            # Store parameters with both original and lowercase keys
-            params[p_name] = p_value
+            # Store lowercase version
             params_lower[p_name_lower] = p_value
         }
         END {
-            # First pass: exact case matching (original behavior)
+            # First process exact matches (backwards compatibility)
             for (p_name in params) {
                 placeholder = "{" p_name "}"
-                gsub(placeholder, params[p_name], msg)
-            }
-            
-            # Second pass: case-insensitive matching for remaining placeholders
-            # This finds any {Name} not already replaced, converts to lowercase for matching
-            while (match(msg, /{[^{}]+}/)) {
-                # Extract the placeholder with braces
-                ph_with_braces = substr(msg, RSTART, RLENGTH)
-                # Extract name without braces
-                ph_name = substr(ph_with_braces, 2, length(ph_with_braces) - 2)
-                # Convert to lowercase for matching
-                ph_name_lower = ""
-                for (i = 1; i <= length(ph_name); i++) {
-                    c = substr(ph_name, i, 1)
-                    if (c >= "A" && c <= "Z")
-                        ph_name_lower = ph_name_lower tolower(c)
-                    else
-                        ph_name_lower = ph_name_lower c
-                }
                 
-                # If we have this parameter in lowercase form, replace it
-                if (ph_name_lower in params_lower) {
-                    # Escape special characters in replacement string
-                    val = params_lower[ph_name_lower]
-                    gsub(/\\/, "\\\\", val) # Escape backslashes first
-                    gsub(/&/, "\\&", val)   # Escape ampersands
-                    
-                    # Replace this specific occurrence
-                    sub(ph_with_braces, val, msg)
+                # Escape special chars in replacement text
+                val = params[p_name]
+                gsub(/\\/, "\\\\", val) # Escape backslashes first
+                gsub(/&/, "\\&", val)   # Escape ampersands
+                
+                # Replace exact matches
+                gsub(placeholder, val, msg)
+            }
+            
+            # Now scan for any remaining {placeholders} and process them 
+            # using case-insensitive matching
+            # POSIX AWK friendly approach: look at each character in the string
+            new_msg = ""
+            i = 1
+            while (i <= length(msg)) {
+                if (substr(msg, i, 1) == "{") {
+                    # Potential placeholder found
+                    j = index(substr(msg, i), "}")
+                    if (j > 0) {
+                        # Extract the complete placeholder with braces
+                        ph_with_braces = substr(msg, i, j)
+                        # Extract just the name without braces
+                        ph_name = substr(ph_with_braces, 2, j - 2)
+                        
+                        # Convert to lowercase for matching
+                        ph_name_lower = ""
+                        for (k = 1; k <= length(ph_name); k++) {
+                            c = substr(ph_name, k, 1)
+                            if (c >= "A" && c <= "Z")
+                                c = tolower(c)
+                            ph_name_lower = ph_name_lower c
+                        }
+                        
+                        # Check if we have this parameter (case-insensitive)
+                        if (ph_name_lower in params_lower) {
+                            # Replace with parameter value
+                            new_msg = new_msg params_lower[ph_name_lower]
+                            i = i + j # Skip past this placeholder
+                        } else {
+                            # No match found, keep as is
+                            new_msg = new_msg ph_with_braces
+                            i = i + j
+                        }
+                    } else {
+                        # No closing brace found, just add the character
+                        new_msg = new_msg substr(msg, i, 1)
+                        i++
+                    }
                 } else {
-                    # No match found, break to avoid infinite loop
-                    break
+                    # Not a placeholder, just add the character
+                    new_msg = new_msg substr(msg, i, 1)
+                    i++
                 }
             }
             
-            print msg # Output the final message
+            print new_msg # Output the final message
         }
         '
         
