@@ -3355,6 +3355,28 @@ download_fetch_file() {
     return 0
 }
 
+display_detected_download() {
+  local max_parallel="$1"
+  local completed_tasks="$2"
+  local total_tasks="$3"
+  local elapsed_seconds="$4"
+  local api_status_string="$5"
+  local github_usage=""
+
+  # Extract the usage part from the API status string (remove "API: ")
+  # POSIX compliant parameter expansion
+  github_usage="${api_status_string#API: }"
+  # Trim leading/trailing whitespace just in case (using sed for POSIX compliance)
+  github_usage=$(echo "$github_usage" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+  # Display Max Threads (Line 2 of summary)
+  printf "%s\n" "$(get_message "MSG_MAX_PARALLEL_TASKS" m="$max_parallel")"
+  # Display Download Summary (Line 3 of summary)
+  printf "%s\n" "$(get_message "MSG_DOWNLOAD_SUMMARY" c="$completed_tasks" t="$total_tasks" s="$elapsed_seconds")"
+  # Display GitHub API Status (Line 4 of summary)
+  printf "%s\n" "$(get_message "MSG_DOWNLOAD_GITHUB" u="$github_usage")"
+}
+
 # 🔴　ダウンロード系　ここまで　🔴　-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　バナー・デバイス情報　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
