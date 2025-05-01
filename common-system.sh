@@ -304,35 +304,6 @@ get_country_info() {
     return 1
 }
 
-# デバイス情報キャッシュを初期化・保存する関数
-init_device_cache() {
-   
-    # アーキテクチャ情報の保存
-    if [ ! -f "${CACHE_DIR}/architecture.ch" ]; then
-        local arch
-        arch=$(uname -m)
-        echo "$arch" > "${CACHE_DIR}/architecture.ch"
-        debug_log "DEBUG" "Created architecture cache: $arch"
-    fi
-
-    # OSバージョン情報の保存
-    if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
-        local version=""
-        # OpenWrtバージョン取得
-        if [ -f "/etc/openwrt_release" ]; then
-            # ファイルからバージョン抽出
-            version=$(grep -E "DISTRIB_RELEASE" /etc/openwrt_release | cut -d "'" -f 2)
-            echo "$version" > "${CACHE_DIR}/osversion.ch"
-            debug_log "DEBUG" "Created OS version cache: $version"
-        else
-            echo "unknown" > "${CACHE_DIR}/osversion.ch"
-            echo "WARN: Could not determine OS version"
-        fi
-    fi
- 
-    return 0
-}
-
 # パッケージマネージャー情報を検出・保存する関数
 detect_and_save_package_manager() {
     if [ ! -f "${CACHE_DIR}/package_manager.ch" ]; then
