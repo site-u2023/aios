@@ -937,8 +937,7 @@ create_language_db() {
             if mkdir "$lock_dir" 2>/dev/null; then
                 lock_acquired=1
                 # --- Lock acquired successfully ---
-                # Append the entire buffer using printf "%s" (buffer already has newlines)
-                printf "%s" "$output_buffer" >> "$final_output_file"
+                echo "$output_buffer" >> "$final_output_file"
                 local write_status=$?
                 # Release lock
                 rmdir "$lock_dir"
