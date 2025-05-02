@@ -120,7 +120,7 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 # aios.sh
 en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
 en|MSG_DOWNLOAD_SUMMARY=Download: {c}/{t} Time: {s} seconds # display_detected_download() 利用時
-en|MSG_DOWNLOAD_GITHUB=Github: {u} # display_detected_download() 利用時
+# en|MSG_DOWNLOAD_GITHUB=Github: {u} # display_detected_download() 利用時
 
 en|DOWNLOAD_PARALLEL_START=Downloading essential files
 # en|DOWNLOAD_PARALLEL_START=Downloading essential files{:} {c}/{t} # display_detected_download() 利用時
@@ -128,9 +128,12 @@ en|MSG_CONFIRM_RESTART=Download failed. Do you want to stop the system? (y/n){;}
 en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully{:} {s} seconds
 # en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully # display_detected_download() 利用時
 
+# en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}{:}
 en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}{:}
-en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:} {f} {v} {api}
-en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:} {f} {v} {api}
+# en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:} {f} {v} {api}
+en|CONFIG_DOWNLOAD_SUCCESS=Downloaded{:} {f}
+# en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:} {f} {v} {api}
+en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:} {f}
 en|CONFIG_DOWNLOAD_FAILED=Failed to download{:} {f} {v} {api}
 
 en|MSG_INFO_DEVICE=Device information retrieved successfully
@@ -142,7 +145,7 @@ en|MSG_HELP_RESET=Reset all cached data
 en|MSG_HELP_DEBUG=Enable debug mode
 en|MSG_HELP_UPDATE=Update aios script
 en|MSG_HELP_FORCE=Force operations without confirmation
-en|MSG_HELP_TOKEN=Setup GitHub API token
+# en|MSG_HELP_TOKEN=Setup GitHub API token
 en|MSG_HELP_FULL=Run in full mode
 en|MSG_HELP_LIGHT=Run in light mode
 en|MSG_HELP_COMMON_DEBUG=Run in debug mode
