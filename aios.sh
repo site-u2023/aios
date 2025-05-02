@@ -56,7 +56,6 @@ SCRIPT_VERSION="2025.05.02-00-01"
 # システム制御
 DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, unset=無効）
 DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
-DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # ダウンロード方式 (direct)
 
 # パス・ファイル関連（resolve_path対応版）
 INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
@@ -86,7 +85,7 @@ MAX_PARALLEL_TASKS=$(( (CORE_COUNT + PARALLEL_PLUS > PARALLEL_LIMIT) * PARALLEL_
 
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
-# CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
+DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # ダウンロード方式 (direct)
 
 # wget関連設定
 BASE_WGET="wget --no-check-certificate -q" # 基本wgetコマンド
