@@ -264,7 +264,7 @@ create_language_db_parallel() {
         # OpenWrt 19 以外の場合は _all 関数を呼び出す
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion'"
         # create_language_db_all "$@" # 引数をそのまま渡す
-        test_create_language_db_all "$@" # 引数をそのまま渡す  # <--------------------------------------------------------------------------------------------------------------------------------------------
+        test_create_db_subshell "$@" # 引数をそのまま渡す  # <--------------------------------------------------------------------------------------------------------------------------------------------
         exit_status=$? # _all 関数の終了ステータスを取得
     fi
     debug_log "DEBUG" "create_language_db_parallel: Child function finished with status: $exit_status"
