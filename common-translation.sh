@@ -883,74 +883,121 @@ EOF
 }
 
 # --- Main Parallel Execution Wrapper ---
-# Determines the parallelism limit based on OS version and calls the appropriate worker function.
+# Routes to the appropriate worker function based on OS version, passing the pre-calculated parallelism limit.
+# Uses the original OK_create_language_db_parallel logic and relies on global CORE_COUNT and MAX_PARALLEL_TASKS.
 create_language_db_parallel() {
-    # 引数受け取り
     local aip_function_name="$1"
-    local api_endpoint_url="$2"
-    local domain_name="$3"
+    local api_endpoint_url="$2"  # Passed for logging/context
+    local domain_name="$3"       # Used for spinner message
     local target_lang_code="$4"
 
-    # 変数定義
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local exit_status=1 # デフォルトは失敗(1)
+    local total_lines=0 # 翻訳対象行数
+
+    # --- Time measurement variables ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=0
+
+    # --- Spinner variables ---
+    local spinner_started="false"
+
+    # --- OS Version Detection (Original Logic) ---
     local osversion
-    local exit_status=0
-    local calculated_max_tasks=1 # Default limit
+    # osversion.ch から読み込み、最初の '.' より前の部分を抽出
+    osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
+    osversion="${osversion%%.*}"
+    debug_log "DEBUG" "create_language_db_parallel: Detected OS major version: '$osversion'"
 
-    # --- Get OS Version ---
-    osversion=$(get_os_version)
-    debug_log "DEBUG" "create_language_db_parallel: Detected OS Version: $osversion"
-
-    # --- Determine Max Parallel Tasks Limit ---
-    # This logic calculates the limit regardless of which function will be called.
-    if [ "$osversion" -ge 19 ]; then
-        debug_log "DEBUG" "create_language_db_parallel: OS Version >= 19. Calculating limit based on CPU cores."
-        local core_count
-        if [ -r "/proc/cpuinfo" ]; then
-             # Use grep -c for efficiency
-             core_count=$(grep -c "^processor" /proc/cpuinfo)
-        else
-             core_count=0
-             debug_log "WARNING" "create_language_db_parallel: Cannot read /proc/cpuinfo to determine core count."
-        fi
-        # Validate core_count is a non-negative integer
-        if ! expr "$core_count" : '^[0-9][0-9]*$' > /dev/null; then
-             debug_log "WARNING" "create_language_db_parallel: Invalid core count detected ('$core_count'). Defaulting calculation base to 0."
-             core_count=0
-        fi
-        # Set limit to core_count, ensuring a minimum of 1
-        calculated_max_tasks=$((core_count > 0 ? core_count : 1))
-        debug_log "DEBUG" "create_language_db_parallel: CPU Core Count: $core_count, Limit set to: $calculated_max_tasks"
-    else
-        debug_log "DEBUG" "create_language_db_parallel: OS Version < 19. Calculating limit based on MAX_PARALLEL_TASKS global variable."
-        # Use global MAX_PARALLEL_TASKS, ensure it's a positive integer, default to 4 if unset/invalid
-        if expr "$MAX_PARALLEL_TASKS" : '^[1-9][0-9]*$' > /dev/null; then
-             # Use the valid global variable
-             calculated_max_tasks="$MAX_PARALLEL_TASKS"
-        else
-             # Fallback if global variable is invalid or not set
-             debug_log "WARNING" "create_language_db_parallel: Global MAX_PARALLEL_TASKS ('$MAX_PARALLEL_TASKS') is not a positive integer. Defaulting limit to 4."
-             calculated_max_tasks=4
-        fi
-        debug_log "DEBUG" "create_language_db_parallel: Limit set to: $calculated_max_tasks (from MAX_PARALLEL_TASKS or default 4)"
+    # --- Pre-checks (Original Logic) ---
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "create_language_db_parallel: Base DB file not found: $base_db"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
+        return 1 # 致命的エラー
+    fi
+    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "create_language_db_parallel: Missing required arguments."
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
+        return 1 # 致命的エラー
     fi
 
-    # --- Call the Appropriate Worker Function with the Calculated Limit ---
-    # Branch based on OS version
-    if [ "$osversion" -ge 19 ]; then
-        debug_log "DEBUG" "create_language_db_parallel: Calling create_language_db_19 with limit $calculated_max_tasks"
-        # Call the chunked/direct-write function, passing the calculated limit
-        create_language_db_19 "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
-        # create_language_db_all "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
-        exit_status=$?
-    else
-        debug_log "DEBUG" "create_language_db_parallel: Calling create_language_db_all with limit $calculated_max_tasks"
-        # Call the line-by-line/partial-file function, passing the calculated limit
-        create_language_db_all "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
-        # create_language_db_19 "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
-        exit_status=$?
-    fi
+    # --- Calculate total lines (for final message) (Original Logic) ---
+    # コメント行と空行を除いた行数をカウント
+    total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
+    debug_log "DEBUG" "create_language_db_parallel: Total valid lines to translate: $total_lines"
 
+    # --- Start Timing and Spinner (Original Logic) ---
+    start_time=$(date +%s)
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name"
+    # スピナーを開始
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    spinner_started="true"
+
+    # --- OS バージョンに基づいた分岐と関数呼び出し (MODIFIED Section) ---
+    # This section now passes the appropriate global variable as the last argument
+    if [ "$osversion" = "19" ]; then
+        # OpenWrt 19 の場合は _19 関数を呼び出す
+        # Use global $CORE_COUNT calculated outside this function
+        debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19 with limit from global CORE_COUNT ($CORE_COUNT)"
+        # Pass original arguments ("$@") and the global CORE_COUNT as the last argument
+        create_language_db_19 "$@" "$CORE_COUNT"
+        exit_status=$? # _19 関数の終了ステータスを取得
+    else
+        # OpenWrt 19 以外の場合は _all 関数を呼び出す
+        # Use global $MAX_PARALLEL_TASKS calculated outside this function
+        debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion' with limit from global MAX_PARALLEL_TASKS ($MAX_PARALLEL_TASKS)"
+        # Pass original arguments ("$@") and the global MAX_PARALLEL_TASKS as the last argument
+        create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
+        exit_status=$? # _all 関数の終了ステータスを取得
+    fi
     debug_log "DEBUG" "create_language_db_parallel: Worker function finished with status: $exit_status"
+
+    # --- Stop Timing and Spinner (Original Logic) ---
+    end_time=$(date +%s)
+    # start_time が空でないことを確認 (Original Logic)
+    [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time)) || elapsed_seconds=0
+
+    # スピナーが開始されていた場合のみ停止処理 (Original Logic)
+    if [ "$spinner_started" = "true" ]; then
+        local final_message=""
+        local spinner_status="success" # デフォルトは成功
+
+        # 終了ステータスに基づいて最終メッセージとスピナーステータスを決定 (Original Logic)
+        if [ "$exit_status" -eq 0 ]; then
+             # 成功した場合
+             if [ "$total_lines" -gt 0 ]; then
+                 # 翻訳行があった場合
+                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+             else
+                 # 翻訳行がなかった場合 (total_lines が 0)
+                 final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
+             fi
+        elif [ "$exit_status" -eq 2 ]; then
+            # 部分的成功の場合
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning" # ステータスを警告に
+        else # exit_status が 1 (致命的エラー) またはその他の場合
+            # 失敗した場合
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
+            spinner_status="error" # ステータスをエラーに
+        fi
+        # スピナーを停止 (Original Logic)
+        stop_spinner "$final_message" "$spinner_status"
+        debug_log "DEBUG" "create_language_db_parallel: Task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+    else
+        # スピナーが開始されていなかった場合 (フォールバック表示) (Original Logic)
+         if [ "$exit_status" -eq 0 ]; then
+             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+         elif [ "$exit_status" -eq 2 ]; then
+             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+         else
+             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+         fi
+    fi
+
+    # 最終的な終了ステータスを返す (Original Logic)
     return "$exit_status"
 }
 
