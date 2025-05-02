@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-00-03"
+SCRIPT_VERSION="2025-05-02-00-04"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -647,7 +647,7 @@ EOF
 }
 
 # --- OpenWrt 19 以外のバージョン用実装関数 ---
-OK_create_language_db_all() {
+create_language_db_all() {
     # 引数受け取り
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context, not used directly here
@@ -815,7 +815,7 @@ EOF
 }
 
 # --- OpenWrt 19 以外のバージョン用実装関数 ---
-create_language_db_all() {
+OK_create_language_db_all() {
     # 引数受け取り
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context, not used directly here
