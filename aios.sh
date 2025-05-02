@@ -1544,15 +1544,11 @@ download_parallel() {
     local start_time end_time elapsed_seconds
     local max_parallel current_jobs pids pid job_index # max_parallel をローカル変数として宣言
     local overall_status fail_flag_file first_failed_command first_error_message
-    local script_path load_targets load_target retry # retry 変数はロード時に使用
+    local script_path load_targets load_target retry
     local exported_vars log_file_prefix stdout_log stderr_log error_info_file
     local line command_line cmd_status
     local loaded_files source_success source_status
     local osversion # OSバージョン用ローカル変数
-    # display_detected_download 用の変数を仮置き (後で内容に合わせて修正)
-    local completed_tasks=0 # 仮: 完了タスク数をカウントする必要がある場合
-    local total_tasks=0 # 仮: 総タスク数をカウントする必要がある場合
-    local api_status_string="" # 仮: 何か別のステータスを表示する場合
 
     start_time=$(date +%s)
     end_time=""
@@ -1563,29 +1559,35 @@ download_parallel() {
     first_failed_command=""
     first_error_message=""
     script_path="$0"
-    # GITHUB_TOKEN_FILE, COMMIT*, FORCE, SKIP_CACHE, DOWNLOAD_METHOD を削除
-    exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DEBUG_MODE DEFAULT_LANGUAGE BASE_URL WGET_TIMEOUT WGET_MAX_RETRIES" # WGET_* を追加
+    exported_vars="BASE_DIR CACHE_DIR DL_DIR LOG_DIR DOWNLOAD_METHOD SKIP_CACHE DEBUG_MODE DEFAULT_LANGUAGE BASE_URL GITHUB_TOKEN_FILE COMMIT_CACHE_DIR COMMIT_CACHE_TTL FORCE"
     log_file_prefix="${LOG_DIR}/download_parallel_task_"
 
-    # --- OS Version Detection --- (変更なし)
+    # --- OS Version Detection ---
+    # osversion.ch から読み込み、最初の '.' より前の部分を抽出
     osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
     osversion="${osversion%%.*}"
     debug_log "DEBUG" "download_parallel: Detected OS major version: '$osversion'"
 
-    # --- OSバージョンに応じた最大並列タスク数の設定 --- (変更なし)
+    # --- OSバージョンに応じた最大並列タスク数の設定 ---
+    # この関数内で使用する実際の並列数を決定
     if [ "$osversion" = "19" ]; then
+        # OpenWrt 19.x の場合は CORE_COUNT を使用
         max_parallel="$CORE_COUNT"
+        # max_parallel=$((CORE_COUNT * 2))
         debug_log "DEBUG" "Detected OpenWrt 19.x (Major version '$osversion'). Setting max parallel tasks to CORE_COUNT ($max_parallel)."
     else
+        # それ以外の場合はグローバル変数 MAX_PARALLEL_TASKS を使用
         max_parallel="$MAX_PARALLEL_TASKS"
+        # max_parallel=$((CORE_COUNT * 2))
         debug_log "DEBUG" "Detected OS Major version '$osversion' (Not 19). Setting max parallel tasks using global MAX_PARALLEL_TASKS ($max_parallel)."
     fi
+    # --- OSバージョンに応じた最大並列タスク数の設定ここまで ---
 
-    # 決定された並列数を表示 (変更なし)
+    # 決定された並列数を表示
     printf "%s\n" "$(color white "$(get_message "MSG_MAX_PARALLEL_TASKS" "m=$max_parallel")")"
     debug_log "DEBUG" "Effective max parallel download tasks set to: $max_parallel"
 
-    # --- 以下、既存の処理 --- (変更なし)
+    # --- 以下、既存の処理 ---
     if ! mkdir -p "$DL_DIR"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
         end_time=$(date +%s)
@@ -1609,34 +1611,20 @@ download_parallel() {
         return 1
     fi
 
-    # download_files()関数のコマンド部のみ抽出（変更なし）
+    # download_files()関数のコマンド部のみ抽出（パイプなしで一時ファイルに保存）
     local cmd_tmpfile load_tmpfile
     cmd_tmpfile="${DL_DIR}/cmd_list_$$.txt"
     load_tmpfile="${DL_DIR}/load_targets_$$.txt"
     rm -f "$cmd_tmpfile" "$load_tmpfile" 2>/dev/null
 
     awk '
-        BEGIN { in_func=0; total_tasks=0; } # total_tasks カウンタ初期化
+        BEGIN { in_func=0; }
         /^download_files\(\) *\{/ { in_func=1; next }
         /^}/ { if(in_func){in_func=0} }
-        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ {
-            print # コマンドを出力
-            total_tasks++ # タスク数をカウント
-        }
-        END { print "TOTAL_TASKS=" total_tasks > "/dev/stderr" } # 総タスク数を標準エラー出力へ
-    ' "$script_path" > "$cmd_tmpfile" 2> /tmp/aios_total_tasks.tmp # 総タスク数を一時ファイルへ
+        in_func && !/^[ \t]*$/ && !/^[ \t]*#/ { print }
+    ' "$script_path" > "$cmd_tmpfile"
 
-    # 一時ファイルから総タスク数を読み込む
-    if [ -f /tmp/aios_total_tasks.tmp ]; then
-        eval $(cat /tmp/aios_total_tasks.tmp) # 例: TOTAL_TASKS=10 のような形式を期待
-        rm -f /tmp/aios_total_tasks.tmp
-    fi
-    # total_tasks が設定されていなければデフォルト値 0
-    total_tasks=${total_tasks:-0}
-    debug_log "DEBUG" "Total download tasks found: $total_tasks"
-
-
-    # コマンドリストをquiet化（変更なし）
+    # コマンドリストをquiet化しつつ一時ファイルに保存
     > "$cmd_tmpfile.quiet"
     while IFS= read -r line; do
         [ -z "$line" ] && continue
@@ -1649,9 +1637,10 @@ download_parallel() {
         esac
         printf "%s\n" "$line" >> "$cmd_tmpfile.quiet"
     done < "$cmd_tmpfile"
+
     mv "$cmd_tmpfile.quiet" "$cmd_tmpfile"
 
-    # コマンドリストが空なら終了（変更なし）
+    # コマンドリストが空なら終了
     if ! grep -q . "$cmd_tmpfile"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
         end_time=$(date +%s)
@@ -1661,7 +1650,7 @@ download_parallel() {
         return 0
     fi
 
-    # ロード対象ファイル収集（変更なし）
+    # ロード対象ファイル収集
     > "$load_tmpfile"
     while IFS= read -r command_line; do
         case "$command_line" in
@@ -1682,9 +1671,7 @@ download_parallel() {
     eval "export $exported_vars"
     pids=""
     job_index=0
-    completed_tasks=0 # 完了タスクカウンタ初期化
 
-    # 並列ダウンロード実行ループ
     while IFS= read -r command_line || [ -n "$command_line" ]; do
         [ -z "$command_line" ] && continue
         job_index=$((job_index + 1))
@@ -1693,7 +1680,6 @@ download_parallel() {
         stderr_log="${log_file_prefix}${task_name}.stderr.log"
         error_info_file="${DL_DIR}/error_info_${task_name}.txt"
 
-        # サブシェルでダウンロードコマンドを実行
         (
             eval "$command_line" >"$stdout_log" 2>"$stderr_log"
             cmd_status=$?
@@ -1702,7 +1688,7 @@ download_parallel() {
                 {
                     echo "$command_line"
                     if [ -s "$stderr_log" ]; then
-                        grep -v '^[[:space:]]*$' "$stderr_log" | head -n 1 | tr -cd '[:print:]\t' | head -c 100
+                        grep -v '^[[:space:]]*$' "$stderr_log" | head -n 1
                     else
                         echo "No error output captured"
                     fi
@@ -1714,17 +1700,10 @@ download_parallel() {
         pid=$!
         pids="$pids $pid"
 
-        # 並列数制御
+        # 並列数制御（決定された max_parallel を使用）
         set -- $pids
         if [ $# -ge "$max_parallel" ]; then
-            wait "$1" # 最も古いプロセスを待機
-            # エラーチェック
-            if [ $? -ne 0 ]; then
-                overall_status=1
-            else
-                completed_tasks=$((completed_tasks + 1)) # 成功時のみカウントアップ
-            fi
-            # 完了したプロセスをリストから削除
+            wait "$1"
             pids=""
             shift
             while [ $# -gt 0 ]; do
@@ -1736,76 +1715,70 @@ download_parallel() {
 
     # 残りのジョブを待機
     for pid in $pids; do
-        wait "$pid"
-        if [ $? -ne 0 ]; then
-            overall_status=1
-        else
-            completed_tasks=$((completed_tasks + 1)) # 成功時のみカウントアップ
-        fi
+        wait "$pid" || overall_status=1
     done
 
-    # エラー処理 (変更なし)
-    if [ $overall_status -eq 1 ]; then
+    # エラー処理
+    if ls "$DL_DIR"/error_info_*.txt 2>/dev/null | grep -q .; then
+        overall_status=1
         first_error_file=$(ls "$DL_DIR"/error_info_*.txt 2>/dev/null | sort | head -n 1)
         if [ -n "$first_error_file" ]; then
             first_failed_command=$(head -n 1 "$first_error_file" 2>/dev/null)
             first_error_message=$(sed -n '2p' "$first_error_file" 2>/dev/null)
-        else
-            first_failed_command="Unknown task"
-            first_error_message="Check logs in $LOG_DIR"
+            first_error_message=$(printf '%s' "$first_error_message" | tr -cd '[:print:]\t' | head -c 100)
         fi
-        rm -f "$DL_DIR"/error_info_*.txt 2>/dev/null
     fi
 
-    rm -f "$cmd_tmpfile" # コマンドリストファイルを削除
-
-    # ロード対象ファイルのsource (エラー発生時はスキップ)
+    # ロード対象ファイルのsource
     if [ $overall_status -eq 0 ] && [ -s "$load_tmpfile" ]; then
         loaded_files=""
         while IFS= read -r load_file; do
             [ -z "$load_file" ] && continue
+            # 重複ロードチェック
             echo "$loaded_files" | grep -qxF "$load_file" && continue
 
             full_load_path="${BASE_DIR}/$load_file"
             retry=1
             source_success=0
             while [ $retry -le 3 ]; do
+                # === source コマンドを実行し、終了ステータスを取得 ===
                 . "$full_load_path"
                 source_status=$?
+                # === ステータスを確認 ===
                 if [ $source_status -eq 0 ]; then
                     source_success=1
-                    debug_log "DEBUG" "Successfully sourced '$full_load_path'"
+                    # ★ 成功した場合、確認のため標準エラー出力にメッセージを表示 (任意) ★
+                    # printf "OK: Sourced '%s' successfully.\n" "$full_load_path" >&2
                     break
                 else
-                    debug_log "DEBUG" "Source '$full_load_path' failed (attempt $retry) with status $source_status"
+                    # ★★★ 失敗した場合、詳細なエラーメッセージを標準エラー出力に表示 ★★★
+                    printf "ERROR: Failed sourcing '%s' on attempt %d. Status: %d\n" "$full_load_path" "$retry" "$source_status" >&2
                     sleep 1
                 fi
                 retry=$((retry + 1))
             done
-            loaded_files="${loaded_files}${load_file}\n"
+            loaded_files="${loaded_files}${load_file}\n" # 改行区切りで記録
             if [ $source_success -ne 1 ]; then
-                debug_log "DEBUG" "Failed to source '$full_load_path' after 3 tries" >&2
+                # ★★★ 最終的に失敗した場合のエラーメッセージ ★★★
+                # $retry はループ終了時の値 (試行回数+1) なので、$((retry - 1)) で試行回数を表示
+                printf "ERROR: Aborting load process. Failed to source '%s' after %d attempts. Final Status: %d\n" "$full_load_path" $((retry - 1)) "$source_status" >&2
                 overall_status=1
                 if [ -z "$first_failed_command" ]; then
-                    first_failed_command="source"
-                    first_error_message="Failed to source $load_file"
+                    first_failed_command="source $load_file"
+                    # 終了ステータスをメッセージに追加
+                    first_error_message="Failed after retries (status $source_status)"
                 fi
-                break
+                break # 最初の永続的な失敗で 'while read' ループを抜ける
             fi
         done < "$load_tmpfile"
     fi
 
-    rm -f "$load_tmpfile" # ロードリストファイルを削除
+    rm -f "$cmd_tmpfile" "$load_tmpfile"
 
     # --- 最終ステータス判定と終了処理 ---
-    end_time=$(date +%s)
-    elapsed_seconds=$((end_time - start_time))
-
-    # display_detected_download 呼び出しをコメントアウトして残す
-    # 最後の引数 ($api_status_string) を削除
-    # display_detected_download "$max_parallel" "$completed_tasks" "$total_tasks" "$elapsed_seconds"
-
     if [ $overall_status -eq 0 ]; then
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}")"
         stop_spinner "$success_message" "success"
         return 0
@@ -1814,6 +1787,8 @@ download_parallel() {
         [ -z "$first_error_message" ] && first_error_message="Check logs in $LOG_DIR"
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_command" "e=$first_error_message")"
         stop_spinner "$failure_message" "failure"
+        end_time=$(date +%s)
+        elapsed_seconds=$((end_time - start_time))
         printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_command" "$elapsed_seconds"
         return 1
     fi
