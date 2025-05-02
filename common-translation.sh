@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-00-06"
+SCRIPT_VERSION="2025-05-02-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -647,15 +647,16 @@ EOF
     return "$exit_status"
 }
 
-# --- Test Function: Based on OK_create_language_db_all, but uses subshell ---
+# --- Test Function: Based on OK_create_language_db_all, uses subshell, AND v5 task management ---
+# (This function replaces the previous content of test_create_db_subshell)
 test_create_db_subshell() {
-    # 引数受け取り (OK_create_language_db_all と同じ)
+    # 引数受け取り (変更なし)
     local aip_function_name="$1"
     local api_endpoint_url="$2"
     local domain_name="$3"
     local target_lang_code="$4"
 
-    # 変数定義 (OK_create_language_db_all と同じ)
+    # 変数定義 (変更なし)
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
@@ -663,19 +664,19 @@ test_create_db_subshell() {
     local pids=""
     local pid=""
     local exit_status=0
-    local line_from_awk="" # <<< awkから読み取る行を保持する変数 (v5から導入)
+    local line_from_awk=""
 
-    # --- Logging & 並列数設定 (OK_create_language_db_all と同じ) ---
-    debug_log "DEBUG" "test_create_db_subshell: Starting parallel translation (line-by-line, subshell test) for language '$target_lang_code'."
+    # --- Logging & 並列数設定 (変更なし) ---
+    debug_log "DEBUG" "test_create_db_subshell: Starting parallel translation (line-by-line, v5 task mgmt test) for language '$target_lang_code'."
     local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
     debug_log "DEBUG" "test_create_db_subshell: Max parallel tasks from global setting: $current_max_parallel_tasks"
 
-    # --- ヘッダー部分を書き出し (OK_create_language_db_all と同じ) ---
+    # --- ヘッダー部分を書き出し (変更なし) ---
     cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
-# Method: test_create_db_subshell
+# Method: test_create_db_subshell (with v5 task management)
 EOF
 
     if [ $? -ne 0 ]; then
@@ -683,21 +684,18 @@ EOF
         exit_status=1
     else
         # --- メイン処理: 行ベースで並列翻訳 ---
-        # awkから読み取る行を line_from_awk 変数に格納 (v5と同様)
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- <<< 変更点: サブシェル内で translate_single_line を実行 ---
+            # --- サブシェル内で translate_single_line を実行 (変更なし) ---
             ( # サブシェルの開始
-                # サブシェル内で必要な変数を参照 (v5と同様)
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
                 local func="$aip_function_name"
-                local outfile="$final_output_file" # 一時ファイル名はOK版と同じにする
+                local outfile="$final_output_file"
 
-                # 翻訳処理 (v5と同様だが、出力先はOK版と同じ .partial)
                 local translated_line
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
                 if [ -n "$translated_line" ]; then
-                     # 出力先は OK_create_language_db_all と同じ単一ファイル
+                     # 出力先は単一ファイル (変更なし)
                      printf "%s\n" "$translated_line" >> "$outfile".partial
                      local write_status=$?
                      if [ "$write_status" -ne 0 ]; then
@@ -711,27 +709,42 @@ EOF
             pid=$!
             pids="$pids $pid"
 
-            # --- 並列タスク数制限 (OK_create_language_db_all と同じ sleep 1) ---
+            # --- <<< 変更点: 並列タスク数制限 (エラー版 v5 と同じ wait + sed 方式) ---
             while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-                sleep 1
+                # 最も古いPIDを取得 (v5と同様)
+                oldest_pid=$(echo "$pids" | cut -d' ' -f1)
+                if [ -n "$oldest_pid" ]; then
+                    if wait "$oldest_pid" >/dev/null 2>&1; then
+                        : # 正常終了
+                    else
+                        debug_log "DEBUG" "test_create_db_subshell: Background task PID $oldest_pid may have failed."
+                    fi
+                    # 待機したPIDをリストから削除 (v5と同様 sed を使用)
+                    pids=$(echo "$pids" | sed "s/^$oldest_pid //")
+                else
+                    debug_log "DEBUG" "test_create_db_subshell: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
+                    sleep 0.1
+                fi
             done
         done
-        # パイプラインの終了ステータス確認 (OK_create_language_db_all と同じ)
+        # パイプラインの終了ステータス確認 (変更なし)
         if [ $? -ne 0 ] && [ "$exit_status" -eq 0 ]; then
              debug_log "DEBUG" "test_create_db_subshell: Error during awk/while processing."
              exit_status=1
         fi
 
-        # --- BGジョブが全て完了するまで待機 (OK_create_language_db_all と同じ) ---
+        # --- BGジョブが全て完了するまで待機 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "test_create_db_subshell: Waiting for background tasks..."
+            debug_log "DEBUG" "test_create_db_subshell: Waiting for remaining background tasks..."
             local wait_failed=0
             for pid in $pids; do
-                if wait "$pid"; then
-                    :
-                else
-                    wait_failed=1
-                    debug_log "DEBUG" "test_create_db_subshell: Task PID $pid failed."
+                if [ -n "$pid" ]; then
+                    if wait "$pid"; then
+                        : # 正常終了
+                    else
+                        wait_failed=1 # 失敗フラグを立てる
+                        debug_log "DEBUG" "test_create_db_subshell: Remaining task PID $pid failed."
+                    fi
                 fi
             done
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
@@ -740,7 +753,7 @@ EOF
             debug_log "DEBUG" "test_create_db_subshell: All background tasks finished."
         fi
 
-        # --- 部分出力を結合 (OK_create_language_db_all と同じ) ---
+        # --- 部分出力を結合 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
             if [ -f "$final_output_file".partial ]; then
                 debug_log "DEBUG" "test_create_db_subshell: Combining partial results..."
@@ -756,7 +769,7 @@ EOF
             fi
         fi
 
-        # --- 完了マーカーを付加 (OK_create_language_db_all と同じ) ---
+        # --- 完了マーカーを付加 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             debug_log "DEBUG" "test_create_db_subshell: Completion marker added."
