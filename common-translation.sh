@@ -900,14 +900,16 @@ create_language_db_parallel() {
         # Use global $CORE_COUNT calculated outside this function
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19 with limit from global CORE_COUNT ($CORE_COUNT)"
         # Pass original arguments ("$@") and the global CORE_COUNT as the last argument
-        create_language_db_19 "$@" "$CORE_COUNT"
+        # create_language_db_19 "$@" "$CORE_COUNT"
+        create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
         exit_status=$? # _19 関数の終了ステータスを取得
     else
         # OpenWrt 19 以外の場合は _all 関数を呼び出す
         # Use global $MAX_PARALLEL_TASKS calculated outside this function
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion' with limit from global MAX_PARALLEL_TASKS ($MAX_PARALLEL_TASKS)"
         # Pass original arguments ("$@") and the global MAX_PARALLEL_TASKS as the last argument
-        create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
+        # create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
+        create_language_db_19 "$@" "$CORE_COUNT"
         exit_status=$? # _all 関数の終了ステータスを取得
     fi
     debug_log "DEBUG" "create_language_db_parallel: Worker function finished with status: $exit_status"
@@ -1017,8 +1019,8 @@ OK_create_language_db_parallel() {
     if [ "$osversion" = "19" ]; then
         # OpenWrt 19 の場合は _19 関数を呼び出す
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19"
-        create_language_db_all "$@" # 引数をそのまま渡す
-        # create_language_db_19 "$@" # 引数をそのまま渡す
+        # create_language_db_all "$@" # 引数をそのまま渡す
+        create_language_db_19 "$@" # 引数をそのまま渡す
         exit_status=$? # _19 関数の終了ステータスを取得
     else
         # OpenWrt 19 以外の場合は _all 関数を呼び出す
