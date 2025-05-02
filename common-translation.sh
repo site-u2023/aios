@@ -147,7 +147,7 @@ translate_with_google() {
     return 1 # Failure
 }
 
-# Helper function (変更なし)
+# Helper function
 translate_single_line() {
     local line="$1"
     local lang="$2"
@@ -349,7 +349,7 @@ create_language_db_19() {
 # @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed. # NEW ARGUMENT
 # @return: 0:success, 1:critical error, 2:partial success
 create_language_db_all() {
-    # 引数受け取り (変更なし)
+    # 引数受け取り
     local aip_function_name="$1"
     local api_endpoint_url="$2"
     local domain_name="$3"
@@ -357,7 +357,7 @@ create_language_db_all() {
     # --- MODIFIED: Receive the parallelism limit as the 5th argument ---
     local max_tasks_limit="$5"
 
-    # 変数定義 (変更なし)
+    # 変数定義
     local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
@@ -367,7 +367,7 @@ create_language_db_all() {
     local exit_status=0
     local line_from_awk=""
 
-    # --- Input validation for the limit (変更なし) ---
+    # --- Input validation for the limit ---
     case "$max_tasks_limit" in
         ''|*[!0-9]*) # Empty or not a number
             debug_log "DEBUG" "create_language_db_all: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
@@ -398,7 +398,7 @@ create_language_db_all() {
         # --- メイン処理: 行ベースで並列翻訳 (Original Logic) ---
         # Note: awk does not use -v here, it pipes output
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- サブシェル内で translate_single_line を実行 (変更なし) ---
+            # --- サブシェル内で translate_single_line を実行 ---
             ( # サブシェルの開始 (Original Logic)
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
@@ -458,7 +458,7 @@ create_language_db_all() {
              exit_status=1
         fi
 
-        # --- BGジョブが全て完了するまで待機 (変更なし) ---
+        # --- BGジョブが全て完了するまで待機 ---
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
             local wait_failed=0
@@ -500,7 +500,7 @@ create_language_db_all() {
             fi
         fi
 
-        # --- 完了マーカーを付加 (変更なし) ---
+        # --- 完了マーカーを付加 ---
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             if [ $? -ne 0 ]; then
@@ -654,7 +654,7 @@ create_language_db() {
     local lock_max_retries=10 # ロック取得のリトライ回数
     local lock_sleep_interval=1 # ロック取得失敗時の待機秒数
 
-    # Check if input file exists (変更なし)
+    # Check if input file exists
     if [ ! -f "$input_chunk_file" ]; then
         debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
         return 1 # Critical error for this child
@@ -662,10 +662,10 @@ create_language_db() {
 
     # Loop through the input chunk file
     while IFS= read -r line; do
-        # Skip comments and empty lines (変更なし)
+        # Skip comments and empty lines
         case "$line" in \#*|"") continue ;; esac
 
-        # Ensure line starts with the default language prefix (変更なし)
+        # Ensure line starts with the default language prefix
         case "$line" in
             "${DEFAULT_LANGUAGE}|"*)
                 ;;
@@ -674,7 +674,7 @@ create_language_db() {
                 ;;
         esac
 
-        # Extract key and value (変更なし)
+        # Extract key and value
         local line_content=${line#*|}
         local key=${line_content%%=*}
         local value=${line_content#*=}
@@ -683,7 +683,7 @@ create_language_db() {
             continue
         fi
 
-        # Call the provided AIP function (変更なし)
+        # Call the provided AIP function
         local translated_text=""
         local exit_code=1
 
@@ -693,12 +693,12 @@ create_language_db() {
         # --- Prepare output line ---
         local output_line=""
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            # Format successful translation *without* newline (変更なし)
+            # Format successful translation *without* newline
             output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$translated_text")
         else
             # 翻訳失敗時は overall_success を 2 (部分的成功) に設定
             overall_success=2
-            # Format original value *without* newline (変更なし)
+            # Format original value *without* newline
             output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$value")
         fi
 
@@ -746,7 +746,7 @@ create_language_db() {
         fi
         # --- End Append line ---
 
-    done < "$input_chunk_file" # Read from the chunk input file (変更なし)
+    done < "$input_chunk_file" # Read from the chunk input file
 
     # 致命的エラー(1)が発生していなければ、最終的な成功ステータス(0 or 2)を返す
     return "$overall_success"
