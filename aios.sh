@@ -2115,7 +2115,7 @@ print_banner_ascii() {
     
     # ASCIIアート
     printf "\n"
-    printf "%s\n" "$(color magenta "aios")"
+    printf "%s\n" "$(color white "all in one script")"
     printf "\n"
     
     # バナーメッセージ
