@@ -170,118 +170,6 @@ translate_single_line() {
     esac
 }
 
-# --- エントリーポイント関数: OSバージョン判定、スピナー管理 ---
-create_language_db_parallel() {
-    local aip_function_name="$1"
-    local api_endpoint_url="$2"  # Passed for logging/context
-    local domain_name="$3"       # Used for spinner message
-    local target_lang_code="$4"
-
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local exit_status=1 # デフォルトは失敗(1)
-    local total_lines=0 # 翻訳対象行数
-
-    # --- Time measurement variables ---
-    local start_time=""
-    local end_time=""
-    local elapsed_seconds=0
-
-    # --- Spinner variables ---
-    local spinner_started="false"
-
-    # --- OS Version Detection ---
-    local osversion
-    # osversion.ch から読み込み、最初の '.' より前の部分を抽出
-    osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
-    osversion="${osversion%%.*}"
-    debug_log "DEBUG" "create_language_db_parallel: Detected OS major version: '$osversion'"
-
-    # --- Pre-checks ---
-    if [ ! -f "$base_db" ]; then
-        debug_log "DEBUG" "create_language_db_parallel: Base DB file not found: $base_db"
-        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
-        return 1 # 致命的エラー
-    fi
-    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
-        debug_log "DEBUG" "create_language_db_parallel: Missing required arguments."
-        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
-        return 1 # 致命的エラー
-    fi
-
-    # --- Calculate total lines (for final message) ---
-    # コメント行と空行を除いた行数をカウント
-    total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
-    debug_log "DEBUG" "create_language_db_parallel: Total valid lines to translate: $total_lines"
-
-    # --- Start Timing and Spinner ---
-    start_time=$(date +%s)
-    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
-    local spinner_default_msg="Currently translating: $domain_name"
-    # スピナーを開始
-    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
-    spinner_started="true"
-
-    # --- OS バージョンに基づいた分岐 ---
-    if [ "$osversion" = "19" ]; then
-        # OpenWrt 19 の場合は _19 関数を呼び出す
-        debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19"
-        create_language_db_19 "$@" # 引数をそのまま渡す
-        exit_status=$? # _19 関数の終了ステータスを取得
-    else
-        # OpenWrt 19 以外の場合は _all 関数を呼び出す
-        debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion'"
-        create_language_db_all "$@" # 引数をそのまま渡す
-        exit_status=$? # _all 関数の終了ステータスを取得
-    fi
-    debug_log "DEBUG" "create_language_db_parallel: Child function finished with status: $exit_status"
-
-    # --- Stop Timing and Spinner ---
-    end_time=$(date +%s)
-    # start_time が空でないことを確認
-    [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time)) || elapsed_seconds=0
-
-    # スピナーが開始されていた場合のみ停止処理
-    if [ "$spinner_started" = "true" ]; then
-        local final_message=""
-        local spinner_status="success" # デフォルトは成功
-
-        # 終了ステータスに基づいて最終メッセージとスピナーステータスを決定
-        if [ "$exit_status" -eq 0 ]; then
-             # 成功した場合
-             if [ "$total_lines" -gt 0 ]; then
-                 # 翻訳行があった場合
-                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
-             else
-                 # 翻訳行がなかった場合 (total_lines が 0)
-                 final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
-             fi
-        elif [ "$exit_status" -eq 2 ]; then
-            # 部分的成功の場合
-            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
-            spinner_status="warning" # ステータスを警告に
-        else # exit_status が 1 (致命的エラー) またはその他の場合
-            # 失敗した場合
-            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
-            spinner_status="error" # ステータスをエラーに
-        fi
-        # スピナーを停止
-        stop_spinner "$final_message" "$spinner_status"
-        debug_log "DEBUG" "create_language_db_parallel: Task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
-    else
-        # スピナーが開始されていなかった場合 (フォールバック表示)
-         if [ "$exit_status" -eq 0 ]; then
-             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
-         elif [ "$exit_status" -eq 2 ]; then
-             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
-         else
-             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
-         fi
-    fi
-
-    # 最終的な終了ステータスを返す
-    return "$exit_status"
-}
-
 # --- OpenWrt 19 専用の実装関数 ---
 create_language_db_19() {
     # 引数受け取り
@@ -608,123 +496,117 @@ EOF
     return "$exit_status"
 }
 
-# Child function called by create_language_db_19 (Revised: Lock Once Per Chunk)
-# This function processes a chunk, acquires a lock ONCE, appends all lines directly, and releases the lock ONCE.
-# @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
-# @param $2: final_output_file (string) - Path to the final output file (e.g., message_ja.db).
-# @param $3: target_lang_code (string) - The target language code (e.g., "ja").
-# @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
-# @return: 0 on success, 1 on critical error (read/write/lock failure), 2 if any translation fails within this chunk (but writes were successful).
-create_language_db() {
-    local input_chunk_file="$1"
-    local final_output_file="$2"
-    local target_lang_code="$3"
-    local aip_function_name="$4"
+# --- エントリーポイント関数: OSバージョン判定、スピナー管理 ---
+create_language_db_parallel() {
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"  # Passed for logging/context
+    local domain_name="$3"       # Used for spinner message
+    local target_lang_code="$4"
 
-    local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local exit_status=1 # デフォルトは失敗(1)
+    local total_lines=0 # 翻訳対象行数
 
-    # --- Lock settings ---
-    local lock_dir="${final_output_file}.lock"
-    local lock_max_retries=10
-    local lock_sleep_interval=1
+    # --- Time measurement variables ---
+    local start_time=""
+    local end_time=""
+    local elapsed_seconds=0
 
-    # Check if input file exists
-    if [ ! -f "$input_chunk_file" ]; then
-        debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
-        return 1 # Critical error
+    # --- Spinner variables ---
+    local spinner_started="false"
+
+    # --- OS Version Detection ---
+    local osversion
+    # osversion.ch から読み込み、最初の '.' より前の部分を抽出
+    osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
+    osversion="${osversion%%.*}"
+    debug_log "DEBUG" "create_language_db_parallel: Detected OS major version: '$osversion'"
+
+    # --- Pre-checks ---
+    if [ ! -f "$base_db" ]; then
+        debug_log "DEBUG" "create_language_db_parallel: Base DB file not found: $base_db"
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_BASE_DB_NOT_FOUND" "file=$base_db" "default=Base DB not found: $base_db")")" >&2
+        return 1 # 致命的エラー
+    fi
+    if [ -z "$aip_function_name" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "create_language_db_parallel: Missing required arguments."
+        printf "%s\n" "$(color red "$(get_message "MSG_ERR_MISSING_ARGS" "default=Missing required arguments for parallel translation.")")" >&2
+        return 1 # 致命的エラー
     fi
 
-    # --- Acquire Lock ONCE at the beginning ---
-    local lock_retries="$lock_max_retries"
-    local lock_acquired=0
-    while [ "$lock_retries" -gt 0 ]; do
-        if mkdir "$lock_dir" 2>/dev/null; then
-            lock_acquired=1
-            break # Lock acquired successfully
-        else
-            lock_retries=$((lock_retries - 1))
-            if [ "$lock_retries" -gt 0 ]; then
-                 sleep "$lock_sleep_interval"
-            fi
-        fi
-    done
+    # --- Calculate total lines (for final message) ---
+    # コメント行と空行を除いた行数をカウント
+    total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
+    debug_log "DEBUG" "create_language_db_parallel: Total valid lines to translate: $total_lines"
 
-    if [ "$lock_acquired" -eq 0 ]; then
-        debug_log "ERROR" "Child: Failed to acquire lock for $final_output_file after $lock_max_retries attempts."
-        return 1 # Critical error: Could not acquire lock
-    fi
-    # --- Lock Acquired ---
+    # --- Start Timing and Spinner ---
+    start_time=$(date +%s)
+    local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
+    local spinner_default_msg="Currently translating: $domain_name"
+    # スピナーを開始
+    start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
+    spinner_started="true"
 
-    # --- Process lines WITHIN the lock ---
-    local write_failed=0
-    while IFS= read -r line; do
-        # Skip comments and empty lines
-        case "$line" in \#*|"") continue ;; esac
-
-        # Ensure line starts with the default language prefix
-        case "$line" in
-            "${DEFAULT_LANGUAGE}|"*)
-                ;;
-            *)
-                continue
-                ;;
-        esac
-
-        # Extract key and value
-        local line_content=${line#*|}
-        local key=${line_content%%=*}
-        local value=${line_content#*=}
-
-        if [ -z "$key" ] || [ -z "$value" ]; then
-            continue
-        fi
-
-        # Call the provided AIP function
-        local translated_text=""
-        local exit_code=1
-
-        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
-        exit_code=$?
-
-        # Prepare output line
-        local output_line=""
-        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
-            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$translated_text")
-        else
-            overall_success=2 # Mark as partial success if translation fails
-            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$value")
-        fi
-
-        # Append line directly to the final file (lock is already held)
-        printf "%s\n" "$output_line" >> "$final_output_file"
-        if [ $? -ne 0 ]; then
-            debug_log "ERROR" "Child: Failed to append line to $final_output_file while lock was held."
-            write_failed=1
-            # Break the loop on write failure, but ensure lock is released
-            break
-        fi
-
-    done < "$input_chunk_file" # Read from the chunk input file
-    # --- Finished processing lines ---
-
-    # --- Release Lock ONCE at the end ---
-    rmdir "$lock_dir"
-    local rmdir_status=$?
-    if [ "$rmdir_status" -ne 0 ]; then
-        # Log warning but don't necessarily fail the whole process if write succeeded
-        debug_log "WARNING" "Child: Failed to remove lock directory $lock_dir (rmdir status: $rmdir_status)"
-        # If write also failed, ensure we return critical error status
-        [ "$write_failed" -eq 1 ] && return 1
-    fi
-    # --- Lock Released ---
-
-    # --- Determine final exit status ---
-    if [ "$write_failed" -eq 1 ]; then
-        return 1 # Critical error due to write failure
+    # --- OS バージョンに基づいた分岐 ---
+    if [ "$osversion" = "19" ]; then
+        # OpenWrt 19 の場合は _19 関数を呼び出す
+        debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19"
+        create_language_db_all "$@" # 引数をそのまま渡す
+        # create_language_db_19 "$@" # 引数をそのまま渡す
+        exit_status=$? # _19 関数の終了ステータスを取得
     else
-        # Return 0 (success) or 2 (partial success due to translation errors)
-        return "$overall_success"
+        # OpenWrt 19 以外の場合は _all 関数を呼び出す
+        debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion'"
+        create_language_db_all "$@" # 引数をそのまま渡す
+        exit_status=$? # _all 関数の終了ステータスを取得
     fi
+    debug_log "DEBUG" "create_language_db_parallel: Child function finished with status: $exit_status"
+
+    # --- Stop Timing and Spinner ---
+    end_time=$(date +%s)
+    # start_time が空でないことを確認
+    [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time)) || elapsed_seconds=0
+
+    # スピナーが開始されていた場合のみ停止処理
+    if [ "$spinner_started" = "true" ]; then
+        local final_message=""
+        local spinner_status="success" # デフォルトは成功
+
+        # 終了ステータスに基づいて最終メッセージとスピナーステータスを決定
+        if [ "$exit_status" -eq 0 ]; then
+             # 成功した場合
+             if [ "$total_lines" -gt 0 ]; then
+                 # 翻訳行があった場合
+                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+             else
+                 # 翻訳行がなかった場合 (total_lines が 0)
+                 final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
+             fi
+        elif [ "$exit_status" -eq 2 ]; then
+            # 部分的成功の場合
+            final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
+            spinner_status="warning" # ステータスを警告に
+        else # exit_status が 1 (致命的エラー) またはその他の場合
+            # 失敗した場合
+            final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
+            spinner_status="error" # ステータスをエラーに
+        fi
+        # スピナーを停止
+        stop_spinner "$final_message" "$spinner_status"
+        debug_log "DEBUG" "create_language_db_parallel: Task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
+    else
+        # スピナーが開始されていなかった場合 (フォールバック表示)
+         if [ "$exit_status" -eq 0 ]; then
+             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+         elif [ "$exit_status" -eq 2 ]; then
+             printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
+         else
+             printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
+         fi
+    fi
+
+    # 最終的な終了ステータスを返す
+    return "$exit_status"
 }
 
 # Child function called by create_language_db_parallel (Revised for Direct Append + Lock)
@@ -734,7 +616,7 @@ create_language_db() {
 # @param $3: target_lang_code (string) - The target language code (e.g., "ja").
 # @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
 # @return: 0 on success, 1 on critical error (read/write/lock failure), 2 if any translation fails within this chunk (but writes were successful).
-OK_create_language_db() {
+create_language_db() {
     local input_chunk_file="$1"
     local final_output_file="$2" # 引数名を変更
     local target_lang_code="$3"
