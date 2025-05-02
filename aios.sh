@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.02-00-00"
+SCRIPT_VERSION="2025.05.02-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -86,7 +86,7 @@ MAX_PARALLEL_TASKS=$(( (CORE_COUNT + PARALLEL_PLUS > PARALLEL_LIMIT) * PARALLEL_
 
 # ダウンロード関連設定
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}" # 基本URL
-CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
+# CACHE_BUST="?cache_bust=$(date +%s)" # キャッシュバスティングパラメータ
 
 # wget関連設定
 BASE_WGET="wget --no-check-certificate -q" # 基本wgetコマンド
@@ -1794,12 +1794,100 @@ download_parallel() {
     fi
 }
 
+download_fetch_file() {
+    local file_name="$1"
+    local clean_remote_version="$2"
+    local chmod_mode="$3"
+    local install_path="${BASE_DIR}/$file_name"
+    local script_file="${CACHE_DIR}/script.ch"
+    local remote_url="${BASE_URL}/$file_name" # Base URL
+    local wget_options=""
+    local ip_type_file="${CACHE_DIR}/ip_type.ch"
+    local retry_count=0
+    local max_retries="${API_MAX_RETRIES:-3}"
+    local wget_exit_code=1
+
+    debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: $max_retries, Timeout: ${API_TIMEOUT:-5}s"
+
+    # --- <<< 変更点: キャッシュバースト文字列の動的生成と適用 >>> ---
+    # FORCEモード、またはバージョン情報に "direct" が含まれる場合にキャッシュバーストを適用
+    if [ "$FORCE" = "true" ] || echo "$clean_remote_version" | grep -q "direct"; then
+        local cache_bust_param="?cache_bust=$(date +%s)" # 関数内で動的に生成
+        remote_url="${remote_url}${cache_bust_param}"     # URLにキャッシュバーストパラメータを追加
+        debug_log "DEBUG" "Cache busting applied: ${remote_url}"
+    fi
+    # --- <<< 変更点ここまで >>> ---
+
+    debug_log "DEBUG" "Downloading from ${remote_url} to ${install_path}"
+
+    # IPバージョン判定（変更なし）
+    if [ ! -f "$ip_type_file" ]; then
+        debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch not found)" >&2
+        return 1
+    fi
+    wget_options=$(cat "$ip_type_file" 2>/dev/null)
+    if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
+        debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch is unknown or empty)" >&2
+        return 1
+    fi
+
+    # --- wget リトライロジック開始 (変更なし) ---
+    while [ "$retry_count" -lt "$max_retries" ]; do
+        if [ "$retry_count" -gt 0 ]; then
+            debug_log "DEBUG" "download_fetch_file: Retrying download for $file_name (Attempt $((retry_count + 1))/$max_retries)..."
+            sleep 1
+        fi
+
+        wget --no-check-certificate $wget_options -T "${API_TIMEOUT:-5}" -q -O "$install_path" "$remote_url" 2>/dev/null
+        wget_exit_code=$?
+
+        if [ "$wget_exit_code" -eq 0 ]; then
+            debug_log "DEBUG" "download_fetch_file: wget command successful for $file_name."
+            break
+        else
+            debug_log "DEBUG" "download_fetch_file: wget command failed for $file_name with exit code $wget_exit_code."
+        fi
+        retry_count=$((retry_count + 1))
+    done
+    # --- wget リトライロジック終了 (変更なし) ---
+
+    # --- 結果判定 (変更なし) ---
+    if [ "$wget_exit_code" -ne 0 ]; then
+        debug_log "DEBUG" "download_fetch_file: Download failed for $file_name after $max_retries attempts."
+        rm -f "$install_path" 2>/dev/null
+        return 1
+    fi
+
+    # --- ファイル検証 (変更なし) ---
+    if [ ! -f "$install_path" ]; then
+        debug_log "DEBUG" "download_fetch_file: Downloaded file not found after successful wget: $file_name"
+        return 1
+    fi
+    if [ ! -s "$install_path" ]; then
+        debug_log "DEBUG" "download_fetch_file: Downloaded file is empty after successful wget: $file_name"
+        rm -f "$install_path" 2>/dev/null
+        return 1
+    fi
+    debug_log "DEBUG" "download_fetch_file: File successfully downloaded and verified: ${install_path}"
+
+    # --- 権限設定 (変更なし) ---
+    if [ "$chmod_mode" = "true" ]; then
+        chmod +x "$install_path"
+        debug_log "DEBUG" "download_fetch_file: chmod +x applied to $file_name"
+    fi
+
+    # --- バージョン情報をキャッシュに保存 (変更なし) ---
+    save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
+
+    return 0
+}
+
 # @FUNCTION: download_fetch_file
 # @DESCRIPTION: Fetches a single file using wget with retries and cache busting.
 # @PARAM: $1 - File name (relative path from BASE_URL).
 # @PARAM: $2 - Flag ("true" or "false") to apply chmod +x.
 # @RETURN: 0 on success, non-zero on failure.
-download_fetch_file() {
+OK_download_fetch_file() {
     local file_name="$1"
     local chmod_mode="$2" # 引数のインデックスを調整
     local install_path="${BASE_DIR}/$file_name"
