@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-00-08"
+SCRIPT_VERSION="2025-05-02-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -263,8 +263,7 @@ create_language_db_parallel() {
     else
         # OpenWrt 19 以外の場合は _all 関数を呼び出す
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion'"
-        # create_language_db_all "$@" # 引数をそのまま渡す
-        test_create_db_subshell "$@" # 引数をそのまま渡す  # <--------------------------------------------------------------------------------------------------------------------------------------------
+        create_language_db_all "$@" # 引数をそのまま渡す
         exit_status=$? # _all 関数の終了ステータスを取得
     fi
     debug_log "DEBUG" "create_language_db_parallel: Child function finished with status: $exit_status"
@@ -648,8 +647,8 @@ EOF
 }
 
 # --- Test Function: Based on OK_create_language_db_all, uses subshell, v5 task management, AND v5 temporary file handling ---
-# (This function replaces the previous content of test_create_db_subshell)
-test_create_db_subshell() {
+# (This function replaces the previous content of create_language_db_all)
+create_language_db_all() {
     # 引数受け取り (変更なし)
     local aip_function_name="$1"
     local api_endpoint_url="$2"
@@ -667,20 +666,20 @@ test_create_db_subshell() {
     local line_from_awk=""
 
     # --- Logging & 並列数設定 (変更なし) ---
-    debug_log "DEBUG" "test_create_db_subshell: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
+    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
     local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
-    debug_log "DEBUG" "test_create_db_subshell: Max parallel tasks from global setting: $current_max_parallel_tasks"
+    debug_log "DEBUG" "create_language_db_all: Max parallel tasks from global setting: $current_max_parallel_tasks"
 
     # --- ヘッダー部分を書き出し (変更なし) ---
     cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
-# Method: test_create_db_subshell (with v5 task management and temp files)
+# Method: create_language_db_all (with v5 task management and temp files)
 EOF
 
     if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "test_create_db_subshell: Failed to write header to $final_output_file"
+        debug_log "DEBUG" "create_language_db_all: Failed to write header to $final_output_file"
         exit_status=1
     else
         # --- メイン処理: 行ベースで並列翻訳 ---
@@ -727,24 +726,24 @@ EOF
                     if wait "$oldest_pid" >/dev/null 2>&1; then
                         :
                     else
-                        debug_log "DEBUG" "test_create_db_subshell: Background task PID $oldest_pid may have failed."
+                        debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed."
                     fi
                     pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                 else
-                    debug_log "DEBUG" "test_create_db_subshell: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
+                    debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
                     sleep 0.1
                 fi
             done
         done
         # パイプラインの終了ステータス確認 (変更なし)
         if [ $? -ne 0 ] && [ "$exit_status" -eq 0 ]; then
-             debug_log "DEBUG" "test_create_db_subshell: Error during awk/while processing."
+             debug_log "DEBUG" "create_language_db_all: Error during awk/while processing."
              exit_status=1
         fi
 
         # --- BGジョブが全て完了するまで待機 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "test_create_db_subshell: Waiting for remaining background tasks..."
+            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
             local wait_failed=0
             for pid in $pids; do
                 if [ -n "$pid" ]; then
@@ -752,19 +751,19 @@ EOF
                         :
                     else
                         wait_failed=1
-                        debug_log "DEBUG" "test_create_db_subshell: Remaining task PID $pid failed."
+                        debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid failed."
                     fi
                 fi
             done
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                 exit_status=2
             fi
-            debug_log "DEBUG" "test_create_db_subshell: All background tasks finished."
+            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
         fi
 
         # --- <<< 変更点: 部分出力を結合 (v5 と同じ ls + cat 方式) ---
         if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "test_create_db_subshell: Combining partial results using ls..."
+            debug_log "DEBUG" "create_language_db_all: Combining partial results using ls..."
             # v5 と同じく ls を使用して部分ファイルを取得
             # 注意: ファイル名に特殊文字が含まれると ls や後続の cat で問題が起きる可能性
             local partial_files=$(ls "$final_output_file".partial_* 2>/dev/null)
@@ -777,181 +776,13 @@ EOF
                 if cat $partial_files >> "$final_output_file"; then
                      # rm も同様に $partial_files をそのまま使う (v5再現)
                      if rm -f $partial_files; then
-                         debug_log "DEBUG" "test_create_db_subshell: Partial files combined and removed."
-                     else
-                         debug_log "DEBUG" "test_create_db_subshell: Failed to remove partial files after combining."
-                         # v5と同様、削除失敗は致命的エラーとしない
-                     fi
-                else
-                     debug_log "DEBUG" "test_create_db_subshell: Failed to combine partial files using ls/cat."
-                     exit_status=1 # 致命的エラー
-                fi
-            else
-                debug_log "DEBUG" "test_create_db_subshell: No partial files found to combine."
-            fi
-        fi
-
-        # --- 完了マーカーを付加 (変更なし) ---
-        if [ "$exit_status" -ne 1 ]; then
-            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
-            debug_log "DEBUG" "test_create_db_subshell: Completion marker added."
-        fi
-    fi
-
-    return "$exit_status"
-}
-
-# --- OpenWrt 19 以外のバージョン用実装関数 ---
-create_language_db_all() {
-    # 引数受け取り
-    local aip_function_name="$1"
-    local api_endpoint_url="$2"  # Passed for logging/context, not used directly here
-    local domain_name="$3"       # Passed for logging/context, not used directly here
-    local target_lang_code="$4"
-
-    # 変数定義
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local final_output_dir="/tmp/aios"
-    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
-    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
-    local pids=""
-    local pid=""
-    local exit_status=0 # 0:success, 1:critical error, 2:partial success
-    local line_from_awk="" # awkから読み取る行を保持する変数
-
-    # --- Logging & 並列数設定 ---
-    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line) for language '$target_lang_code'."
-    # グローバル変数 MAX_PARALLEL_TASKS を使用。未定義の場合は安全策として 1 にフォールバック。
-    local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
-    debug_log "DEBUG" "create_language_db_all: Max parallel tasks from global setting: $current_max_parallel_tasks"
-
-    # --- ヘッダー部分を書き出し ---
-    cat > "$final_output_file" <<-EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name}
-# Target Language: ${target_lang_code}
-# Method: create_language_db_all
-EOF
-
-    if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_all: Failed to write header to $final_output_file"
-        exit_status=1 # 致命的エラー
-    else
-        # --- メイン処理: 行ベースで並列翻訳 ---
-        # awkから読み取る行を line_from_awk 変数に格納
-        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- 並列タスクをBGで起動 ---
-            ( # ← サブシェルの開始
-                # サブシェル内で必要な変数を参照
-                local current_line="$line_from_awk" # awkから受け取った行を変数に
-                local lang="$target_lang_code"      # 外側のスコープの変数を参照
-                local func="$aip_function_name"     # 外側のスコープの変数を参照
-                local outfile="$final_output_file"  # 外側のスコープの変数を参照
-
-                # --- 翻訳処理 ---
-                local translated_line
-                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
-                # 結果を部分ファイルに追記 (ファイル名は一意にする必要がある)
-                if [ -n "$translated_line" ]; then
-                     # 一意なサフィックスを生成 (より安全な方法を検討)
-                     # mktempが使えるか？ 使えない場合はプロセスIDと時間などで代替
-                     local partial_suffix=""
-                     if type mktemp >/dev/null 2>&1; then
-                         # mktemp が使える場合 (より安全)
-                         # partial_suffix=$(mktemp -u XXXXXX) # 一時ファイル名生成 (実際には作成しない)
-                         # よりシンプルな方法: プロセスIDとナノ秒 (利用可能なら)
-                         if date '+%N' >/dev/null 2>&1; then
-                            partial_suffix="$$$(date '+%N')"
-                         else
-                            partial_suffix="$$$(date '+%S')" # ナノ秒が使えなければ秒
-                         fi
-                     else
-                         # mktemp が使えない場合 (プロセスIDと秒)
-                         partial_suffix="$$$(date '+%S')"
-                     fi
-
-                     # printf はファイルへの追記に失敗してもエラーを返さないことがあるため注意
-                     printf "%s\n" "$translated_line" >> "$outfile".partial_"$partial_suffix"
-                     local write_status=$?
-                     if [ "$write_status" -ne 0 ]; then
-                         debug_log "ERROR [Subshell]" "Failed to append to partial file: $outfile.partial_$partial_suffix"
-                         exit 1 # サブシェルをエラー終了させる
-                     fi
-                fi
-                exit 0 # サブシェルを正常終了させる
-            ) & # <<< 引数なしでバックグラウンド実行
-
-            pid=$!
-            pids="$pids $pid"
-
-            # --- 並列タスク数制限 (グローバル設定を使用) ---
-            # jobs -p が利用可能か確認 (POSIX標準ではない)
-            # POSIX準拠のためには、単純に一定数起動したらwaitするか、
-            # より複雑なプロセス管理が必要になる場合がある。
-            # ここでは jobs -p が使える前提で進める。
-            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-                # wait -n が使えれば効率的だがPOSIXではない
-                # 特定のPIDを待つ (最も古いものを待つなど)
-                oldest_pid=$(echo $pids | cut -d' ' -f1)
-                if wait "$oldest_pid" >/dev/null 2>&1; then
-                    # 正常終了
-                    :
-                else
-                    # 異常終了
-                    wait_failed=1 # フラグを設定 (ループの外でチェック)
-                    debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed."
-                fi
-                # 待機したPIDをリストから削除
-                pids=$(echo "$pids" | sed "s/^$oldest_pid //")
-                # sleep 0.1 # 短いスリープを入れる場合
-            done
-        done
-        # パイプラインの終了ステータス確認
-        # awk | while の構造では、whileループの終了ステータスしか取れない場合がある
-        # 必要であればFIFOなどを使う
-        local pipe_status=${PIPESTATUS[0]} # bash/zsh拡張。ashでは使えない
-        # ashでは単純に$?でwhileループの終了ステータスを見る
-        if [ $? -ne 0 ] && [ "$exit_status" -eq 0 ]; then
-             debug_log "DEBUG" "create_language_db_all: Error during awk/while processing (while loop exit status)."
-             exit_status=1 # 致命的エラーとみなす
-        fi
-
-        # --- BGジョブが全て完了するまで待機 ---
-        if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
-            local wait_failed=0 # このスコープでの失敗フラグ
-            for pid in $pids; do
-                if wait "$pid"; then
-                    : # 正常終了
-                else
-                    wait_failed=1 # 失敗フラグを立てる
-                    debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid failed."
-                fi
-            done
-            # ループ中または最後の wait で失敗があった場合
-            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
-                exit_status=2 # 部分的成功とする
-            fi
-            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
-        fi
-
-        # --- 部分出力を結合 ---
-        if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_all: Combining partial results..."
-            # find や ls * を使う代わりに、より安全な方法を検討
-            # ここでは単純な ls を使うが、ファイル名に特殊文字が含まれると問題の可能性
-            local partial_files=$(ls "$final_output_file".partial_* 2>/dev/null)
-            if [ -n "$partial_files" ]; then
-                # cat で結合し、成功したら元ファイルを削除
-                if cat "$final_output_file".partial_* >> "$final_output_file"; then
-                     if rm -f "$final_output_file".partial_*; then
                          debug_log "DEBUG" "create_language_db_all: Partial files combined and removed."
                      else
                          debug_log "DEBUG" "create_language_db_all: Failed to remove partial files after combining."
-                         # 結合は成功したが削除に失敗した場合、ステータスをどうするか？ (ここでは継続)
+                         # v5と同様、削除失敗は致命的エラーとしない
                      fi
                 else
-                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files."
+                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using ls/cat."
                      exit_status=1 # 致命的エラー
                 fi
             else
@@ -959,12 +790,12 @@ EOF
             fi
         fi
 
-        # --- 完了マーカーを付加 ---
+        # --- 完了マーカーを付加 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             debug_log "DEBUG" "create_language_db_all: Completion marker added."
         fi
-    fi # ヘッダー書き込み成功チェックの終わり
+    fi
 
     return "$exit_status"
 }
