@@ -1249,7 +1249,6 @@ download() {
     while [ $# -gt 0 ]; do
         case "$1" in
             chmod)   chmod_mode="true" ;;
-            # force オプションは削除
             hidden)  hidden_mode="true" ;;
             quiet)   quiet_mode="true" ;;
             bash|python3|node|perl)
@@ -1278,7 +1277,6 @@ download() {
     fi
 
     # シングル時のみDL成功メッセージ表示（抑制/隠し/静音モード除外）
-    # バージョン情報とAPIステータスをメッセージから削除
     if [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
         # メッセージキー CONFIG_DOWNLOAD_SUCCESS を使用し、ファイル名のみ渡す
         printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name")"
@@ -1809,12 +1807,11 @@ download_fetch_file() {
 
     debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: $max_retries, Timeout: ${API_TIMEOUT:-5}s"
 
-    # --- <<< 変更点: キャッシュバースト文字列の動的生成と適用 >>> ---
-    # FORCEモード、またはバージョン情報に "direct" が含まれる場合にキャッシュバーストを適用
-    if [ "$FORCE" = "true" ] || echo "$clean_remote_version" | grep -q "direct"; then
+    # バージョン情報に "direct" が含まれる場合にキャッシュバーストを適用
+    if echo "$clean_remote_version" | grep -q "direct"; then
         local cache_bust_param="?cache_bust=$(date +%s)" # 関数内で動的に生成
         remote_url="${remote_url}${cache_bust_param}"     # URLにキャッシュバーストパラメータを追加
-        debug_log "DEBUG" "Cache busting applied: ${remote_url}"
+        debug_log "DEBUG" "Cache busting applied (version contains 'direct'): ${remote_url}"
     fi
     # --- <<< 変更点ここまで >>> ---
 
