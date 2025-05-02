@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-02-03"
+SCRIPT_VERSION="2025-05-02-03-00"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -183,7 +183,6 @@ create_language_db_19() {
     local api_endpoint_url="$2"  # Passed for logging/context, not used directly here
     local domain_name="$3"       # Passed for logging/context, not used directly here
     local target_lang_code="$4"
-    # --- MODIFIED: Receive the parallelism limit as the 5th argument ---
     local max_tasks_limit="$5"
 
     # 変数定義
@@ -191,7 +190,6 @@ create_language_db_19() {
     local final_output_dir="/tmp/aios"
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local tmp_input_prefix="${TR_DIR}/message_${target_lang_code}.tmp.in."
-    # local tmp_output_prefix="${TR_DIR}/message_${target_lang_code}.tmp.out." # Original comment: Not used
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
     local total_lines=0
     local i=0
@@ -199,185 +197,143 @@ create_language_db_19() {
     local pid=""
     local exit_status=0 # 0:success, 1:critical error, 2:partial success
 
-    # --- Input validation for the limit ---
-    case "$max_tasks_limit" in
-        ''|*[!0-9]*) # Empty or not a number
-            debug_log "DEBUG" "create_language_db_19: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
-            max_tasks_limit=1
-            ;;
-        0) # Zero is not valid, default to 1
-            debug_log "DEBUG" "create_language_db_19: Received max_tasks_limit=0. Defaulting to 1."
-            max_tasks_limit=1
-            ;;
-        *) # Valid positive integer
-            : # No action needed
-            ;;
-    esac
-    debug_log "DEBUG" "create_language_db_19: Using parallelism limit: $max_tasks_limit"
+    # --- MODIFIED: Assuming max_tasks_limit is valid from the caller ---
+    # Removed the input validation case statement as it's redundant
+    # given the caller (create_language_db_parallel) provides a validated value.
+    debug_log "DEBUG" "create_language_db_19: Using parallelism limit from argument: $max_tasks_limit"
 
     # --- Prepare directories and cleanup (Original Logic) ---
     mkdir -p "$TR_DIR" || { debug_log "DEBUG" "create_language_db_19: Failed to create temporary directory: $TR_DIR"; return 1; }
     mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_19: Failed to create final output directory: $final_output_dir"; return 1; }
 
     # shellcheck disable=SC2064
-    # Original comment: tmp_output_prefix is not used
     trap "debug_log 'DEBUG' 'Trap cleanup (19): Removing temporary input files...'; rm -f ${tmp_input_prefix}*" INT TERM EXIT
 
     # --- Logging (Original Logic, limit source changed) ---
     debug_log "DEBUG" "create_language_db_19: Starting parallel translation for language '$target_lang_code'."
-    # --- REMOVED: Internal core count calculation ---
-    # local core_count
-    # core_count=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
-    # [ "$core_count" -lt 1 ] && core_count=1
-    # local current_max_parallel_tasks="$core_count"
-    # debug_log "DEBUG" "create_language_db_19: Max parallel tasks set to CPU core count: $current_max_parallel_tasks"
-    # --- Use the passed limit instead ---
     local current_max_parallel_tasks="$max_tasks_limit" # Use the argument
-    debug_log "DEBUG" "create_language_db_19: Max parallel tasks set from argument: $current_max_parallel_tasks"
+    # Debug log moved up after validation removal
 
-
-    # --- Split Base DB (Original Logic, uses the limit) ---
+    # --- Check lines, Initialize Output File OR Split Base DB ---
     total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
+
     if [ "$total_lines" -le 0 ]; then
+        # --- Case 1: No lines to translate ---
         debug_log "DEBUG" "create_language_db_19: No lines to translate."
-        # Write header only (Original Logic)
-        cat > "$final_output_file" <<-EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name}
-# Target Language: ${target_lang_code}
-# Method: create_language_db_19
-EOF
-        # Check cat's exit status (Original Logic)
+        # Create an empty file (no header)
+        >"$final_output_file"
         if [ $? -ne 0 ]; then
-             debug_log "DEBUG" "create_language_db_19: Failed to write header for empty translation."
+             debug_log "DEBUG" "create_language_db_19: Failed to create empty output file $final_output_file."
              exit_status=1
         else
-             exit_status=0 # Considered success if header write succeeds
+             exit_status=0
         fi
         return "$exit_status"
-    fi
-
-    debug_log "DEBUG" "create_language_db_19: Splitting $total_lines lines into $current_max_parallel_tasks tasks..."
-    # --- MODIFIED: Use the passed limit in awk ---
-    awk -v num_tasks="$current_max_parallel_tasks" \
-        -v prefix="$tmp_input_prefix" \
-        'BEGIN { valid_line_count=0 }
-         NR > 1 && !/^#/ && !/^$/ {
-            valid_line_count++;
-            task_num = (valid_line_count - 1) % num_tasks + 1;
-            print $0 >> (prefix task_num);
-        }' "$base_db"
-    if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_19: Failed to split base DB using awk."
-        return 1 # Critical error
-    fi
-    debug_log "DEBUG" "create_language_db_19: Base DB split complete."
-
-    # --- Write header to the final file (Original Logic) ---
-    cat > "$final_output_file" <<-EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name}
-# Target Language: ${target_lang_code}
-# Method: create_language_db_19
-EOF
-    if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_19: Failed to write header to $final_output_file"
-        return 1 # Critical error
-    fi
-
-    # --- Execute tasks (Original Logic, uses the limit) ---
-    debug_log "DEBUG" "create_language_db_19: Launching parallel translation tasks..."
-    i=1
-    # --- MODIFIED: Use the passed limit in loop condition ---
-    while [ "$i" -le "$current_max_parallel_tasks" ]; do
-        local tmp_input_file="${tmp_input_prefix}${i}"
-        # local tmp_output_file="${tmp_output_prefix}${i}" # Original comment: Not used
-
-        if [ ! -f "$tmp_input_file" ]; then
-             i=$((i + 1))
-             continue
-        fi
-        # Original comment: Temporary output file creation not needed
-        # >"$tmp_output_file" || { ... } # Original comment: Removed
-
-        # Pass final output file path to child process (Original Logic)
-        create_language_db "$tmp_input_file" "$final_output_file" "$target_lang_code" "$aip_function_name" &
-        pid=$!
-        pids="$pids $pid"
-        debug_log "DEBUG" "create_language_db_19: Launched task $i (PID: $pid)"
-
-        # --- MODIFIED: Use the passed limit for job control ---
-        # Original comment: Parallel task limit control
-        while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-            # Check if any background job finished to avoid busy-waiting if possible
-            # Using wait -n is ideal but not POSIX standard. sleep is the fallback.
-            # If wait -n was available: wait -n || sleep 1
-            sleep 1
-        done
-        # ─────────────────────────
-
-        i=$((i + 1))
-    done
-
-    # --- Wait for tasks (Original Logic) ---
-    if [ -n "$pids" ]; then
-         debug_log "DEBUG" "create_language_db_19: Waiting for tasks to complete..."
-         for pid in $pids; do
-             wait "$pid"
-             local task_exit_status=$?
-             # Original logic for handling task exit status
-             if [ "$task_exit_status" -ne 0 ]; then
-                 if [ "$task_exit_status" -eq 1 ]; then
-                     debug_log "DEBUG" "create_language_db_19: Task PID $pid failed critically (status 1)."
-                     exit_status=1 # Set overall to critical failure
-                 elif [ "$task_exit_status" -eq 2 ]; then
-                     debug_log "DEBUG" "create_language_db_19: Task PID $pid completed partially (status 2)."
-                     # Update to partial success only if not already critical failure
-                     [ "$exit_status" -eq 0 ] && exit_status=2
-                 else
-                     debug_log "DEBUG" "create_language_db_19: Task PID $pid failed unexpectedly (status $task_exit_status)."
-                     # Treat unexpected errors as critical failure if not already failed
-                     [ "$exit_status" -eq 0 ] && exit_status=1
-                 fi
-             else
-                 debug_log "DEBUG" "create_language_db_19: Task PID $pid completed successfully."
-             fi
-         done
-         debug_log "DEBUG" "create_language_db_19: All tasks finished processing (Overall status: $exit_status)."
     else
-         debug_log "DEBUG" "create_language_db_19: No tasks were launched."
-    fi
+        # --- Case 2: Lines exist ---
+        # Initialize empty file for appending (no header)
+        >"$final_output_file"
+        if [ $? -ne 0 ]; then
+            debug_log "DEBUG" "create_language_db_19: Failed to initialize output file $final_output_file"
+            return 1 # Critical error
+        fi
 
-    # --- Add completion marker (Original Logic) ---
-    # Add marker if no critical error occurred
-    if [ "$exit_status" -ne 1 ]; then
-        # Use lock mechanism to append marker (Original Logic)
-        local lock_dir="${final_output_file}.lock"
-        local lock_retries=5
-        local lock_acquired=0
-        while [ "$lock_retries" -gt 0 ]; do
-            if mkdir "$lock_dir" 2>/dev/null; then
-                lock_acquired=1
-                break
+        # --- Split the base DB ---
+        debug_log "DEBUG" "create_language_db_19: Splitting $total_lines lines into $current_max_parallel_tasks tasks..."
+        awk -v num_tasks="$current_max_parallel_tasks" \
+            -v prefix="$tmp_input_prefix" \
+            'BEGIN { valid_line_count=0 }
+             NR > 1 && !/^#/ && !/^$/ {
+                valid_line_count++;
+                task_num = (valid_line_count - 1) % num_tasks + 1;
+                print $0 >> (prefix task_num);
+            }' "$base_db"
+        if [ $? -ne 0 ]; then
+            debug_log "DEBUG" "create_language_db_19: Failed to split base DB using awk."
+            return 1 # Critical error
+        fi
+        debug_log "DEBUG" "create_language_db_19: Base DB split complete."
+
+        # --- Execute tasks (Original Logic, uses the limit) ---
+        debug_log "DEBUG" "create_language_db_19: Launching parallel translation tasks..."
+        i=1
+        while [ "$i" -le "$current_max_parallel_tasks" ]; do
+            local tmp_input_file="${tmp_input_prefix}${i}"
+
+            if [ ! -f "$tmp_input_file" ]; then
+                 i=$((i + 1))
+                 continue
             fi
-            lock_retries=$((lock_retries - 1))
-            sleep 0.1
+
+            # Pass final output file path to child process (Original Logic)
+            create_language_db "$tmp_input_file" "$final_output_file" "$target_lang_code" "$aip_function_name" &
+            pid=$!
+            pids="$pids $pid"
+            debug_log "DEBUG" "create_language_db_19: Launched task $i (PID: $pid)"
+
+            # --- Job control loop (Original Logic, uses limit) ---
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                sleep 1 # Use integer sleep for POSIX
+            done
+
+            i=$((i + 1))
         done
 
-        if [ "$lock_acquired" -eq 1 ]; then
-            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
-            if [ $? -ne 0 ]; then
-                debug_log "DEBUG" "create_language_db_19: Failed to append completion marker."
-                # Do not change exit_status as marker failure is not critical (Original Logic)
-            else
-                 debug_log "DEBUG" "create_language_db_19: Completion marker added."
-            fi
-            rmdir "$lock_dir" # Release lock (Original Logic)
+        # --- Wait for tasks (Original Logic) ---
+        if [ -n "$pids" ]; then
+             debug_log "DEBUG" "create_language_db_19: Waiting for tasks to complete..."
+             for pid in $pids; do
+                 wait "$pid"
+                 local task_exit_status=$?
+                 # Original logic for handling task exit status
+                 if [ "$task_exit_status" -ne 0 ]; then
+                     if [ "$task_exit_status" -eq 1 ]; then
+                         debug_log "DEBUG" "create_language_db_19: Task PID $pid failed critically (status 1)."
+                         exit_status=1
+                     elif [ "$task_exit_status" -eq 2 ]; then
+                         debug_log "DEBUG" "create_language_db_19: Task PID $pid completed partially (status 2)."
+                         [ "$exit_status" -eq 0 ] && exit_status=2
+                     else
+                         debug_log "DEBUG" "create_language_db_19: Task PID $pid failed unexpectedly (status $task_exit_status)."
+                         [ "$exit_status" -eq 0 ] && exit_status=1
+                     fi
+                 else
+                     debug_log "DEBUG" "create_language_db_19: Task PID $pid completed successfully."
+                 fi
+             done
+             debug_log "DEBUG" "create_language_db_19: All tasks finished processing (Overall status: $exit_status)."
         else
-            debug_log "DEBUG" "create_language_db_19: Failed to acquire lock for appending marker."
-            # Marker failure is not critical (Original Logic)
+             debug_log "DEBUG" "create_language_db_19: No tasks were launched."
         fi
-    fi
+
+        # --- Add completion marker (Original Logic) ---
+        if [ "$exit_status" -ne 1 ]; then
+            # Use lock mechanism to append marker (Original Logic)
+            local lock_dir="${final_output_file}.lock"
+            local lock_retries=5
+            local lock_acquired=0
+            while [ "$lock_retries" -gt 0 ]; do
+                if mkdir "$lock_dir" 2>/dev/null; then
+                    lock_acquired=1
+                    break
+                fi
+                lock_retries=$((lock_retries - 1))
+                sleep 1 # Use POSIX compliant sleep
+            done
+
+            if [ "$lock_acquired" -eq 1 ]; then
+                printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+                if [ $? -ne 0 ]; then
+                    debug_log "DEBUG" "create_language_db_19: Failed to append completion marker."
+                else
+                     debug_log "DEBUG" "create_language_db_19: Completion marker added."
+                fi
+                rmdir "$lock_dir" # Release lock (Original Logic)
+            else
+                debug_log "DEBUG" "create_language_db_19: Failed to acquire lock for appending marker."
+            fi
+        fi
+    fi # End of if/else based on total_lines
 
     # Original comment: Temporary input files are deleted by trap
 
@@ -533,7 +489,7 @@ EOF
                 break
             fi
             lock_retries=$((lock_retries - 1))
-            sleep 0.1
+            sleep 1
         done
 
         if [ "$lock_acquired" -eq 1 ]; then
@@ -583,7 +539,7 @@ create_language_db_all() {
     local exit_status=0
     local line_from_awk=""
 
-    # --- Input validation for the limit ---
+    # --- Input validation for the limit (変更なし) ---
     case "$max_tasks_limit" in
         ''|*[!0-9]*) # Empty or not a number
             debug_log "DEBUG" "create_language_db_all: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
@@ -601,54 +557,41 @@ create_language_db_all() {
 
     # --- Logging (Original Logic, limit source changed) ---
     debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
-    # --- REMOVED: Internal reference to global MAX_PARALLEL_TASKS ---
-    # local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
-    # debug_log "DEBUG" "create_language_db_all: Max parallel tasks from global setting: $current_max_parallel_tasks"
-    # --- Use the passed limit instead ---
     local current_max_parallel_tasks="$max_tasks_limit" # Use the argument
     debug_log "DEBUG" "create_language_db_all: Max parallel tasks set from argument: $current_max_parallel_tasks"
 
 
-    # --- ヘッダー部分を書き出し (変更なし) ---
-    cat > "$final_output_file" <<-EOF
-SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
-# Translation generated using: ${aip_function_name}
-# Target Language: ${target_lang_code}
-# Method: create_language_db_all (with v5 task management and temp files)
-EOF
-
-    # Check cat's exit status (Original Logic)
+    # --- MODIFIED: Initialize output file (remove header) ---
+    >"$final_output_file"
     if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_all: Failed to write header to $final_output_file"
+        debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
         exit_status=1
     else
         # --- メイン処理: 行ベースで並列翻訳 (Original Logic) ---
+        # Note: awk does not use -v here, it pipes output
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
             # --- サブシェル内で translate_single_line を実行 (変更なし) ---
             ( # サブシェルの開始 (Original Logic)
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
                 local func="$aip_function_name"
-                local outfile="$final_output_file" # 出力ファイル名のベース (Original Logic)
+                local outfile="$final_output_file" # Use the final output file directly (or base name)
 
                 # --- 一時ファイル名の生成と書き込み (Original Logic - v5方式) ---
                 local translated_line
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
                 if [ -n "$translated_line" ]; then
-                     # 一意なサフィックスを生成 (Original Logic - v5方式)
                      local partial_suffix=""
-                     # mktemp is not POSIX, use v5 alternative (Original Logic)
                      if date '+%N' >/dev/null 2>&1; then
-                        partial_suffix="$$$(date '+%N')" # PID + nanoseconds (Original Logic)
+                        partial_suffix="$$$(date '+%N')"
                      else
-                        partial_suffix="$$$(date '+%S')" # PID + seconds (fallback) (Original Logic)
+                        partial_suffix="$$$(date '+%S')"
                      fi
 
                      # Append to partial file using printf (Original Logic - v5方式)
                      printf "%s\n" "$translated_line" >> "$outfile".partial_"$partial_suffix"
                      local write_status=$?
                      if [ "$write_status" -ne 0 ]; then
-                         # Log error like v5 (Original Logic)
                          debug_log "ERROR [Subshell]" "Failed to append to partial file: $outfile.partial_$partial_suffix"
                          exit 1 # Exit subshell with error (Original Logic)
                      fi
@@ -675,18 +618,15 @@ EOF
                 else
                     # Original logic for handling empty pids list
                     debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
-                    sleep 0.1
+                    # --- MODIFIED: Use POSIX compliant sleep ---
+                    sleep 1
                 fi
             done
         done
         # Check pipeline exit status (Original Logic)
-        local pipe_status=$? # Capture the exit status of the last command in the pipe (while loop)
-        # Check if awk failed (exit status of the first command in the pipe)
-        # Note: Getting awk's status reliably after a pipe is tricky in pure POSIX sh.
-        # This check focuses on the while loop's status.
+        local pipe_status=$?
         if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
              debug_log "DEBUG" "create_language_db_all: Error during awk/while processing (pipe status: $pipe_status)."
-             # If the loop failed, consider it critical only if no other error occurred yet.
              exit_status=1
         fi
 
@@ -694,7 +634,6 @@ EOF
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
             local wait_failed=0
-            # Iterate through remaining PIDs (Original Logic)
             for pid in $pids; do
                 if [ -n "$pid" ]; then
                     if wait "$pid"; then
@@ -705,7 +644,6 @@ EOF
                     fi
                 fi
             done
-            # Set partial success if any remaining job failed and no critical error occurred (Original Logic)
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                 exit_status=2
             fi
@@ -715,14 +653,8 @@ EOF
         # --- 部分出力を結合 (変更なし - v5 ls + cat 方式) ---
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Combining partial results using ls..."
-            # Use ls to get partial files (Original Logic - v5 way)
-            # Warning: ls is problematic with special chars (Original comment)
             local partial_files=$(ls "$final_output_file".partial_* 2>/dev/null)
             if [ -n "$partial_files" ]; then
-                # Combine using cat, remove original if successful (Original Logic - v5 way)
-                # Warning: Issues with spaces in filenames (Original comment)
-                # Safer: find ... -exec cat {} + >> "$final_output_file" \; (Original comment)
-                # Replicating v5 behavior:
                 # shellcheck disable=SC2086 # Intentionally splitting $partial_files like v5
                 if cat $partial_files >> "$final_output_file"; then
                      # shellcheck disable=SC2086 # Intentionally splitting $partial_files like v5
@@ -730,7 +662,6 @@ EOF
                          debug_log "DEBUG" "create_language_db_all: Partial files combined and removed."
                      else
                          debug_log "DEBUG" "create_language_db_all: Failed to remove partial files after combining."
-                         # Removal failure not critical (Original Logic)
                      fi
                 else
                      debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using ls/cat."
@@ -746,12 +677,11 @@ EOF
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             if [ $? -ne 0 ]; then
                 debug_log "DEBUG" "create_language_db_all: Failed to append completion marker."
-                # Marker failure is not critical (Original Logic)
             else
                 debug_log "DEBUG" "create_language_db_all: Completion marker added."
             fi
         fi
-    fi # End of initial header write check
+    fi # End of initial file initialization check
 
     return "$exit_status"
 }
@@ -841,7 +771,7 @@ EOF
                     pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                 else
                     debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
-                    sleep 0.1
+                    sleep 1
                 fi
             done
         done
