@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-00-07"
+SCRIPT_VERSION="2025-05-02-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -647,7 +647,7 @@ EOF
     return "$exit_status"
 }
 
-# --- Test Function: Based on OK_create_language_db_all, uses subshell, AND v5 task management ---
+# --- Test Function: Based on OK_create_language_db_all, uses subshell, v5 task management, AND v5 temporary file handling ---
 # (This function replaces the previous content of test_create_db_subshell)
 test_create_db_subshell() {
     # 引数受け取り (変更なし)
@@ -667,7 +667,7 @@ test_create_db_subshell() {
     local line_from_awk=""
 
     # --- Logging & 並列数設定 (変更なし) ---
-    debug_log "DEBUG" "test_create_db_subshell: Starting parallel translation (line-by-line, v5 task mgmt test) for language '$target_lang_code'."
+    debug_log "DEBUG" "test_create_db_subshell: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
     local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
     debug_log "DEBUG" "test_create_db_subshell: Max parallel tasks from global setting: $current_max_parallel_tasks"
 
@@ -676,7 +676,7 @@ test_create_db_subshell() {
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
-# Method: test_create_db_subshell (with v5 task management)
+# Method: test_create_db_subshell (with v5 task management and temp files)
 EOF
 
     if [ $? -ne 0 ]; then
@@ -690,36 +690,45 @@ EOF
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
                 local func="$aip_function_name"
-                local outfile="$final_output_file"
+                local outfile="$final_output_file" # 出力ファイル名のベース
 
+                # --- <<< 変更点: 一時ファイル名の生成 (v5 と同じ方式) ---
                 local translated_line
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
                 if [ -n "$translated_line" ]; then
-                     # 出力先は単一ファイル (変更なし)
-                     printf "%s\n" "$translated_line" >> "$outfile".partial
+                     # 一意なサフィックスを生成 (v5のロジックを再現)
+                     local partial_suffix=""
+                     # mktemp が POSIX 標準ではないため、v5 の代替ロジックを使用
+                     if date '+%N' >/dev/null 2>&1; then
+                        partial_suffix="$$$(date '+%N')" # プロセスID + ナノ秒
+                     else
+                        partial_suffix="$$$(date '+%S')" # プロセスID + 秒 (フォールバック)
+                     fi
+
+                     # printf で部分ファイルに追記 (ファイル名は v5 同様)
+                     printf "%s\n" "$translated_line" >> "$outfile".partial_"$partial_suffix"
                      local write_status=$?
                      if [ "$write_status" -ne 0 ]; then
-                         debug_log "ERROR [Subshell]" "Failed to append to partial file: $outfile.partial"
-                         exit 1
+                         # v5と同様のログ出力
+                         debug_log "ERROR [Subshell]" "Failed to append to partial file: $outfile.partial_$partial_suffix"
+                         exit 1 # サブシェルをエラー終了
                      fi
                 fi
-                exit 0
+                exit 0 # サブシェルを正常終了
             ) & # サブシェルをバックグラウンド実行
 
             pid=$!
             pids="$pids $pid"
 
-            # --- <<< 変更点: 並列タスク数制限 (エラー版 v5 と同じ wait + sed 方式) ---
+            # --- 並列タスク数制限 (v5 と同じ wait + sed 方式、変更なし) ---
             while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-                # 最も古いPIDを取得 (v5と同様)
                 oldest_pid=$(echo "$pids" | cut -d' ' -f1)
                 if [ -n "$oldest_pid" ]; then
                     if wait "$oldest_pid" >/dev/null 2>&1; then
-                        : # 正常終了
+                        :
                     else
                         debug_log "DEBUG" "test_create_db_subshell: Background task PID $oldest_pid may have failed."
                     fi
-                    # 待機したPIDをリストから削除 (v5と同様 sed を使用)
                     pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                 else
                     debug_log "DEBUG" "test_create_db_subshell: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
@@ -740,9 +749,9 @@ EOF
             for pid in $pids; do
                 if [ -n "$pid" ]; then
                     if wait "$pid"; then
-                        : # 正常終了
+                        :
                     else
-                        wait_failed=1 # 失敗フラグを立てる
+                        wait_failed=1
                         debug_log "DEBUG" "test_create_db_subshell: Remaining task PID $pid failed."
                     fi
                 fi
@@ -753,19 +762,32 @@ EOF
             debug_log "DEBUG" "test_create_db_subshell: All background tasks finished."
         fi
 
-        # --- 部分出力を結合 (変更なし) ---
+        # --- <<< 変更点: 部分出力を結合 (v5 と同じ ls + cat 方式) ---
         if [ "$exit_status" -ne 1 ]; then
-            if [ -f "$final_output_file".partial ]; then
-                debug_log "DEBUG" "test_create_db_subshell: Combining partial results..."
-                if cat "$final_output_file".partial >> "$final_output_file"; then
-                     rm -f "$final_output_file".partial
-                     debug_log "DEBUG" "test_create_db_subshell: Partial file combined and removed."
+            debug_log "DEBUG" "test_create_db_subshell: Combining partial results using ls..."
+            # v5 と同じく ls を使用して部分ファイルを取得
+            # 注意: ファイル名に特殊文字が含まれると ls や後続の cat で問題が起きる可能性
+            local partial_files=$(ls "$final_output_file".partial_* 2>/dev/null)
+            if [ -n "$partial_files" ]; then
+                # cat で結合し、成功したら元ファイルを削除 (v5と同様)
+                # 注意: partial_files 変数が複数のファイル名を含む場合、そのまま cat に渡すと
+                #       スペース区切りでファイル名が展開されるため、ファイル名にスペース等が
+                #       含まれると問題になる。ただし v5 の動作を再現するため、ここではそのまま使う。
+                #       より安全なのは find ... -exec cat {} + >> "$final_output_file" \;
+                if cat $partial_files >> "$final_output_file"; then
+                     # rm も同様に $partial_files をそのまま使う (v5再現)
+                     if rm -f $partial_files; then
+                         debug_log "DEBUG" "test_create_db_subshell: Partial files combined and removed."
+                     else
+                         debug_log "DEBUG" "test_create_db_subshell: Failed to remove partial files after combining."
+                         # v5と同様、削除失敗は致命的エラーとしない
+                     fi
                 else
-                     debug_log "DEBUG" "test_create_db_subshell: Failed to combine or remove partial file."
-                     exit_status=1
+                     debug_log "DEBUG" "test_create_db_subshell: Failed to combine partial files using ls/cat."
+                     exit_status=1 # 致命的エラー
                 fi
             else
-                debug_log "DEBUG" "test_create_db_subshell: No partial file found."
+                debug_log "DEBUG" "test_create_db_subshell: No partial files found to combine."
             fi
         fi
 
