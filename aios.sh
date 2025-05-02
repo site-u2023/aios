@@ -1794,24 +1794,23 @@ download_parallel() {
 # @FUNCTION: download_fetch_file
 # @DESCRIPTION: Fetches a single file using wget with retries and cache busting (if DOWNLOAD_METHOD=direct).
 # @PARAM: $1 - File name (relative path from BASE_URL).
-# @PARAM: $2 - Remote version (received but not used for caching anymore).
-# @PARAM: $3 - Flag ("true" or "false") to apply chmod +x.
+# @PARAM: $2 - Flag ("true" or "false") to apply chmod +x.
 # @RETURN: 0 on success, non-zero on failure.
 download_fetch_file() {
     local file_name="$1"
-    local clean_remote_version="$2" # Note: Argument received but no longer used internally
-    local chmod_mode="$3"
+    local chmod_mode="$2"             # Second argument is now the second ($2)
     local install_path="${BASE_DIR}/$file_name"
     local remote_url="${BASE_URL}/$file_name"
     local wget_options=""
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local retry_count=0
-    local max_retries="${WGET_MAX_RETRIES}" # Use WGET_MAX_RETRIES for consistency
-    local wget_timeout="${WGET_TIMEOUT}"
+    # Use global wget settings directly
+    local max_retries="${WGET_MAX_RETRIES}" # Use WGET_MAX_RETRIES (Correctly uses the global variable)
+    local wget_timeout="${WGET_TIMEOUT}"     # Use WGET_TIMEOUT (Correctly uses the global variable)
     local wget_exit_code=1 # Default to failure
 
     # Debug log using the actual values from global variables
-    debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: ${max_retries:-[WGET_MAX_RETRIES not set]}, Timeout: ${wget_timeout:-[WGET_TIMEOUT not set]}s"
+    debug_log "DEBUG" "download_fetch_file called for ${file_name}. Chmod: ${chmod_mode}. Max retries: ${max_retries:-[WGET_MAX_RETRIES not set]}, Timeout: ${wget_timeout:-[WGET_TIMEOUT not set]}s"
 
     # Apply dynamic cache busting only if DOWNLOAD_METHOD is 'direct'
     if [ "$DOWNLOAD_METHOD" = "direct" ]; then
@@ -1824,7 +1823,7 @@ download_fetch_file() {
 
     debug_log "DEBUG" "Downloading from ${remote_url} to ${install_path}"
 
-    # Check network availability via ip_type.ch (no changes)
+    # Check network availability via ip_type.ch
     if [ ! -f "$ip_type_file" ]; then
         debug_log "DEBUG" "download_fetch_file: Network check failed (ip_type.ch not found)" >&2
         return 1
@@ -1856,14 +1855,14 @@ download_fetch_file() {
     done
     # --- wget retry logic end ---
 
-    # --- Check final result --- (no changes)
+    # --- Check final result ---
     if [ "$wget_exit_code" -ne 0 ]; then
         debug_log "DEBUG" "download_fetch_file: Download failed for $file_name after $max_retries attempts."
         rm -f "$install_path" 2>/dev/null # Clean up incomplete file
         return 1
     fi
 
-    # --- Validate downloaded file --- (no changes)
+    # --- Validate downloaded file ---
     if [ ! -f "$install_path" ]; then
         debug_log "DEBUG" "download_fetch_file: Downloaded file not found after successful wget: $file_name"
         return 1
@@ -1875,14 +1874,104 @@ download_fetch_file() {
     fi
     debug_log "DEBUG" "download_fetch_file: File successfully downloaded and verified: ${install_path}"
 
-    # --- Set permissions if requested --- (no changes)
+    # --- Set permissions if requested ---
     if [ "$chmod_mode" = "true" ]; then
         chmod +x "$install_path"
         debug_log "DEBUG" "download_fetch_file: chmod +x applied to $file_name"
     fi
 
-    # --- Removed version caching logic ---
-    # save_version_to_cache call has been deleted.
+    return 0
+}
+
+download() {
+    local file_name="$1"
+    shift
+
+    # デフォルト設定
+    local chmod_mode="false"
+    local force_mode="false"
+    local hidden_mode="false"
+    local quiet_mode="false"
+    local interpreter_name=""
+    local load_mode="false"
+
+    # オプション解析
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            chmod)   chmod_mode="true" ;;
+            force)   force_mode="true" ;;
+            hidden)  hidden_mode="true" ;;
+            quiet)   quiet_mode="true" ;;
+            bash|python3|node|perl)
+                interpreter_name="$1"
+                ;;
+            load)   load_mode="true" ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+    [ -z "$interpreter_name" ] && interpreter_name="ash"
+
+    # ファイル名が空の場合は即失敗
+    if [ -z "$file_name" ]; then
+        debug_log "DEBUG" "download: filename is empty"
+        return 1
+    fi
+
+    local file_path="${BASE_DIR}/${file_name}"
+
+    # 強制DL判定
+    if [ "$force_mode" = "true" ]; then
+        debug_log "DEBUG" "download: force mode enabled for $file_name"
+    fi
+
+    # ダウンロードスキップ判定 (ファイル存在有無のみ)
+    if [ "$force_mode" != "true" ] && [ -f "$file_path" ]; then
+        debug_log "DEBUG" "download: File already exists and force mode is off for $file_name; skipping download."
+        # chmod要求ありなら実行
+        if [ "$chmod_mode" = "true" ]; then
+            chmod +x "$file_path" 2>/dev/null || debug_log "DEBUG" "download: chmod +x failed for existing file $file_path"
+        fi
+        # シングル時のみ最新版メッセージ出力（抑制/隠し/静音モード除外）
+        if [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+            printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_UNNECESSARY" "f=$file_name")"
+        fi
+
+        if [ "$load_mode" = "true" ]; then
+            if [ -f "$file_path" ]; then
+                debug_log "DEBUG" "download: Sourcing existing file due to load option: $file_path"
+                . "$file_path"
+                local source_status=$?
+                if [ $source_status -ne 0 ]; then
+                    debug_log "DEBUG" "download: Sourcing existing file failed with status $source_status: $file_path"
+                fi
+            fi
+        fi
+        return 0
+    fi
+
+    if ! download_fetch_file "$file_name" "$chmod_mode"; then
+        debug_log "DEBUG" "download: download_fetch_file failed for $file_name"
+        return 1
+    fi
+
+    # シングル時のみDL成功メッセージ表示（抑制/隠し/静音モード除外）
+    if [ "$hidden_mode" = "false" ] && [ "$quiet_mode" = "false" ]; then
+
+        printf "%s\n" "$(get_message "CONFIG_DOWNLOAD_SUCCESS" "f=$file_name")"
+    fi
+
+    if [ "$load_mode" = "true" ]; then
+        if [ -f "$file_path" ]; then
+            debug_log "DEBUG" "download: Sourcing downloaded file due to load option: $file_path"
+            . "$file_path"
+            local source_status=$?
+            if [ $source_status -ne 0 ]; then
+                debug_log "DEBUG" "download: Sourcing downloaded file failed with status $source_status: $file_path"
+            fi
+        fi
+    fi
 
     return 0
 }
