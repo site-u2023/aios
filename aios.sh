@@ -89,8 +89,8 @@ DOWNLOAD_METHOD="${DOWNLOAD_METHOD:-direct}" # ダウンロード方式 (direct)
 
 # wget関連設定
 BASE_WGET="wget --no-check-certificate -q" # 基本wgetコマンド
-WGET_TIMEOUT="${API_TIMEOUT:-8}"
-WGET_MAX_RETRIES="${API_MAX_RETRIES:-5}"
+WGET_TIMEOUT="${WGET_TIMEOUT:-8}"
+WGET_MAX_RETRIES="${WGET_MAX_RETRIES:-5}"
 
 # GitHub API認証関連
 UPDATE_CACHE="${CACHE_DIR}/update.ch" # 更新情報キャッシュ
@@ -1791,89 +1791,98 @@ download_parallel() {
     fi
 }
 
+# @FUNCTION: download_fetch_file
+# @DESCRIPTION: Fetches a single file using wget with retries and cache busting (if DOWNLOAD_METHOD=direct).
+# @PARAM: $1 - File name (relative path from BASE_URL).
+# @PARAM: $2 - Remote version (received but not used for caching anymore).
+# @PARAM: $3 - Flag ("true" or "false") to apply chmod +x.
+# @RETURN: 0 on success, non-zero on failure.
 download_fetch_file() {
     local file_name="$1"
-    local clean_remote_version="$2"
+    local clean_remote_version="$2" # Note: Argument received but no longer used internally
     local chmod_mode="$3"
     local install_path="${BASE_DIR}/$file_name"
-    local script_file="${CACHE_DIR}/script.ch"
-    local remote_url="${BASE_URL}/$file_name" # Base URL
+    local remote_url="${BASE_URL}/$file_name"
     local wget_options=""
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local retry_count=0
-    local max_retries="${API_MAX_RETRIES:-3}"
-    local wget_exit_code=1
+    local max_retries="${WGET_MAX_RETRIES}" # Use WGET_MAX_RETRIES for consistency
+    local wget_timeout="${WGET_TIMEOUT}"
+    local wget_exit_code=1 # Default to failure
 
-    debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: $max_retries, Timeout: ${API_TIMEOUT:-5}s"
+    # Debug log using the actual values from global variables
+    debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: ${max_retries:-[WGET_MAX_RETRIES not set]}, Timeout: ${wget_timeout:-[WGET_TIMEOUT not set]}s"
 
-    # バージョン情報に "direct" が含まれる場合にキャッシュバーストを適用
-    if echo "$clean_remote_version" | grep -q "direct"; then
-        local cache_bust_param="?cache_bust=$(date +%s)" # 関数内で動的に生成
-        remote_url="${remote_url}${cache_bust_param}"     # URLにキャッシュバーストパラメータを追加
-        debug_log "DEBUG" "Cache busting applied (version contains 'direct'): ${remote_url}"
+    # Apply dynamic cache busting only if DOWNLOAD_METHOD is 'direct'
+    if [ "$DOWNLOAD_METHOD" = "direct" ]; then
+        local cache_bust_param="?cache_bust=$(date +%s)"
+        remote_url="${remote_url}${cache_bust_param}"
+        debug_log "DEBUG" "Cache busting applied dynamically (DOWNLOAD_METHOD=direct): ${remote_url}"
+    else
+        debug_log "DEBUG" "Cache busting skipped (DOWNLOAD_METHOD is not 'direct')"
     fi
-    # --- <<< 変更点ここまで >>> ---
 
     debug_log "DEBUG" "Downloading from ${remote_url} to ${install_path}"
 
-    # IPバージョン判定（変更なし）
+    # Check network availability via ip_type.ch (no changes)
     if [ ! -f "$ip_type_file" ]; then
-        debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch not found)" >&2
+        debug_log "DEBUG" "download_fetch_file: Network check failed (ip_type.ch not found)" >&2
         return 1
     fi
     wget_options=$(cat "$ip_type_file" 2>/dev/null)
     if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
-        debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch is unknown or empty)" >&2
+        debug_log "DEBUG" "download_fetch_file: Network check failed (ip_type.ch is unknown or empty)" >&2
         return 1
     fi
 
-    # --- wget リトライロジック開始 (変更なし) ---
+    # --- wget retry logic start ---
     while [ "$retry_count" -lt "$max_retries" ]; do
         if [ "$retry_count" -gt 0 ]; then
             debug_log "DEBUG" "download_fetch_file: Retrying download for $file_name (Attempt $((retry_count + 1))/$max_retries)..."
-            sleep 1
+            sleep 1 # Wait 1 second before retrying
         fi
 
-        wget --no-check-certificate $wget_options -T "${API_TIMEOUT:-5}" -q -O "$install_path" "$remote_url" 2>/dev/null
+        # Execute wget with specified timeout and options
+        wget --no-check-certificate $wget_options -T "$wget_timeout" -q -O "$install_path" "$remote_url" 2>/dev/null
         wget_exit_code=$?
 
         if [ "$wget_exit_code" -eq 0 ]; then
             debug_log "DEBUG" "download_fetch_file: wget command successful for $file_name."
-            break
+            break # Exit loop on success
         else
             debug_log "DEBUG" "download_fetch_file: wget command failed for $file_name with exit code $wget_exit_code."
         fi
         retry_count=$((retry_count + 1))
     done
-    # --- wget リトライロジック終了 (変更なし) ---
+    # --- wget retry logic end ---
 
-    # --- 結果判定 (変更なし) ---
+    # --- Check final result --- (no changes)
     if [ "$wget_exit_code" -ne 0 ]; then
         debug_log "DEBUG" "download_fetch_file: Download failed for $file_name after $max_retries attempts."
-        rm -f "$install_path" 2>/dev/null
+        rm -f "$install_path" 2>/dev/null # Clean up incomplete file
         return 1
     fi
 
-    # --- ファイル検証 (変更なし) ---
+    # --- Validate downloaded file --- (no changes)
     if [ ! -f "$install_path" ]; then
         debug_log "DEBUG" "download_fetch_file: Downloaded file not found after successful wget: $file_name"
         return 1
     fi
     if [ ! -s "$install_path" ]; then
         debug_log "DEBUG" "download_fetch_file: Downloaded file is empty after successful wget: $file_name"
-        rm -f "$install_path" 2>/dev/null
+        rm -f "$install_path" 2>/dev/null # Clean up empty file
         return 1
     fi
     debug_log "DEBUG" "download_fetch_file: File successfully downloaded and verified: ${install_path}"
 
-    # --- 権限設定 (変更なし) ---
+    # --- Set permissions if requested --- (no changes)
     if [ "$chmod_mode" = "true" ]; then
         chmod +x "$install_path"
         debug_log "DEBUG" "download_fetch_file: chmod +x applied to $file_name"
     fi
 
-    # --- バージョン情報をキャッシュに保存 (変更なし) ---
-    save_version_to_cache "$file_name" "$clean_remote_version" "$script_file"
+    # --- Removed version caching logic ---
+    # save_version_to_cache call has been deleted.
 
     return 0
 }
