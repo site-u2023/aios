@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-02-01"
+SCRIPT_VERSION="2025-05-02-02-02"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -940,11 +940,13 @@ create_language_db_parallel() {
         debug_log "DEBUG" "create_language_db_parallel: Calling create_language_db_19 with limit $calculated_max_tasks"
         # Call the chunked/direct-write function, passing the calculated limit
         create_language_db_19 "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
+        # create_language_db_all "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
         exit_status=$?
     else
         debug_log "DEBUG" "create_language_db_parallel: Calling create_language_db_all with limit $calculated_max_tasks"
         # Call the line-by-line/partial-file function, passing the calculated limit
         create_language_db_all "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
+        # create_language_db_19 "$aip_function_name" "$api_endpoint_url" "$domain_name" "$target_lang_code" "$calculated_max_tasks"
         exit_status=$?
     fi
 
