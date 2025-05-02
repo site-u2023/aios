@@ -263,7 +263,8 @@ create_language_db_parallel() {
     else
         # OpenWrt 19 以外の場合は _all 関数を呼び出す
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion'"
-        create_language_db_all "$@" # 引数をそのまま渡す
+        # create_language_db_all "$@" # 引数をそのまま渡す
+        test_create_language_db_all "$@" # 引数をそのまま渡す  # <--------------------------------------------------------------------------------------------------------------------------------------------
         exit_status=$? # _all 関数の終了ステータスを取得
     fi
     debug_log "DEBUG" "create_language_db_parallel: Child function finished with status: $exit_status"
@@ -640,6 +641,125 @@ EOF
                  printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
                  debug_log "DEBUG" "create_language_db_19: Completion marker added."
             fi
+        fi
+    fi
+
+    return "$exit_status"
+}
+
+# --- Test Function: Based on OK_create_language_db_all, but uses subshell ---
+test_create_db_subshell() {
+    # 引数受け取り (OK_create_language_db_all と同じ)
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"
+    local domain_name="$3"
+    local target_lang_code="$4"
+
+    # 変数定義 (OK_create_language_db_all と同じ)
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    local pids=""
+    local pid=""
+    local exit_status=0
+    local line_from_awk="" # <<< awkから読み取る行を保持する変数 (v5から導入)
+
+    # --- Logging & 並列数設定 (OK_create_language_db_all と同じ) ---
+    debug_log "DEBUG" "test_create_db_subshell: Starting parallel translation (line-by-line, subshell test) for language '$target_lang_code'."
+    local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
+    debug_log "DEBUG" "test_create_db_subshell: Max parallel tasks from global setting: $current_max_parallel_tasks"
+
+    # --- ヘッダー部分を書き出し (OK_create_language_db_all と同じ) ---
+    cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+# Method: test_create_db_subshell
+EOF
+
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "test_create_db_subshell: Failed to write header to $final_output_file"
+        exit_status=1
+    else
+        # --- メイン処理: 行ベースで並列翻訳 ---
+        # awkから読み取る行を line_from_awk 変数に格納 (v5と同様)
+        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+            # --- <<< 変更点: サブシェル内で translate_single_line を実行 ---
+            ( # サブシェルの開始
+                # サブシェル内で必要な変数を参照 (v5と同様)
+                local current_line="$line_from_awk"
+                local lang="$target_lang_code"
+                local func="$aip_function_name"
+                local outfile="$final_output_file" # 一時ファイル名はOK版と同じにする
+
+                # 翻訳処理 (v5と同様だが、出力先はOK版と同じ .partial)
+                local translated_line
+                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+                if [ -n "$translated_line" ]; then
+                     # 出力先は OK_create_language_db_all と同じ単一ファイル
+                     printf "%s\n" "$translated_line" >> "$outfile".partial
+                     local write_status=$?
+                     if [ "$write_status" -ne 0 ]; then
+                         debug_log "ERROR [Subshell]" "Failed to append to partial file: $outfile.partial"
+                         exit 1
+                     fi
+                fi
+                exit 0
+            ) & # サブシェルをバックグラウンド実行
+
+            pid=$!
+            pids="$pids $pid"
+
+            # --- 並列タスク数制限 (OK_create_language_db_all と同じ sleep 1) ---
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                sleep 1
+            done
+        done
+        # パイプラインの終了ステータス確認 (OK_create_language_db_all と同じ)
+        if [ $? -ne 0 ] && [ "$exit_status" -eq 0 ]; then
+             debug_log "DEBUG" "test_create_db_subshell: Error during awk/while processing."
+             exit_status=1
+        fi
+
+        # --- BGジョブが全て完了するまで待機 (OK_create_language_db_all と同じ) ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "test_create_db_subshell: Waiting for background tasks..."
+            local wait_failed=0
+            for pid in $pids; do
+                if wait "$pid"; then
+                    :
+                else
+                    wait_failed=1
+                    debug_log "DEBUG" "test_create_db_subshell: Task PID $pid failed."
+                fi
+            done
+            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
+                exit_status=2
+            fi
+            debug_log "DEBUG" "test_create_db_subshell: All background tasks finished."
+        fi
+
+        # --- 部分出力を結合 (OK_create_language_db_all と同じ) ---
+        if [ "$exit_status" -ne 1 ]; then
+            if [ -f "$final_output_file".partial ]; then
+                debug_log "DEBUG" "test_create_db_subshell: Combining partial results..."
+                if cat "$final_output_file".partial >> "$final_output_file"; then
+                     rm -f "$final_output_file".partial
+                     debug_log "DEBUG" "test_create_db_subshell: Partial file combined and removed."
+                else
+                     debug_log "DEBUG" "test_create_db_subshell: Failed to combine or remove partial file."
+                     exit_status=1
+                fi
+            else
+                debug_log "DEBUG" "test_create_db_subshell: No partial file found."
+            fi
+        fi
+
+        # --- 完了マーカーを付加 (OK_create_language_db_all と同じ) ---
+        if [ "$exit_status" -ne 1 ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+            debug_log "DEBUG" "test_create_db_subshell: Completion marker added."
         fi
     fi
 
