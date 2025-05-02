@@ -1832,7 +1832,9 @@ download_fetch_file() {
     local wget_options=""
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local retry_count=0
+    # グローバル変数 WGET_MAX_RETRIES を使用 (デフォルト値 5)
     local max_retries=${WGET_MAX_RETRIES:-5}
+    # グローバル変数 WGET_TIMEOUT を使用 (デフォルト値 8)
     local wget_timeout=${WGET_TIMEOUT:-8}
     local wget_exit_code=1 # wget の終了コードを保持 (デフォルトは失敗)
 
