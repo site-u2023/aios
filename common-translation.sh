@@ -662,188 +662,154 @@ OK_create_language_db_all() {
     local pids=""
     local pid=""
     local exit_status=0 # 0:success, 1:critical error, 2:partial success
+    local line_from_awk="" # awkから読み取る行を保持する変数
 
-    # --- ロック関連設定 ---
-    local lock_dir="${final_output_file}.lock"
-    local lock_max_retries=10
-    local lock_sleep_seconds=1
-
-    # --- Logging & 並列数設定 --- (変更なし)
-    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (direct append) for language '$target_lang_code'."
+    # --- Logging & 並列数設定 ---
+    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line) for language '$target_lang_code'."
+    # グローバル変数 MAX_PARALLEL_TASKS を使用。未定義の場合は安全策として 1 にフォールバック。
     local current_max_parallel_tasks="${MAX_PARALLEL_TASKS:-1}"
     debug_log "DEBUG" "create_language_db_all: Max parallel tasks from global setting: $current_max_parallel_tasks"
 
-    # --- ヘッダー部分を書き出し --- (変更なし)
+    # --- ヘッダー部分を書き出し ---
     cat > "$final_output_file" <<-EOF
 SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
 # Translation generated using: ${aip_function_name}
 # Target Language: ${target_lang_code}
-# Method: create_language_db_all (Direct Append)
+# Method: create_language_db_all
 EOF
+
     if [ $? -ne 0 ]; then
         debug_log "DEBUG" "create_language_db_all: Failed to write header to $final_output_file"
-        return 1 # 致命的エラー
-    fi
+        exit_status=1 # 致命的エラー
+    else
+        # --- メイン処理: 行ベースで並列翻訳 ---
+        # awkから読み取る行を line_from_awk 変数に格納
+        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+            # --- 並列タスクをBGで起動 ---
+            ( # ← サブシェルの開始
+                # サブシェル内で必要な変数を参照
+                local current_line="$line_from_awk" # awkから受け取った行を変数に
+                local lang="$target_lang_code"      # 外側のスコープの変数を参照
+                local func="$aip_function_name"     # 外側のスコープの変数を参照
+                local outfile="$final_output_file"  # 外側のスコープの変数を参照
 
-    # --- メイン処理: 行ベースで並列翻訳 (直接追記方式) ---
-    local line_count=0 # For debug logging
-    awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line; do
-        line_count=$((line_count + 1))
-
-        # --- 並列タスクをBGで起動 (ロック付き追記処理) ---
-        # バックグラウンドで translate_single_line を実行し、その結果をロック付きで追記する
-        (
-            local original_line="$1" # 引数から元の行を受け取る
-            local current_lang="$2"
-            local current_func="$3"
-            local output_file="$4"
-            local l_lock_dir="$5"
-            local l_lock_max_retries="$6"
-            local l_lock_sleep_seconds="$7"
-            local translated_line=""
-            local append_success=0 # 追記成功フラグ
-
-            # translate_single_line を同期的に呼び出す
-            translated_line=$(translate_single_line "$original_line" "$current_lang" "$current_func")
-
-            if [ -n "$translated_line" ]; then
-                # --- Append line to final output file with lock ---
-                local lock_retries="$l_lock_max_retries"
-                local lock_acquired=0
-                while [ "$lock_retries" -gt 0 ]; do
-                    if mkdir "$l_lock_dir" 2>/dev/null; then
-                        lock_acquired=1
-                        # --- Lock acquired ---
-                        printf "%s\n" "$translated_line" >> "$output_file"
-                        local write_status=$?
-                        rmdir "$l_lock_dir"
-                        local rmdir_status=$?
-
-                        if [ "$write_status" -ne 0 ]; then
-                            debug_log "ERROR" "BG Child (all): Failed to append line to $output_file (Write status: $write_status)"
-                            exit 1 # 子プロセス異常終了
-                        fi
-                        if [ "$rmdir_status" -ne 0 ]; then
-                            debug_log "WARNING" "BG Child (all): Failed to remove lock directory $l_lock_dir (rmdir status: $rmdir_status)"
-                        fi
-                        append_success=1 # 追記成功
-                        break # ロックループを抜ける
-                    else
-                        # --- Lock acquisition failed ---
-                        lock_retries=$((lock_retries - 1))
-                        if [ "$lock_retries" -gt 0 ]; then
-                            sleep "$l_lock_sleep_seconds"
-                        fi
-                    fi
-                done # End lock retry loop
-
-                if [ "$lock_acquired" -eq 0 ]; then
-                    debug_log "ERROR" "BG Child (all): Failed to acquire lock for $output_file after $l_lock_max_retries attempts."
-                    exit 1 # 子プロセス異常終了
-                fi
-                # --- End Append line ---
-            else
-                 # translate_single_line が空を返した場合 (通常発生しないはずだが念のため)
-                 debug_log "DEBUG" "BG Child (all): translate_single_line returned empty for line: $original_line"
-                 exit 2 # 部分的失敗を示す終了コード
-            fi
-
-            # 追記が成功したら正常終了
-            if [ "$append_success" -eq 1 ]; then
-                exit 0
-            else
-                # ここに来ることは通常ないはずだが、念のため
-                exit 1
-            fi
-
-        # サブシェルに関数と変数を渡してバックグラウンド実行
-        ) "$line" "$target_lang_code" "$aip_function_name" "$final_output_file" "$lock_dir" "$lock_max_retries" "$lock_sleep_seconds" &
-        pid=$!
-        pids="$pids $pid"
-        debug_log "DEBUG" "create_language_db_all: Launched task for line $line_count (PID: $pid)"
-
-        # --- 並列タスク数制限 (グローバル設定を使用) --- (変更なし)
-        while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-            sleep 1
-        done
-    done
-    # パイプラインの終了ステータス確認 (変更なし)
-    local pipe_status=$?
-    if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
-         debug_log "DEBUG" "create_language_db_all: Error during awk/while processing (pipe status: $pipe_status)."
-         exit_status=1 # 致命的エラー
-    fi
-
-    # --- BGジョブが全て完了するまで待機 ---
-    if [ "$exit_status" -ne 1 ]; then
-        debug_log "DEBUG" "create_language_db_all: Waiting for background tasks ($line_count lines processed)..."
-        local wait_failed=0
-        local child_exit_status=0
-        for pid in $pids; do
-            if wait "$pid"; then
-                child_exit_status=$?
-                if [ "$child_exit_status" -ne 0 ]; then
-                     # 子プロセスが異常終了した場合
-                     debug_log "DEBUG" "create_language_db_all: Task PID $pid failed (status $child_exit_status)."
-                     if [ "$child_exit_status" -eq 1 ]; then
-                         # 致命的エラー (書き込み/ロック失敗)
-                         exit_status=1
-                     elif [ "$child_exit_status" -eq 2 ]; then
-                         # 部分的失敗 (翻訳空など)
-                         [ "$exit_status" -eq 0 ] && exit_status=2
+                # --- 翻訳処理 ---
+                local translated_line
+                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+                # 結果を部分ファイルに追記 (ファイル名は一意にする必要がある)
+                if [ -n "$translated_line" ]; then
+                     # 一意なサフィックスを生成 (より安全な方法を検討)
+                     # mktempが使えるか？ 使えない場合はプロセスIDと時間などで代替
+                     local partial_suffix=""
+                     if type mktemp >/dev/null 2>&1; then
+                         # mktemp が使える場合 (より安全)
+                         # partial_suffix=$(mktemp -u XXXXXX) # 一時ファイル名生成 (実際には作成しない)
+                         # よりシンプルな方法: プロセスIDとナノ秒 (利用可能なら)
+                         if date '+%N' >/dev/null 2>&1; then
+                            partial_suffix="$$$(date '+%N')"
+                         else
+                            partial_suffix="$$$(date '+%S')" # ナノ秒が使えなければ秒
+                         fi
                      else
-                         # その他のエラー
-                         [ "$exit_status" -eq 0 ] && exit_status=1
+                         # mktemp が使えない場合 (プロセスIDと秒)
+                         partial_suffix="$$$(date '+%S')"
+                     fi
+
+                     # printf はファイルへの追記に失敗してもエラーを返さないことがあるため注意
+                     printf "%s\n" "$translated_line" >> "$outfile".partial_"$partial_suffix"
+                     local write_status=$?
+                     if [ "$write_status" -ne 0 ]; then
+                         debug_log "ERROR [Subshell]" "Failed to append to partial file: $outfile.partial_$partial_suffix"
+                         exit 1 # サブシェルをエラー終了させる
                      fi
                 fi
-            else
-                # wait 自体が失敗した場合 (シグナル受信など?)
-                wait_failed=1
-                debug_log "DEBUG" "create_language_db_all: wait command failed for Task PID $pid."
-                [ "$exit_status" -eq 0 ] && exit_status=1 # 致命的エラー扱い
-            fi
-        done
-        # wait 自体の失敗があった場合も考慮 (不要かも)
-        # if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
-        #    exit_status=1
-        # fi
-        debug_log "DEBUG" "create_language_db_all: All background tasks finished (Overall status: $exit_status)."
-    fi
+                exit 0 # サブシェルを正常終了させる
+            ) & # <<< 引数なしでバックグラウンド実行
 
-    # --- 部分出力を結合 --- (削除)
-    # if [ "$exit_status" -ne 1 ]; then
-    #     if [ -f "$final_output_file".partial ]; then ... cat ... rm ... fi
-    # fi
+            pid=$!
+            pids="$pids $pid"
 
-    # --- 完了マーカーを付加 ---
-    # 致命的エラーが発生していなければマーカーを追加
-    if [ "$exit_status" -ne 1 ]; then
-        # マーカー追記もロック付きで行う
-        local lock_retries="$lock_max_retries"
-        local lock_acquired=0
-        while [ "$lock_retries" -gt 0 ]; do
-            if mkdir "$lock_dir" 2>/dev/null; then
-                lock_acquired=1
-                printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
-                local write_status=$?
-                rmdir "$lock_dir"
-                if [ "$write_status" -ne 0 ]; then
-                     debug_log "DEBUG" "create_language_db_all: Failed to append completion marker."
+            # --- 並列タスク数制限 (グローバル設定を使用) ---
+            # jobs -p が利用可能か確認 (POSIX標準ではない)
+            # POSIX準拠のためには、単純に一定数起動したらwaitするか、
+            # より複雑なプロセス管理が必要になる場合がある。
+            # ここでは jobs -p が使える前提で進める。
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                # wait -n が使えれば効率的だがPOSIXではない
+                # 特定のPIDを待つ (最も古いものを待つなど)
+                oldest_pid=$(echo $pids | cut -d' ' -f1)
+                if wait "$oldest_pid" >/dev/null 2>&1; then
+                    # 正常終了
+                    :
                 else
-                     debug_log "DEBUG" "create_language_db_all: Completion marker added."
+                    # 異常終了
+                    wait_failed=1 # フラグを設定 (ループの外でチェック)
+                    debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed."
                 fi
-                break
-            else
-                lock_retries=$((lock_retries - 1))
-                if [ "$lock_retries" -gt 0 ]; then
-                    sleep "$lock_sleep_seconds"
-                fi
-            fi
+                # 待機したPIDをリストから削除
+                pids=$(echo "$pids" | sed "s/^$oldest_pid //")
+                # sleep 0.1 # 短いスリープを入れる場合
+            done
         done
-        if [ "$lock_acquired" -eq 0 ]; then
-            debug_log "DEBUG" "create_language_db_all: Failed to acquire lock for appending marker."
+        # パイプラインの終了ステータス確認
+        # awk | while の構造では、whileループの終了ステータスしか取れない場合がある
+        # 必要であればFIFOなどを使う
+        local pipe_status=${PIPESTATUS[0]} # bash/zsh拡張。ashでは使えない
+        # ashでは単純に$?でwhileループの終了ステータスを見る
+        if [ $? -ne 0 ] && [ "$exit_status" -eq 0 ]; then
+             debug_log "DEBUG" "create_language_db_all: Error during awk/while processing (while loop exit status)."
+             exit_status=1 # 致命的エラーとみなす
         fi
-    fi
+
+        # --- BGジョブが全て完了するまで待機 ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
+            local wait_failed=0 # このスコープでの失敗フラグ
+            for pid in $pids; do
+                if wait "$pid"; then
+                    : # 正常終了
+                else
+                    wait_failed=1 # 失敗フラグを立てる
+                    debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid failed."
+                fi
+            done
+            # ループ中または最後の wait で失敗があった場合
+            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
+                exit_status=2 # 部分的成功とする
+            fi
+            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
+        fi
+
+        # --- 部分出力を結合 ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Combining partial results..."
+            # find や ls * を使う代わりに、より安全な方法を検討
+            # ここでは単純な ls を使うが、ファイル名に特殊文字が含まれると問題の可能性
+            local partial_files=$(ls "$final_output_file".partial_* 2>/dev/null)
+            if [ -n "$partial_files" ]; then
+                # cat で結合し、成功したら元ファイルを削除
+                if cat "$final_output_file".partial_* >> "$final_output_file"; then
+                     if rm -f "$final_output_file".partial_*; then
+                         debug_log "DEBUG" "create_language_db_all: Partial files combined and removed."
+                     else
+                         debug_log "DEBUG" "create_language_db_all: Failed to remove partial files after combining."
+                         # 結合は成功したが削除に失敗した場合、ステータスをどうするか？ (ここでは継続)
+                     fi
+                else
+                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files."
+                     exit_status=1 # 致命的エラー
+                fi
+            else
+                debug_log "DEBUG" "create_language_db_all: No partial files found to combine."
+            fi
+        fi
+
+        # --- 完了マーカーを付加 ---
+        if [ "$exit_status" -ne 1 ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+            debug_log "DEBUG" "create_language_db_all: Completion marker added."
+        fi
+    fi # ヘッダー書き込み成功チェックの終わり
 
     return "$exit_status"
 }
