@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-03-03"
+SCRIPT_VERSION="2025-05-02-03-04"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
