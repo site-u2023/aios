@@ -3,41 +3,7 @@
 
 SCRIPT_VERSION="2025-05-02-01-00"
 
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-04-23
-#
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-#
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use type command (POSIX) instead of command -v, which, or type -t for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
-
 # 基本定数の設定
-BASE_WGET="wget --no-check-certificate -q"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/site-u2023/aios/main}"
 BASE_DIR="${BASE_DIR:-/tmp/aios}"
@@ -50,6 +16,7 @@ TR_DIR="${TR_DIR:-$BASE_DIR/translation}"
 ONLINE_TRANSLATION_ENABLED="yes"
 
 # API設定 (Global defaults)
+BASE_WGET="wget --no-check-certificate -q"
 API_TIMEOUT="${API_TIMEOUT:-8}"
 API_MAX_RETRIES="${API_MAX_RETRIES:-5}"
 # AI_TRANSLATION_FUNCTIONS should be defined globally (e.g., in main script or config)
