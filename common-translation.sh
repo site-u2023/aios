@@ -608,6 +608,97 @@ EOF
     return "$exit_status"
 }
 
+# Child function called by create_language_db_19 (Revised: Write to Temporary Chunk File)
+# This function processes a chunk of the base DB and writes output to a temporary file specific to this chunk.
+# The parent process is responsible for combining these temporary files later.
+# @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
+# @param $2: output_chunk_file (string) - Path to the temporary output file for this chunk's results. # MODIFIED
+# @param $3: target_lang_code (string) - The target language code (e.g., "ja").
+# @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
+# @return: 0 on success, 1 on critical error (read/write failure), 2 if any translation fails within this chunk (but write succeeded).
+create_language_db() {
+    local input_chunk_file="$1"
+    local output_chunk_file="$2" # Use temporary output file argument again
+    local target_lang_code="$3"
+    local aip_function_name="$4"
+
+    local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
+    local output_buffer=""  # Buffer for efficient writing
+
+    # --- Lock logic removed ---
+    # local lock_dir="${final_output_file}.lock" ... (Removed)
+
+    # Check if input file exists
+    if [ ! -f "$input_chunk_file" ]; then
+        debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
+        return 1 # Critical error for this child
+    fi
+
+    # Clear/Create the temporary output file for this chunk
+    >"$output_chunk_file" || {
+        debug_log "ERROR" "Child process: Failed to create/clear temporary output file: $output_chunk_file"
+        return 1 # Critical error
+    }
+
+    # Loop through the input chunk file
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        case "$line" in \#*|"") continue ;; esac
+
+        # Ensure line starts with the default language prefix
+        case "$line" in
+            "${DEFAULT_LANGUAGE}|"*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        # Extract key and value
+        local line_content=${line#*|}
+        local key=${line_content%%=*}
+        local value=${line_content#*=}
+
+        if [ -z "$key" ] || [ -z "$value" ]; then
+            continue
+        fi
+
+        # Call the provided AIP function
+        local translated_text=""
+        local exit_code=1
+
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+
+        # Prepare output line (no trailing \n here)
+        local output_line=""
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$translated_text")
+        else
+            # 翻訳失敗時は overall_success を 2 (部分的成功) に設定
+            overall_success=2
+            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$value")
+        fi
+        # Append the formatted line and a literal '\n' sequence to the buffer
+        output_buffer="${output_buffer}${output_line}\\n"
+
+        # --- Lock and direct append logic removed ---
+        # local lock_retries="$lock_max_retries" ... (Removed)
+
+    done < "$input_chunk_file" # Read from the chunk input file
+
+    # Write the entire buffer using printf %b to the temporary output file
+    printf "%b" "$output_buffer" > "$output_chunk_file"
+    local write_status=$?
+    if [ "$write_status" -ne 0 ]; then
+        debug_log "ERROR" "Child: Failed to write buffer using %%b to output chunk file: $output_chunk_file (Exit code: $write_status)"
+        return 1 # Critical error for this child
+    fi
+
+    # Return overall status (0 or 2) only if write was successful
+    return "$overall_success"
+}
+
 # Child function called by create_language_db_parallel (Revised for Direct Append + Lock)
 # This function now processes a *chunk* of the base DB and directly appends to the final output file using a lock.
 # @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
@@ -615,7 +706,7 @@ EOF
 # @param $3: target_lang_code (string) - The target language code (e.g., "ja").
 # @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
 # @return: 0 on success, 1 on critical error (read/write/lock failure), 2 if any translation fails within this chunk (but writes were successful).
-create_language_db() {
+OK_create_language_db() {
     local input_chunk_file="$1"
     local final_output_file="$2" # 引数名を変更
     local target_lang_code="$3"
@@ -722,10 +813,6 @@ create_language_db() {
         # --- End Append line ---
 
     done < "$input_chunk_file" # Read from the chunk input file (変更なし)
-
-    # --- バッファ書き込み処理は削除 ---
-    # printf "%b" "$output_buffer" > "$output_chunk_file" # 削除
-    # local write_status=$? ... return 1 ... # 削除
 
     # 致命的エラー(1)が発生していなければ、最終的な成功ステータス(0 or 2)を返す
     return "$overall_success"
