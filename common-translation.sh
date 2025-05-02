@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-01-03-01"
+SCRIPT_VERSION="2025-05-02-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -317,6 +317,186 @@ create_language_db_parallel() {
 
 # --- OpenWrt 19 専用の実装関数 ---
 create_language_db_19() {
+    # 引数受け取り
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"  # Passed for logging/context, not used directly here
+    local domain_name="$3"       # Passed for logging/context, not used directly here
+    local target_lang_code="$4"
+
+    # 変数定義
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local tmp_input_prefix="${TR_DIR}/message_${target_lang_code}.tmp.in."
+    # local tmp_output_prefix="${TR_DIR}/message_${target_lang_code}.tmp.out." # 削除: 一時出力ファイルは使用しない
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    local total_lines=0
+    local i=0
+    local pids=""
+    local pid=""
+    local exit_status=0 # 0:success, 1:critical error, 2:partial success
+
+    # --- Prepare directories and cleanup ---
+    mkdir -p "$TR_DIR" || { debug_log "DEBUG" "create_language_db_19: Failed to create temporary directory: $TR_DIR"; return 1; }
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_19: Failed to create final output directory: $final_output_dir"; return 1; }
+
+    # shellcheck disable=SC2064
+    # tmp_output_prefix を削除
+    trap "debug_log 'DEBUG' 'Trap cleanup (19): Removing temporary input files...'; rm -f ${tmp_input_prefix}*" INT TERM EXIT
+
+    # --- Logging & 並列数設定 --- (変更なし)
+    debug_log "DEBUG" "create_language_db_19: Starting parallel translation for language '$target_lang_code'."
+    local core_count
+    core_count=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
+    [ "$core_count" -lt 1 ] && core_count=1
+    local current_max_parallel_tasks="$core_count"
+    debug_log "DEBUG" "create_language_db_19: Max parallel tasks set to CPU core count: $current_max_parallel_tasks"
+
+    # --- Split Base DB --- (変更なし)
+    total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
+    if [ "$total_lines" -le 0 ]; then
+        debug_log "DEBUG" "create_language_db_19: No lines to translate."
+        # ヘッダーのみ書き込み
+        cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+# Method: create_language_db_19
+EOF
+        if [ $? -ne 0 ]; then exit_status=1; fi
+        return "$exit_status"
+    fi
+
+    debug_log "DEBUG" "create_language_db_19: Splitting $total_lines lines into $current_max_parallel_tasks tasks..."
+    awk -v num_tasks="$current_max_parallel_tasks" \
+        -v prefix="$tmp_input_prefix" \
+        'BEGIN { valid_line_count=0 }
+         NR > 1 && !/^#/ && !/^$/ {
+            valid_line_count++;
+            task_num = (valid_line_count - 1) % num_tasks + 1;
+            print $0 >> (prefix task_num);
+        }' "$base_db"
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "create_language_db_19: Failed to split base DB using awk."
+        return 1 # 致命的エラー
+    fi
+    debug_log "DEBUG" "create_language_db_19: Base DB split complete."
+
+    # --- ヘッダーを最終ファイルに書き込み ---
+    cat > "$final_output_file" <<-EOF
+SCRIPT_VERSION="$(date +%Y.%m.%d-%H-%M)"
+# Translation generated using: ${aip_function_name}
+# Target Language: ${target_lang_code}
+# Method: create_language_db_19
+EOF
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "create_language_db_19: Failed to write header to $final_output_file"
+        return 1 # 致命的エラー
+    fi
+
+    # --- Execute tasks ---
+    debug_log "DEBUG" "create_language_db_19: Launching parallel translation tasks..."
+    i=1
+    while [ "$i" -le "$current_max_parallel_tasks" ]; do
+        local tmp_input_file="${tmp_input_prefix}${i}"
+        # local tmp_output_file="${tmp_output_prefix}${i}" # 削除
+
+        if [ ! -f "$tmp_input_file" ]; then
+             i=$((i + 1))
+             continue
+        fi
+        # 一時出力ファイルの作成は不要
+        # >"$tmp_output_file" || { ... } # 削除
+
+        # 子プロセスに最終出力ファイルパスを渡す
+        create_language_db "$tmp_input_file" "$final_output_file" "$target_lang_code" "$aip_function_name" &
+        pid=$!
+        pids="$pids $pid"
+        debug_log "DEBUG" "create_language_db_19: Launched task $i (PID: $pid)"
+
+        # ▼▼▼ 並列タスク数制限 (変更なし) ▼▼▼
+        while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+            sleep 1
+        done
+        # ─────────────────────────
+
+        i=$((i + 1))
+    done
+
+    # --- Wait for tasks --- (変更なし)
+    if [ -n "$pids" ]; then
+         debug_log "DEBUG" "create_language_db_19: Waiting for tasks to complete..."
+         for pid in $pids; do
+             wait "$pid"
+             local task_exit_status=$?
+             if [ "$task_exit_status" -ne 0 ]; then
+                 if [ "$task_exit_status" -eq 1 ]; then
+                     debug_log "DEBUG" "create_language_db_19: Task PID $pid failed critically (status 1)."
+                     exit_status=1
+                 elif [ "$task_exit_status" -eq 2 ]; then
+                     debug_log "DEBUG" "create_language_db_19: Task PID $pid completed partially (status 2)."
+                     # 致命的エラー(1)でなければ、部分的成功(2)に更新
+                     [ "$exit_status" -eq 0 ] && exit_status=2
+                 else
+                     debug_log "DEBUG" "create_language_db_19: Task PID $pid failed unexpectedly (status $task_exit_status)."
+                     # 致命的エラー(1)でなければ、致命的エラー(1)に更新
+                     [ "$exit_status" -eq 0 ] && exit_status=1
+                 fi
+             else
+                 debug_log "DEBUG" "create_language_db_19: Task PID $pid completed successfully."
+             fi
+         done
+         debug_log "DEBUG" "create_language_db_19: All tasks finished processing (Overall status: $exit_status)."
+    else
+         debug_log "DEBUG" "create_language_db_19: No tasks were launched."
+    fi
+
+    # --- Combine results --- (削除)
+    # if [ "$exit_status" -ne 1 ]; then
+    #    debug_log "DEBUG" "create_language_db_19: Combining results..."
+    #    # ヘッダー書き込みは並列処理の前に移動済み
+    #    find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
+    #    if [ $? -ne 0 ]; then ... exit_status=1 ... fi
+    # fi
+
+    # --- 完了マーカーを追加 ---
+    # 致命的エラーが発生していなければマーカーを追加
+    if [ "$exit_status" -ne 1 ]; then
+        # ロック機構を使ってマーカーを追記（必須ではないが、念のため）
+        local lock_dir="${final_output_file}.lock"
+        local lock_retries=5
+        local lock_acquired=0
+        while [ "$lock_retries" -gt 0 ]; do
+            if mkdir "$lock_dir" 2>/dev/null; then
+                lock_acquired=1
+                break
+            fi
+            lock_retries=$((lock_retries - 1))
+            sleep 0.1
+        done
+
+        if [ "$lock_acquired" -eq 1 ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+            if [ $? -ne 0 ]; then
+                debug_log "DEBUG" "create_language_db_19: Failed to append completion marker."
+                # マーカー追記失敗は致命的ではないため exit_status は変更しない
+            else
+                 debug_log "DEBUG" "create_language_db_19: Completion marker added."
+            fi
+            rmdir "$lock_dir" # ロック解放
+        else
+            debug_log "DEBUG" "create_language_db_19: Failed to acquire lock for appending marker."
+            # マーカー追記失敗は致命的ではない
+        fi
+    fi
+
+    # trap で一時入力ファイルは削除される
+
+    return "$exit_status"
+}
+
+# --- OpenWrt 19 専用の実装関数 ---
+OK_create_language_db_19() {
     # 引数受け取り
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context, not used directly here
