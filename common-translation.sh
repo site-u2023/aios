@@ -762,7 +762,7 @@ create_language_db() {
     # --- ロック関連設定 ---
     local lock_dir="${final_output_file}.lock"
     local lock_max_retries=10 # ロック取得のリトライ回数
-    local lock_sleep_interval=0.2 # ロック取得失敗時の待機秒数
+    local lock_sleep_interval=1 # ロック取得失敗時の待機秒数
 
     # Check if input file exists (変更なし)
     if [ ! -f "$input_chunk_file" ]; then
