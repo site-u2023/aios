@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-00-00"
+SCRIPT_VERSION="2025-05-02-00-01"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -743,6 +743,129 @@ EOF
     return "$exit_status"
 }
 
+# Child function called by create_language_db_parallel (Revised for Direct Append + Lock)
+# This function now processes a *chunk* of the base DB and directly appends to the final output file using a lock.
+# @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
+# @param $2: final_output_file (string) - Path to the final output file (e.g., message_ja.db).
+# @param $3: target_lang_code (string) - The target language code (e.g., "ja").
+# @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
+# @return: 0 on success, 1 on critical error (read/write/lock failure), 2 if any translation fails within this chunk (but writes were successful).
+create_language_db() {
+    local input_chunk_file="$1"
+    local final_output_file="$2" # 引数名を変更
+    local target_lang_code="$3"
+    local aip_function_name="$4"
+
+    local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
+    # local output_buffer=""  # 削除: バッファは使用しない
+
+    # --- ロック関連設定 ---
+    local lock_dir="${final_output_file}.lock"
+    local lock_max_retries=10 # ロック取得のリトライ回数
+    local lock_sleep_interval=0.2 # ロック取得失敗時の待機秒数
+
+    # Check if input file exists (変更なし)
+    if [ ! -f "$input_chunk_file" ]; then
+        debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
+        return 1 # Critical error for this child
+    fi
+
+    # Loop through the input chunk file
+    while IFS= read -r line; do
+        # Skip comments and empty lines (変更なし)
+        case "$line" in \#*|"") continue ;; esac
+
+        # Ensure line starts with the default language prefix (変更なし)
+        case "$line" in
+            "${DEFAULT_LANGUAGE}|"*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        # Extract key and value (変更なし)
+        local line_content=${line#*|}
+        local key=${line_content%%=*}
+        local value=${line_content#*=}
+
+        if [ -z "$key" ] || [ -z "$value" ]; then
+            continue
+        fi
+
+        # Call the provided AIP function (変更なし)
+        local translated_text=""
+        local exit_code=1
+
+        translated_text=$("$aip_function_name" "$value" "$target_lang_code")
+        exit_code=$?
+
+        # --- Prepare output line ---
+        local output_line=""
+        if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
+            # Format successful translation *without* newline (変更なし)
+            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$translated_text")
+        else
+            # 翻訳失敗時は overall_success を 2 (部分的成功) に設定
+            overall_success=2
+            # Format original value *without* newline (変更なし)
+            output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$value")
+        fi
+
+        # --- Append line to final output file with lock ---
+        local lock_retries="$lock_max_retries"
+        local lock_acquired=0
+        while [ "$lock_retries" -gt 0 ]; do
+            # mkdir でロック取得試行
+            if mkdir "$lock_dir" 2>/dev/null; then
+                lock_acquired=1
+                # --- ロック取得成功 ---
+                # printf でファイルに追記 (%s\n で改行を追加)
+                printf "%s\n" "$output_line" >> "$final_output_file"
+                local write_status=$?
+                # rmdir でロック解放
+                rmdir "$lock_dir"
+                local rmdir_status=$?
+
+                if [ "$write_status" -ne 0 ]; then
+                    debug_log "ERROR" "Child: Failed to append line to $final_output_file (Write status: $write_status)"
+                    # 書き込み失敗は致命的エラー
+                    return 1
+                fi
+                if [ "$rmdir_status" -ne 0 ]; then
+                    # ロック解放失敗は警告ログのみ（ファイル書き込みは成功している可能性）
+                    debug_log "WARNING" "Child: Failed to remove lock directory $lock_dir (rmdir status: $rmdir_status)"
+                fi
+                # ロック取得・書き込み・解放成功したらループを抜ける
+                break
+            else
+                # --- ロック取得失敗 ---
+                lock_retries=$((lock_retries - 1))
+                # 最後の試行でなければ待機
+                if [ "$lock_retries" -gt 0 ]; then
+                     sleep "$lock_sleep_interval"
+                fi
+            fi
+        done # ロック取得リトライループ終了
+
+        # リトライしてもロック取得できなかった場合
+        if [ "$lock_acquired" -eq 0 ]; then
+            debug_log "ERROR" "Child: Failed to acquire lock for $final_output_file after $lock_max_retries attempts."
+            # ロック取得失敗は致命的エラー
+            return 1
+        fi
+        # --- End Append line ---
+
+    done < "$input_chunk_file" # Read from the chunk input file (変更なし)
+
+    # --- バッファ書き込み処理は削除 ---
+    # printf "%b" "$output_buffer" > "$output_chunk_file" # 削除
+    # local write_status=$? ... return 1 ... # 削除
+
+    # 致命的エラー(1)が発生していなければ、最終的な成功ステータス(0 or 2)を返す
+    return "$overall_success"
+}
+
 # Child function called by create_language_db_parallel (Revised: I/O Buffering with %b)
 # This function now processes a *chunk* of the base DB and writes output once using %b.
 # @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
@@ -750,7 +873,7 @@ EOF
 # @param $3: target_lang_code (string) - The target language code (e.g., "ja").
 # @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
 # @return: 0 on success, 1 on critical error (read/write failure), 2 if any translation fails within this chunk (but write succeeded).
-create_language_db() {
+OK_create_language_db() {
     local input_chunk_file="$1"
     local output_chunk_file="$2"
     local target_lang_code="$3"
