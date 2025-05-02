@@ -1826,21 +1826,23 @@ download_parallel() {
 # @RETURN: 0 on success, non-zero on failure.
 download_fetch_file() {
     local file_name="$1"
-    local chmod_mode="$2"
-    local install_path="${BASE_DIR}/${file_name}"
-    local remote_url="${BASE_URL}/${file_name}"
+    local chmod_mode="$2" # 引数のインデックスを調整
+    local install_path="${BASE_DIR}/$file_name"
+    local remote_url="${BASE_URL}/$file_name"
     local wget_options=""
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local retry_count=0
     local max_retries=${WGET_MAX_RETRIES:-5}
     local wget_timeout=${WGET_TIMEOUT:-8}
-    local wget_exit_code=1 # Default to failure
-    local timestamp="" # For cache busting
-    local final_remote_url="" # URL with cache buster
+    local wget_exit_code=1 # wget の終了コードを保持 (デフォルトは失敗)
+    # --- Cache Busting Variables ---
+    local timestamp=""
+    local final_remote_url=""
+    # --- End Cache Busting Variables ---
 
     debug_log "DEBUG" "download_fetch_file called for ${file_name}. Max retries: $max_retries, Timeout: ${wget_timeout}s"
 
-    # --- IP Version Check --- (No changes)
+    # IPバージョン判定（変更なし）
     if [ ! -f "$ip_type_file" ]; then
         debug_log "DEBUG" "download_fetch_file: Network is not available. (ip_type.ch not found)" >&2
         return 1
@@ -1851,57 +1853,70 @@ download_fetch_file() {
         return 1
     fi
 
-    # --- wget Retry Logic Start ---
+    # --- wget リトライロジック開始 ---
     while [ "$retry_count" -lt "$max_retries" ]; do
         if [ "$retry_count" -gt 0 ]; then
             debug_log "DEBUG" "download_fetch_file: Retrying download for $file_name (Attempt $((retry_count + 1))/$max_retries)..."
-            sleep 1 # Wait 1 second before retrying
+            sleep 1 # リトライ前に1秒待機
         fi
 
         # --- Add Cache Busting Parameter ---
+        debug_log "DEBUG" "Cache Busting: Original remote_url = '${remote_url}'" # ★ 確認用ログ
         timestamp=$(date +%s)
+        debug_log "DEBUG" "Cache Busting: Generated timestamp = '${timestamp}'" # ★ 確認用ログ
         # Check if the original URL already contains a query string (?)
         case "$remote_url" in
-            *\?*) final_remote_url="${remote_url}&_cb=${timestamp}" ;; # Append with &
-            *)    final_remote_url="${remote_url}?_cb=${timestamp}" ;; # Append with ?
+            *\?*)
+                debug_log "DEBUG" "Cache Busting: URL contains '?', appending with '&'" # ★ 確認用ログ
+                final_remote_url="${remote_url}&_cb=${timestamp}"
+                ;;
+            *)
+                debug_log "DEBUG" "Cache Busting: URL does not contain '?', appending with '?'" # ★ 確認用ログ
+                final_remote_url="${remote_url}?_cb=${timestamp}"
+                ;;
         esac
-        debug_log "DEBUG" "Downloading from ${final_remote_url} to ${install_path}"
-        # --- End Cache Busting Parameter ---
+        debug_log "DEBUG" "Cache Busting: Generated final_remote_url = '${final_remote_url}'" # ★ 確認用ログ
 
-        # Execute wget command with timeout and cache-busted URL
-        wget --no-check-certificate $wget_options -T "$wget_timeout" -q -O "$install_path" "$final_remote_url" 2>/dev/null
-        wget_exit_code=$?
+        # --- Test Code ---
+        # wget --no-check-certificate $wget_options -T "$wget_timeout" -q -O "$install_path" "$final_remote_url" 2>/dev/null # wget を一時的にコメントアウト
+        echo "Generated URL for wget: $final_remote_url" # コンソールへの出力は不要なら削除してもOK
+        wget_exit_code=0 # テストのため強制的に成功させる
+        # --- End Test Code ---
+
+        # wget_exit_code=$? # Test Code を使うため、元の終了コード取得はコメントアウト
 
         if [ "$wget_exit_code" -eq 0 ]; then
+            # wget 成功 (テスト中は常に成功)
             debug_log "DEBUG" "download_fetch_file: wget command successful for $file_name."
-            break # Exit loop on success
+            break # ループを抜ける
         else
+            # wget 失敗 (テスト中はここには来ないはず)
             debug_log "DEBUG" "download_fetch_file: wget command failed for $file_name with exit code $wget_exit_code."
         fi
         retry_count=$((retry_count + 1))
     done
-    # --- wget Retry Logic End ---
+    # --- wget リトライロジック終了 ---
 
-    # --- Result Check --- (No changes)
+    # --- 結果判定 --- (変更なし)
     if [ "$wget_exit_code" -ne 0 ]; then
         debug_log "DEBUG" "download_fetch_file: Download failed for $file_name after $max_retries attempts."
-        rm -f "$install_path" 2>/dev/null # Remove potentially incomplete file
+        rm -f "$install_path" 2>/dev/null
         return 1
     fi
 
-    # --- File Verification (Only if wget succeeded) --- (No changes)
+    # --- ファイル検証 (wget成功時のみ) --- (変更なし)
     if [ ! -f "$install_path" ]; then
         debug_log "DEBUG" "download_fetch_file: Downloaded file not found after successful wget: $file_name"
         return 1
     fi
     if [ ! -s "$install_path" ]; then
         debug_log "DEBUG" "download_fetch_file: Downloaded file is empty after successful wget: $file_name"
-        rm -f "$install_path" 2>/dev/null # Remove empty file
+        rm -f "$install_path" 2>/dev/null
         return 1
     fi
     debug_log "DEBUG" "download_fetch_file: File successfully downloaded and verified: ${install_path}"
 
-    # --- Permission Setting (Only on success) --- (No changes)
+    # --- 権限設定 (成功時のみ) --- (変更なし)
     if [ "$chmod_mode" = "true" ]; then
         chmod +x "$install_path"
         debug_log "DEBUG" "download_fetch_file: chmod +x applied to $file_name"
@@ -1918,9 +1933,7 @@ OK_download_fetch_file() {
     local wget_options=""
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local retry_count=0
-    # グローバル変数 WGET_MAX_RETRIES を使用 (デフォルト値 5)
     local max_retries=${WGET_MAX_RETRIES:-5}
-    # グローバル変数 WGET_TIMEOUT を使用 (デフォルト値 8)
     local wget_timeout=${WGET_TIMEOUT:-8}
     local wget_exit_code=1 # wget の終了コードを保持 (デフォルトは失敗)
 
