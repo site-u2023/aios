@@ -680,7 +680,7 @@ create_language_db_parallel() {
 # @return: 0 on success, 1 on critical error (read/write/lock failure), 2 if any translation fails within this chunk (but writes were successful).
 create_language_db() {
     local input_chunk_file="$1"
-    local final_output_file="$2" # 引数名を変更
+    local final_output_file="$2"
     local target_lang_code="$3"
     local aip_function_name="$4"
 
