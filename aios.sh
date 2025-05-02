@@ -284,7 +284,7 @@ into_memory_message() {
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_START=Downloading essential files"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully in {s} seconds"$'\n' # 時間引数追加
-    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in task {f}{:} {e}{:}"$'\n' # API情報削除
+    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in task {f}{:} {e}"$'\n' # API情報削除
 
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}"$'\n' # API情報削除
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"$'\n' # API情報削除
