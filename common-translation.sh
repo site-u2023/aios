@@ -418,14 +418,6 @@ EOF
          debug_log "DEBUG" "create_language_db_19: No tasks were launched."
     fi
 
-    # --- Combine results --- (削除)
-    # if [ "$exit_status" -ne 1 ]; then
-    #    debug_log "DEBUG" "create_language_db_19: Combining results..."
-    #    # ヘッダー書き込みは並列処理の前に移動済み
-    #    find "$TR_DIR" -name "message_${target_lang_code}.tmp.out.*" -print0 | xargs -0 -r cat >> "$final_output_file"
-    #    if [ $? -ne 0 ]; then ... exit_status=1 ... fi
-    # fi
-
     # --- 完了マーカーを追加 ---
     # 致命的エラーが発生していなければマーカーを追加
     if [ "$exit_status" -ne 1 ]; then
