@@ -1,7 +1,7 @@
 
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-02-01-01"
+SCRIPT_VERSION="2025-05-02-02-00"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -608,39 +608,55 @@ EOF
     return "$exit_status"
 }
 
-# Child function called by create_language_db_19 (Revised: Write to Temporary Chunk File)
-# This function processes a chunk of the base DB and writes output to a temporary file specific to this chunk.
-# The parent process is responsible for combining these temporary files later.
+# Child function called by create_language_db_19 (Revised: Lock Once Per Chunk)
+# This function processes a chunk, acquires a lock ONCE, appends all lines directly, and releases the lock ONCE.
 # @param $1: input_chunk_file (string) - Path to the temporary input file containing a chunk of lines.
-# @param $2: output_chunk_file (string) - Path to the temporary output file for this chunk's results. # MODIFIED
+# @param $2: final_output_file (string) - Path to the final output file (e.g., message_ja.db).
 # @param $3: target_lang_code (string) - The target language code (e.g., "ja").
 # @param $4: aip_function_name (string) - The name of the AIP function to call (e.g., "translate_with_google").
-# @return: 0 on success, 1 on critical error (read/write failure), 2 if any translation fails within this chunk (but write succeeded).
+# @return: 0 on success, 1 on critical error (read/write/lock failure), 2 if any translation fails within this chunk (but writes were successful).
 create_language_db() {
     local input_chunk_file="$1"
-    local output_chunk_file="$2" # Use temporary output file argument again
+    local final_output_file="$2"
     local target_lang_code="$3"
     local aip_function_name="$4"
 
     local overall_success=0 # Assume success initially for this chunk, 2 indicates at least one translation failed
-    local output_buffer=""  # Buffer for efficient writing
 
-    # --- Lock logic removed ---
-    # local lock_dir="${final_output_file}.lock" ... (Removed)
+    # --- Lock settings ---
+    local lock_dir="${final_output_file}.lock"
+    local lock_max_retries=10
+    local lock_sleep_interval=1
 
     # Check if input file exists
     if [ ! -f "$input_chunk_file" ]; then
         debug_log "ERROR" "Child process: Input chunk file not found: $input_chunk_file"
-        return 1 # Critical error for this child
+        return 1 # Critical error
     fi
 
-    # Clear/Create the temporary output file for this chunk
-    >"$output_chunk_file" || {
-        debug_log "ERROR" "Child process: Failed to create/clear temporary output file: $output_chunk_file"
-        return 1 # Critical error
-    }
+    # --- Acquire Lock ONCE at the beginning ---
+    local lock_retries="$lock_max_retries"
+    local lock_acquired=0
+    while [ "$lock_retries" -gt 0 ]; do
+        if mkdir "$lock_dir" 2>/dev/null; then
+            lock_acquired=1
+            break # Lock acquired successfully
+        else
+            lock_retries=$((lock_retries - 1))
+            if [ "$lock_retries" -gt 0 ]; then
+                 sleep "$lock_sleep_interval"
+            fi
+        fi
+    done
 
-    # Loop through the input chunk file
+    if [ "$lock_acquired" -eq 0 ]; then
+        debug_log "ERROR" "Child: Failed to acquire lock for $final_output_file after $lock_max_retries attempts."
+        return 1 # Critical error: Could not acquire lock
+    fi
+    # --- Lock Acquired ---
+
+    # --- Process lines WITHIN the lock ---
+    local write_failed=0
     while IFS= read -r line; do
         # Skip comments and empty lines
         case "$line" in \#*|"") continue ;; esac
@@ -670,33 +686,45 @@ create_language_db() {
         translated_text=$("$aip_function_name" "$value" "$target_lang_code")
         exit_code=$?
 
-        # Prepare output line (no trailing \n here)
+        # Prepare output line
         local output_line=""
         if [ "$exit_code" -eq 0 ] && [ -n "$translated_text" ]; then
             output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$translated_text")
         else
-            # 翻訳失敗時は overall_success を 2 (部分的成功) に設定
-            overall_success=2
+            overall_success=2 # Mark as partial success if translation fails
             output_line=$(printf "%s|%s=%s" "$target_lang_code" "$key" "$value")
         fi
-        # Append the formatted line and a literal '\n' sequence to the buffer
-        output_buffer="${output_buffer}${output_line}\\n"
 
-        # --- Lock and direct append logic removed ---
-        # local lock_retries="$lock_max_retries" ... (Removed)
+        # Append line directly to the final file (lock is already held)
+        printf "%s\n" "$output_line" >> "$final_output_file"
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "Child: Failed to append line to $final_output_file while lock was held."
+            write_failed=1
+            # Break the loop on write failure, but ensure lock is released
+            break
+        fi
 
     done < "$input_chunk_file" # Read from the chunk input file
+    # --- Finished processing lines ---
 
-    # Write the entire buffer using printf %b to the temporary output file
-    printf "%b" "$output_buffer" > "$output_chunk_file"
-    local write_status=$?
-    if [ "$write_status" -ne 0 ]; then
-        debug_log "ERROR" "Child: Failed to write buffer using %%b to output chunk file: $output_chunk_file (Exit code: $write_status)"
-        return 1 # Critical error for this child
+    # --- Release Lock ONCE at the end ---
+    rmdir "$lock_dir"
+    local rmdir_status=$?
+    if [ "$rmdir_status" -ne 0 ]; then
+        # Log warning but don't necessarily fail the whole process if write succeeded
+        debug_log "WARNING" "Child: Failed to remove lock directory $lock_dir (rmdir status: $rmdir_status)"
+        # If write also failed, ensure we return critical error status
+        [ "$write_failed" -eq 1 ] && return 1
     fi
+    # --- Lock Released ---
 
-    # Return overall status (0 or 2) only if write was successful
-    return "$overall_success"
+    # --- Determine final exit status ---
+    if [ "$write_failed" -eq 1 ]; then
+        return 1 # Critical error due to write failure
+    else
+        # Return 0 (success) or 2 (partial success due to translation errors)
+        return "$overall_success"
+    fi
 }
 
 # Child function called by create_language_db_parallel (Revised for Direct Append + Lock)
