@@ -1953,12 +1953,7 @@ print_banner_ascii() {
     
     # ASCIIアート
     printf "\n"
-    printf "%s\n" "$(color magenta "               ## #")"
-    printf "%s\n" "$(color blue    "     ####      ###       ####      #####")"
-    printf "%s\n" "$(color green   "        ##      ##      ##  ##    ##")"
-    printf "%s\n" "$(color yellow  "     #####      ##      ##  ##     #####")"
-    printf "%s\n" "$(color orange  "    ##  ##      ##      ##  ##         ##")"
-    printf "%s\n" "$(color red     "     #####     ####      ####     ######")"
+    printf "%s\n" "$(color magenta "aios")"
     printf "\n"
     
     # バナーメッセージ
