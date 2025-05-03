@@ -29,7 +29,9 @@ aios -t
 | MAX PARALLELE: 3  | 28            | 6             | 6             | 20            | 18            | 18            |
 | MAX PARALLELE: 4  | 7             | 6             | 17            | 17            | 18            | 22            |
 | MAX PARALLELE: 5  | 18            | 17            | 17            | 22            | 29            | 26            |
-| create_language_db_19: 4 | 1             | 1            | 1            | 21            | 20            | 23            |
+| create_language_db_19: 4 | 1             | 2            | 1            | 4             | 4             | 5             |
+| **Radxa ZERO 3W (24.10)** |               |               |               | 
+| create_language_db_all: 5 | 1            | 2            | 1             | 4             | 5            | 14            |
 | [**NCP-HG100 (24.10)**](https://qiita.com/site_u/items/e07cd5b6326039e45fde) |               |               |               |               |               |               |
 | フレッツ光: 1G  |               |               |               |               |               |               |
 | MAX PARALLELE: 1  | 90            | 87            | 89            | 82            | 82            | 82            |
@@ -38,7 +40,6 @@ aios -t
 | MAX PARALLELE: 4  | 30            | 31            | 30            | 31            | 31            | 32            |
 | MAX PARALLELE: 5  | 10            | 10            | 9             | 25            | 23            | 23            |
 | create_language_db_all: 5 | 3            | 3            | 3             | 13            | 14            | 14            |
-
 ### 
 
 ```
