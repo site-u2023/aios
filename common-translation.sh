@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-04-00-00"
+SCRIPT_VERSION="2025-05-04-00-01"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -344,6 +344,7 @@ create_language_db_19() {
 # Modified to accept max parallel tasks limit as an argument.
 # MODIFIED: Uses find for combining partial files for robustness.
 # MODIFIED: Replaced find -quit with POSIX compliant alternative.
+# MODIFIED: Replaced find -delete with POSIX compliant alternative.
 # @param $1: aip_function_name (string) - AIP function (e.g., "translate_with_google")
 # @param $2: api_endpoint_url (string) - API URL (for logging)
 # @param $3: domain_name (string) - Domain name (for logging)
@@ -511,13 +512,39 @@ create_language_db_all() {
                  # If this also fails, a loop with `cat "$file" >> "$final_output_file"` would be the fallback.
                  if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} + >> "$final_output_file"); then
                       debug_log "DEBUG" "create_language_db_all: Partial files combined successfully into $final_output_file."
-                      # Remove using find -delete within TR_DIR
-                      if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -delete); then
-                         debug_log "DEBUG" "create_language_db_all: Partial files removed from $TR_DIR using find -delete."
+
+                      # --- MODIFIED: Remove using find and rm loop (POSIX compliant) ---
+                      debug_log "DEBUG" "create_language_db_all: Attempting to remove partial files using find and rm loop..."
+                      if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
+                          # Remove the leading './' if present, find might output ./file
+                          file_to_delete="${file_to_delete#./}"
+                          if [ -n "$file_to_delete" ]; then # Ensure filename is not empty after potential stripping
+                              debug_log "DEBUG" "create_language_db_all: Removing partial file: $file_to_delete"
+                              rm -- "$file_to_delete" # Use -- to handle filenames starting with -
+                              if [ $? -ne 0 ]; then
+                                  debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial file: $file_to_delete"
+                                  # Consider setting a flag or incrementing a counter if needed
+                              fi
+                          fi
+                          # Check if read failed unexpectedly, though unlikely with find -print
+                          if [ $? -ne 0 ]; then
+                              debug_log "DEBUG" "create_language_db_all: Warning: read command failed in rm loop."
+                              # break or return error? For now, just log.
+                          fi
+                      done); then
+                          # This checks the exit status of the subshell pipeline (cd && find | while ... done)
+                          debug_log "DEBUG" "create_language_db_all: Warning: Error occurred during find or rm loop for partial files in $TR_DIR."
+                          # This might not be critical if some files were removed, but log it.
                       else
-                         debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial files from $TR_DIR using find -delete."
-                         # This might not be critical, but log it.
+                          debug_log "DEBUG" "create_language_db_all: Partial files removal process completed."
+                          # Check again if files still exist (optional, for robustness)
+                          if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
+                              debug_log "DEBUG" "create_language_db_all: Warning: Some partial files might still remain in $TR_DIR after removal attempt."
+                          else
+                              debug_log "DEBUG" "create_language_db_all: Confirmed no partial files remain matching pattern in $TR_DIR."
+                          fi
                       fi
+                      # --- End MODIFIED section for removal ---
                  else
                      debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using find/cat."
                      # If cat fails, it's likely a more critical issue
