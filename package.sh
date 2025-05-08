@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.28-00-01"
+SCRIPT_VERSION="2025.05.08-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -282,7 +282,7 @@ package_list() {
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
-install_packages_by_version() {
+install_packages_list() {
     # OSバージョンファイルの確認
     if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
         debug_log "DEBUG" "OS version file not found, using default package function"
@@ -339,14 +339,19 @@ install_usb_packages() {
 }
 
 # メイン処理
-package_manual_main() {    
+package_main() {    
+
+    : "${PACKAGE_INSTALL_MODE:=manual}"
     
     # OSバージョンに基づいたパッケージインストール
     install_packages_by_version
     
     # USB関連パッケージのインストール
     install_usb_packages
+
+    : "${PACKAGE_INSTALL_MODE:=manual}"
+    
 }
 
 # スクリプトの実行
-# package_manual_main "$@"
+# package_main "$@"
