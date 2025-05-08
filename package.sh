@@ -334,7 +334,7 @@ install_usb_packages() {
 
 # インストール後のパッケージリストを表示
 check_install_list() {
-    printf "\n%s\n" "$(color blue "Packages installed after flashing.")"
+    printf "\n%s\n" "$(color blue "Packages installed after flashing")"
 
     # パッケージマネージャの種類を確認
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
@@ -342,7 +342,6 @@ check_install_list() {
     fi
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # opkg用の処理 - 元のロジックを維持
         debug_log "DEBUG" "Using opkg package manager"
         FLASH_TIME="$(awk '
         $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
@@ -366,20 +365,19 @@ check_install_list() {
         }
         ' /usr/lib/opkg/status | sort
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # apk用の処理
         debug_log "DEBUG" "Using apk package manager"
-        if [ -f /etc/apk/world ]; then
+        if [ -f /etc/apk/world ] && [ -s /etc/apk/world ]; then # ファイルが存在し、かつ空でないことを確認
             # /etc/apk/worldには明示的にインストールされたパッケージリスト
             cat /etc/apk/world | sort
         else
-            # フォールバック：インストール済みパッケージを表示
-            apk info | sort
+            # /etc/apk/world が存在しない、または空の場合
+            debug_log "INFO" "/etc/apk/world not found or is empty. No user-installed packages to list by this method."
         fi
     else
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
     fi
 
-    return 0    
+    return 0 
 }
 
 # メイン処理
