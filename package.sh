@@ -479,10 +479,21 @@ check_install_list() {
 
     if echo "$distrib_release" | grep -q "SNAPSHOT"; then
         openwrt_git_branch="main"
-    elif echo "$distrib_release" | grep -Eq '^[0-9]+\.[0-9]+'; then
+    # --- MODIFIED: Branch name generation for release versions ---
+    elif echo "$distrib_release" | grep -Eq '^[0-9]+\.[0-9]+(-[0-9]+)?$'; then # Matches '19.07' or '19.07-9'
         local major_minor_version
-        major_minor_version=$(echo "$distrib_release" | awk -F'.' '{print $1"."$2}')
-        openwrt_git_branch="openwrt-$major_minor_version"
+        # '19.07-9' から '-9' を取り除き、'19.07' を抽出する
+        major_minor_version=$(echo "$distrib_release" | sed 's/-.*//' | awk -F'.' '{print $1"."$2}')
+        # 抽出結果が 'X.Y' 形式であるか基本的な検証を行う
+        if [ -n "$major_minor_version" ] && echo "$major_minor_version" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+             openwrt_git_branch="openwrt-$major_minor_version" # 'openwrt-19.07' が設定される
+        else
+            # 万が一、上記の抽出がうまくいかなかった場合のフォールバック処理
+            debug_log "DEBUG" "CRITICAL - Could not reliably parse major.minor from DISTRIB_RELEASE ('$distrib_release'). Using raw value for branch."
+            local raw_major_minor=$(echo "$distrib_release" | awk -F'.' '{print $1"."$2}') # 元のロジックに近い形
+            openwrt_git_branch="openwrt-$raw_major_minor" # この場合 'openwrt-19.07-9' となる可能性がある
+            debug_log "DEBUG" "Fallback branch name: $openwrt_git_branch (may be incorrect)"
+        fi
     else
         debug_log "DEBUG" "CRITICAL - DISTRIB_RELEASE ('$distrib_release') has an unrecognized format. Cannot determine git branch."
         rm -rf "$pkg_extract_tmp_dir"; return 1
