@@ -339,14 +339,33 @@ install_usb_packages() {
 }
 
 # メイン処理
-package_main() {    
+package_main() {
+    debug_log "DEBUG" "package_main called. PACKAGE_INSTALL_MODE is currently: '$PACKAGE_INSTALL_MODE'"
+
+    if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
+        # common-country.sh の confirm 関数を使用する
+        # メッセージキーは適切なものを get_message で取得するか、直接指定
+        # 例: "MSG_CONFIRM_AUTO_INSTALL_ALL" のようなキーを messages.db に定義
+        # ここでは仮のメッセージキーを使用
+        if ! confirm "MSG_PACKAGE_INSTALL_AUTO" "yn"; then
+            debug_log "DEBUG" "User cancelled automatic package installation."
+            printf "%s\n" "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")" # キャンセルメッセージ
+            return 1 # 中断して終了
+        fi
+        debug_log "DEBUG" "User confirmed automatic package installation."
+    fi
     
     # OSバージョンに基づいたパッケージインストール
     install_packages_by_version
     
     # USB関連パッケージのインストール
     install_usb_packages
-    
+
+    # 自動インストール成功時のメッセージ (オプション)
+    if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
+        printf "%s\n" "$(get_message "MSG_PACKAGE_INSTALL_COMPLETED")" # 完了メッセージ
+    fi
+    return 0 # 正常終了
 }
 
 # スクリプトの実行
