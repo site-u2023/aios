@@ -802,14 +802,10 @@ check_install_list() {
     local default_pkgs_tier2_tmp; local default_pkgs_tier3_tmp
     local default_pkgs_from_source_sorted_tmp; local default_pkgs_combined_tmp; local tmp_f
 
-    # Temporary directory creation (mktemp check is in user's source)
-    if command -v mktemp >/dev/null; then
-        pkg_extract_tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "pkg_extract.XXXXXX")
-    else
-        pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
-        pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
-        mkdir -p "$pkg_extract_tmp_dir"
-    fi
+    pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
+    pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
+    mkdir -p "$pkg_extract_tmp_dir"
+    
     if [ ! -d "$pkg_extract_tmp_dir" ]; then
          debug_log "DEBUG" "CRITICAL - Failed to create temp dir for default package extraction."
          return 1
@@ -1003,9 +999,8 @@ check_install_list() {
 
     if [ "$PACKAGE_MANAGER" = "apk" ]; then
         debug_log "DEBUG" "APK package manager detected via PACKAGE_MANAGER. Reading /etc/apk/world."
-        source_of_installed_pkgs_msg="/etc/apk/world"
+        source_of_installed_pkgs_msg="/etc/apk/world" # For debug message context
         if [ -f "/etc/apk/world" ] && [ -s "/etc/apk/world" ]; then
-            # バージョンサフィックスを除去
             sed 's/=[^=]*$//; s/~[^~]*$//' "/etc/apk/world" | sort -u > "$installed_pkgs_list_tmp"
         else
             debug_log "DEBUG" "/etc/apk/world not found or is empty."
@@ -1013,12 +1008,7 @@ check_install_list() {
         fi
     elif [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "OPKG package manager detected via PACKAGE_MANAGER. Running 'opkg list-installed'."
-        source_of_installed_pkgs_msg="'opkg list-installed'"
-        if ! command -v opkg >/dev/null 2>&1; then
-            debug_log "DEBUG" "CRITICAL - opkg command not found, but PACKAGE_MANAGER is 'opkg'."
-            rm -rf "$pkg_extract_tmp_dir" "$installed_pkgs_list_tmp"; return 1 # Ensure both are cleaned up
-        fi
-        # バージョンサフィックスを除去
+        source_of_installed_pkgs_msg="'opkg list-installed'" # For debug message context
         opkg list-installed | awk '{print $1}' | sed 's/=[^=]*$//; s/~[^~]*$//' | sort -u > "$installed_pkgs_list_tmp"
         if [ ! -s "$installed_pkgs_list_tmp" ]; then
              debug_log "DEBUG" "'opkg list-installed' yielded no packages or awk failed."
@@ -1035,8 +1025,12 @@ check_install_list() {
     else
         pkgs_only_in_installed_list=""
     fi
-    # ユーザーのログ出力形式に合わせて (None) を表示
-    if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; else printf "(None)\n"; fi
+    # Output to debug_log instead of echo/printf
+    if [ -n "$pkgs_only_in_installed_list" ]; then
+        debug_log "DEBUG" "Packages only in installed list (source: %s):\n%s" "$source_of_installed_pkgs_msg" "$pkgs_only_in_installed_list"
+    else
+        debug_log "DEBUG" "Packages only in installed list (source: %s): (None)" "$source_of_installed_pkgs_msg"
+    fi
 
     local pkgs_only_in_default_source_list
     if [ -s "$default_pkgs_from_source_sorted_tmp" ]; then 
@@ -1044,8 +1038,12 @@ check_install_list() {
     else
         pkgs_only_in_default_source_list=""
     fi
-    # ユーザーのログ出力形式に合わせて (None) を表示
-    if [ -n "$pkgs_only_in_default_source_list" ]; then echo "$pkgs_only_in_default_source_list"; else printf "(None)\n"; fi
+    # Output to debug_log instead of echo/printf
+    if [ -n "$pkgs_only_in_default_source_list" ]; then
+        debug_log "DEBUG" "Packages only in default source list (potentially missing from system):\n%s" "$pkgs_only_in_default_source_list"
+    else
+        debug_log "DEBUG" "Packages only in default source list (potentially missing from system): (None)"
+    fi
     
     rm -f "$installed_pkgs_list_tmp"; rm -rf "$pkg_extract_tmp_dir" 
     debug_log "DEBUG" "Cleaned up temporary files."
