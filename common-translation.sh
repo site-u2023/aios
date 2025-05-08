@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-08-00-00"
+SCRIPT_VERSION="2025-05-08-00-01"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -64,102 +64,100 @@ urlencode() {
 translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
-    local source_lang="${3:-$DEFAULT_LANGUAGE}" # 第3引数があればそれを使い、なければDEFAULT_LANGUAGE
+    local source_lang="${3:-$DEFAULT_LANGUAGE}" # Use 3rd arg if provided, else DEFAULT_LANGUAGE
 
-    # ... (以降の処理はほぼ同じだが、source_lang 変数を API URL に使用する) ...
-
+    # --- network.ch依存をip_type.chに変更 ---
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local wget_options=""
     local retry_count=0
+    # --- temp_file関連の変数は元から未使用 ---
     local api_url=""
     local translated_text=""
     local wget_exit_code=0
-    local response_data=""
+    local response_data="" # Variable to store wget output
 
-    mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
+    # Ensure BASE_DIR exists (still needed for potential cache files, etc.)
+    # mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
 
+    # --- IPバージョン判定（ip_type.chの内容をそのままwget_optionsに） ---
     if [ ! -f "$ip_type_file" ]; then
-        debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch not found)" >&2
+        # debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch not found)" >&2 # REMOVED
+        echo "Network is not available. (ip_type.ch not found)" >&2 # Original error output
         return 1
     fi
     wget_options=$(cat "$ip_type_file" 2>/dev/null)
     if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
-        debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch is unknown or empty)" >&2
+        # debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch is unknown or empty)" >&2 # REMOVED
+        echo "Network is not available. (ip_type.ch is unknown or empty)" >&2 # Original error output
         return 1
     fi
 
     local encoded_text
-    encoded_text=$(urlencode "$source_text")
+    encoded_text=$(urlencode "$source_text") # urlencode function must be available
 
     if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
-        debug_log "DEBUG" "translate_with_google: Source ('$source_lang') or target ('$target_lang_code') language code is empty."
+        # debug_log "DEBUG" "translate_with_google: Source or target language code is empty (source='$source_lang', target='$target_lang_code')." # REMOVED
         return 1
     fi
+    # API URL now uses the potentially overridden source_lang
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
-    debug_log "DEBUG" "translate_with_google: API URL: $api_url" # API URLをデバッグログに出力
+    # debug_log "DEBUG" "translate_with_google: API URL: $api_url" # REMOVED
 
-    while [ $retry_count -lt "$API_MAX_RETRIES" ]; do
+    # RES_OPTIONSによるDNSタイムアウト短縮（関数内限定）
+    # export RES_OPTIONS="timeout:1 attempts:1"
+
+    # リトライループ
+    while [ $retry_count -lt $API_MAX_RETRIES ]; do
         response_data=""
-        # wget の出力を response_data に確実に代入し、エラー出力は抑制しない（デバッグのため）
-        response_data=$(wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O - --user-agent="Mozilla/5.0" "$api_url" 2>&1)
+        # Capture both stdout and stderr from wget to see API error messages if any
+        response_data=$(wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O - --user-agent="Mozilla/5.0" "$api_url" 2>&1)
         wget_exit_code=$?
-
-        # wget の終了コードとレスポンス内容をデバッグ
-        debug_log "DEBUG" "translate_with_google: wget exit_code=$wget_exit_code, response_data (first 100 chars)='$(echo "$response_data" | head -c 100)'"
+        
+        # REMOVED: All debug logs related to retry attempts, wget_exit_code, and response_data inside the loop
 
         if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
-            # Google Translate の成功レスポンスは通常 JSON লাইক配列で始まる
-            if echo "$response_data" | grep -q '^\s*\[\[\["'; then
-                # 以前のawk処理で翻訳テキストを抽出
-                translated_text=$(printf "%s" "$response_data" | awk '
+            if echo "$response_data" | grep -q '^\s*\[\[\["'; then # Original check
+                # Original awk script is used here
+                translated_text=$(printf %s "$response_data" | awk '
                 BEGIN { out = "" }
                 /^\s*\[\[\["/ {
-                    sub(/^\s*\[\[\["/, ""); # 先頭の [[[ を除去
-                    # 最初の翻訳結果だけを取得 (単純化のため)
-                    if (match($0, /"[^"]*"/)) {
-                         out = substr($0, RSTART + 1, RLENGTH - 2);
-                         # 特殊文字のデコード処理 (必要に応じて追加・修正)
-                         gsub(/\\u003d/, "=", out);
-                         gsub(/\\u003c/, "<", out);
-                         gsub(/\\u003e/, ">", out);
-                         gsub(/\\u0026/, "&", out);
-                         gsub(/\\"/, "\"", out);
-                         gsub(/\\n/, "\n", out); # \n を実際の改行に
-                         gsub(/\\r/, "", out);
-                         gsub(/\\\\/, "\\", out);
-                         print out;
-                         exit;
-                    }
-                }
-                END { if (out == "") print "" } # マッチしなかった場合は空を出力
-                ')
-                
+                sub(/^\s*\[\[\["/, "")
+                split($0, a, /","/)
+                out = a[1]
+                gsub(/\\u003d/, "=", out)
+                gsub(/\\u003c/, "<", out)
+                gsub(/\\u003e/, ">", out)
+                gsub(/\\u0026/, "&", out)
+                gsub(/\\"/, "\"", out)
+                gsub(/\\n/, "\n", out)
+                gsub(/\\r/, "", out)
+                gsub(/\\\\/, "\\", out)
+                print out
+                exit
+            }
+            ')
+                    
                 if [ -n "$translated_text" ]; then
-                    printf "%s\n" "$translated_text" # 最後の改行は呼び出し側でトリムされることを想定
+                    # debug_log "DEBUG" "translate_with_google: Translation parsed successfully." # REMOVED
+                    printf "%s\n" "$translated_text"
                     return 0 # Success
-                else
-                    debug_log "DEBUG" "translate_with_google: Failed to parse translation from response: $response_data"
                 fi
-            else
-                debug_log "DEBUG" "translate_with_google: Response does not look like a valid Google Translate API success response. Response: $response_data"
+                # If parsing failed (translated_text is empty), it will fall through to retry logic
             fi
-        else
-            if [ "$wget_exit_code" -ne 0 ]; then
-                debug_log "DEBUG" "translate_with_google: wget failed with exit code $wget_exit_code. Response: $response_data"
-            elif [ -z "$response_data" ]; then
-                debug_log "DEBUG" "translate_with_google: wget succeeded (code 0) but response data is empty!"
-            fi
+            # If response_data is not in expected format, it will fall through to retry logic
         fi
+        # If wget failed or response was empty, it will fall through to retry logic
 
+        # --- Retry Logic ---
         retry_count=$((retry_count + 1))
-        if [ $retry_count -lt "$API_MAX_RETRIES" ]; then
-            debug_log "DEBUG" "translate_with_google: Retrying in 1 second..."
+        if [ $retry_count -lt $API_MAX_RETRIES ]; then
+            # debug_log "DEBUG" "translate_with_google: Retrying in 1 second..." # REMOVED
             sleep 1
         fi
     done
 
-    debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' from '$source_lang' to '$target_lang_code' after $API_MAX_RETRIES attempts."
-    printf "" # Output empty string on failure
+    # debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts." # REMOVED
+    printf "" # Output empty string on failure (Original behavior for failure after retries)
     return 1 # Failure
 }
 
@@ -1148,94 +1146,65 @@ create_language_db() {
 # @PARAM: $1 - original_description (string) - The package description text to translate.
 # @PARAM: $2 - target_lang_code (string) - The target language code (e.g., "ja").
 # @PARAM: $3 - [optional] source_lang_code (string) - The source language code (defaults to DEFAULT_LANGUAGE).
-# @STDOUT: Translated description string. If translation fails or result is empty,
-#          it outputs the original_description.
-# @RETURN: 0 on successful translation (even if result is same as original due to API),
-#          1 if no translation function is available or if input is empty.
-#          The called translation function's exit code might indicate API specific errors.
+# @STDOUT: Translated description string (with a trailing newline if successful and non-empty),
+#          or an empty string if translation fails or the result is empty.
+# @RETURN: 0 if the selected translation function was called successfully (output might be empty).
+#          1 if input was invalid, no translation function available, or the selected function call failed.
 translate_package_description() {
     local original_description="$1"
     local target_lang_code="$2"
-    local source_lang_code="${3:-$DEFAULT_LANGUAGE}" # Use global DEFAULT_LANGUAGE if not provided
+    local source_lang_code="${3:-$DEFAULT_LANGUAGE}"
 
-    local translated_description=""
+    local translated_text_raw=""
     local selected_func=""
     local func_name=""
+    local translate_api_status=1 # Default to failure for the API call itself
 
-    debug_log "DEBUG" "translate_package_description: Original: '$original_description', TargetLang: '$target_lang_code', SourceLang: '$source_lang_code'"
+    # Minimal debug log, can be removed if user prefers no logs from this function either
+    # debug_log "DEBUG" "translate_package_description: Called with TargetLang: '$target_lang_code', SourceLang: '$source_lang_code'"
 
-    # 入力チェック
     if [ -z "$original_description" ]; then
-        debug_log "DEBUG" "translate_package_description: Original description is empty. Returning original (empty)."
-        printf "%s" "$original_description" # 空の元文字列をそのまま返す
-        return 1 # 処理対象なし
+        # debug_log "DEBUG" "translate_package_description: Original description is empty."
+        return 1
     fi
     if [ -z "$target_lang_code" ]; then
-        debug_log "DEBUG" "translate_package_description: Target language code is empty. Returning original description."
-        printf "%s" "$original_description"
+        # debug_log "ERROR" "translate_package_description: Target language code is empty."
         return 1
     fi
 
-    # 翻訳元と翻訳先が同じ言語の場合は翻訳処理をスキップ
     if [ "$source_lang_code" = "$target_lang_code" ]; then
-        debug_log "DEBUG" "translate_package_description: Source and target languages are the same ('$target_lang_code'). Skipping translation."
-        printf "%s" "$original_description"
+        # debug_log "DEBUG" "translate_package_description: Source and target languages are the same. Returning original."
+        printf "%s\n" "$original_description"
         return 0
     fi
 
-    # 利用可能な翻訳関数を選択 (translate_main と同様のロジック)
     if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
-         debug_log "DEBUG" "translate_package_description: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
-         printf "%s" "$original_description" # フォールバック
-         return 1
+        # debug_log "ERROR" "translate_package_description: AI_TRANSLATION_FUNCTIONS not set."
+        return 1
     fi
-    # POSIX準拠のループ (set -f; ...; set +f はファイル名展開を防ぐ)
-    set -f
-    # shellcheck disable=SC2086 # AI_TRANSLATION_FUNCTIONS は意図的にスペース区切りで展開
-    IFS=' ' eval 'set -- $AI_TRANSLATION_FUNCTIONS'
-    set +f
+    set -f; IFS=' ' eval 'set -- $AI_TRANSLATION_FUNCTIONS'; IFS=$(printf ' \t\n'); set +f
     for func_name in "$@"; do
         if type "$func_name" >/dev/null 2>&1; then
-            selected_func="$func_name"
-            break
+            selected_func="$func_name"; break
         fi
     done
 
     if [ -z "$selected_func" ]; then
-        debug_log "DEBUG" "translate_package_description: No available translation functions found. Returning original description."
-        printf "%s" "$original_description" # フォールバック
+        # debug_log "ERROR" "translate_package_description: No available translation functions."
         return 1
     fi
-    debug_log "DEBUG" "translate_package_description: Using translation function: $selected_func"
+    # debug_log "DEBUG" "translate_package_description: Using: '$selected_func'"
 
-    # 選択された関数で翻訳を実行
-    # translate_with_google は翻訳失敗時に空文字列と非ゼロステータスを返す想定
-    # また、source_lang は translate_with_google 内部で DEFAULT_LANGUAGE を参照するため、
-    # ここで source_lang_code を明示的に渡すように translate_with_google を修正するか、
-    # この関数から source_lang_code を渡す新しいラッパーを作る必要がある。
-    # 現状の translate_with_google は第3引数を取らないため、ここでは source_lang_code を渡さない。
-    # 必要であれば translate_with_google の改修を検討。
-    # → translate_with_google 側で source_lang を引数で受け取れるように修正するのが望ましい。
-    #   ここでは一旦、既存の translate_with_google をそのまま使う前提で進める。
-    #   (translate_with_google は内部で DEFAULT_LANGUAGE を source_lang として使う)
+    translated_text_raw=$("$selected_func" "$original_description" "$target_lang_code" "$source_lang_code")
+    translate_api_status=$?
 
-    # translate_with_google が source_lang を引数で受け取れるように修正する前提で、
-    # source_lang_code を渡すように変更 (この修正は別途必要)
-    # translated_description=$("$selected_func" "$original_description" "$target_lang_code" "$source_lang_code")
-    # ↓ 現状の translate_with_google に合わせる場合 (source_lang は DEFAULT_LANGUAGE 固定)
-    translated_description=$("$selected_func" "$original_description" "$target_lang_code")
-    local translate_exit_status=$?
-
-    if [ "$translate_exit_status" -eq 0 ] && [ -n "$translated_description" ]; then
-        debug_log "DEBUG" "translate_package_description: Translation successful. Translated: '$translated_description'"
-        printf "%s" "$translated_description"
+    if [ "$translate_api_status" -eq 0 ]; then
+        # debug_log "DEBUG" "translate_package_description: '$selected_func' succeeded."
+        printf "%s" "$translated_text_raw" # Output raw, selected_func is responsible for newline
         return 0
     else
-        debug_log "DEBUG" "translate_package_description: Translation failed (status $translate_exit_status) or returned empty. Original: '$original_description'"
-        printf "%s" "$original_description" # 翻訳失敗時は元の説明文を返す
-        # 翻訳API自体が失敗したのか、結果が空だったのかを区別したい場合は $translate_exit_status を利用
-        return 0 # 呼び出し側では翻訳結果の有無で判断するため、ここでは成功として返す
-                 # (APIエラー等を呼び出し側に伝えたい場合は $translate_exit_status を返す)
+        # debug_log "WARN" "translate_package_description: '$selected_func' failed (status $translate_api_status)."
+        return 1
     fi
 }
 
