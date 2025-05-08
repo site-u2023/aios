@@ -619,11 +619,6 @@ check_install_list() {
     elif [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "OPKG package manager detected via PACKAGE_MANAGER. Running 'opkg list-installed'."
         source_of_installed_pkgs_msg="'opkg list-installed'"
-        if ! command -v opkg >/dev/null 2>&1; then
-            debug_log "DEBUG" "CRITICAL - opkg command not found, but PACKAGE_MANAGER is 'opkg'."
-            rm -rf "$pkg_extract_tmp_dir" "$installed_pkgs_list_tmp"
-            return 1
-        fi
         opkg list-installed | awk '{print $1}' | sort > "$installed_pkgs_list_tmp"
         if [ ! -s "$installed_pkgs_list_tmp" ]; then
              debug_log "DEBUG" "'opkg list-installed' yielded no packages or awk failed."
