@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.18-00-00"
+SCRIPT_VERSION="2025.05.08-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -406,6 +406,73 @@ local_package_db() {
 #          1 - Already installed on device
 #          2 - Not found in repository or FEED_DIR (skip installation)
 package_pre_install() {
+    local package_name="$1"
+    local package_cache="${CACHE_DIR}/package_list.ch"
+
+    debug_log "DEBUG" "Checking package: $package_name"
+
+    # デバイス内パッケージ確認
+    local check_extension=$(basename "$package_name" .ipk)
+    check_extension=$(basename "$check_extension" .apk)
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        output=$(opkg list-installed "$check_extension" 2>&1)
+        if [ -n "$output" ]; then  # 出力があった場合
+            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device"
+            return 1  # 既にインストールされている場合は終了
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        # Check if package is installed by using the exit status of 'apk info'
+        # 'apk info <package>' exits with 0 if installed, non-zero otherwise.
+        if apk info "$check_extension" >/dev/null 2>&1; then
+            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device (apk info exit status 0)"
+            return 1  # Already installed
+        else
+            # Package is not installed, or 'apk info' command failed for other reasons.
+            # Proceed to check repository.
+            debug_log "DEBUG" "Package \"$check_extension\" not found on device by 'apk info' (exit status non-zero). Will check repository."
+        fi
+    fi
+
+    # リポジトリ内パッケージ確認
+    debug_log "DEBUG" "Checking repository for package: $check_extension"
+
+    if [ ! -f "$package_cache" ]; then
+        debug_log "DEBUG" "Package cache not found. Attempting to update."
+        update_package_list >/dev/null 2>&1
+
+        # 更新後も存在しない場合は警告を出すが処理は継続
+        if [ ! -f "$package_cache" ]; then
+            debug_log "WARNING" "Package cache still not available after update attempt"
+            # キャッシュがなくてもインストール処理は続行（ローカルファイル等の場合）
+        fi
+    fi
+
+    # パッケージキャッシュが存在する場合のみチェック
+    if [ -f "$package_cache" ]; then
+        # パッケージがキャッシュ内に存在するか確認
+        if grep -q "^$package_name " "$package_cache"; then
+            debug_log "DEBUG" "Package $package_name found in repository"
+            return 0  # パッケージが存在するのでOK
+        fi
+    fi
+
+    # キャッシュに存在しない場合、FEED_DIR内を探してみる
+    if [ -f "$package_name" ]; then
+        debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
+        return 0  # FEED_DIR内にパッケージが見つかったのでOK
+    fi
+
+    debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
+    # リポジトリにもFEED_DIRにも存在しないパッケージはスキップする
+    return 2  # ★ 変更: 1から2に変更 (Not found)
+}
+
+# パッケージインストール前のチェック
+# Returns: 0 - Ready to install (found in repository or FEED_DIR)
+#          1 - Already installed on device
+#          2 - Not found in repository or FEED_DIR (skip installation)
+OK_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
