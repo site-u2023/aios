@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-00-07"
+SCRIPT_VERSION="2025.05.08-00-08"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -808,9 +808,10 @@ get_package_description() {
     local current_lang_code=""
     local package_cache="${CACHE_DIR}/package_list.ch"
 
-    if [ -z "$package_name" ]; {
+    if [ -z "$package_name" ]; then # MODIFIED: Added "then"
         # debug_log "ERROR" "get_package_description: package_name is empty." # Minimal logging
-        printf "\n"; return 0; } # Consistent return
+        printf "\n"; return 0;
+    fi # MODIFIED: Added "fi"
 
     # debug_log "DEBUG" "get_package_description: For package: '$package_name'" # Minimal logging
 
