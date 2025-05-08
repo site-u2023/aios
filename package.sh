@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-00-01"
+SCRIPT_VERSION="2025.05.08-01-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -332,49 +332,412 @@ install_usb_packages() {
     return 0
 }
 
-# インストール後のパッケージリストを表示
+# 元の check_install_list 関数を入口関数として利用
+# パッケージマネージャに応じて処理を分岐する
+
+# グローバル変数（またはスクリプトの早い段階で設定される変数）の想定
+# CACHE_DIR="/tmp/my_cache" # 例: キャッシュディレクトリ
+# PACKAGE_MANAGER="" # スクリプトの初期化段階で設定される想定
+
+# ログ出力関数のプレースホルダー (実際のログ関数に置き換えてください)
+debug_log() {
+    _level="$1"
+    _message="$2"
+    # 実際のログ記録処理 (例: printf "[%s] %s\n" "$_level" "$_message" >&2)
+    printf "[%s] %s\n" "$_level" "$_message"
+}
+
+# メッセージ取得関数のプレースホルダー (実際のメッセージ取得関数に置き換えてください)
+get_message() {
+    _key="$1"
+    # 実際のメッセージ取得処理 (例: echo "$_key")
+    echo "$_key"
+}
+
+# 色付け関数のプレースホルダー (実際のカラーリング関数に置き換えてください)
+color() {
+    _color_name="$1"
+    _text="$2"
+    # 実際のカラーリング処理 (例: echo "$_text")
+    echo "$_text"
+}
+
+# opkgでフラッシュ後にユーザーがインストールしたパッケージを取得する関数
+get_installed_packages_opkg() {
+    debug_log "DEBUG" "Function called: get_installed_packages_opkg"
+    if [ ! -f "/usr/lib/opkg/status" ] || [ ! -s "/usr/lib/opkg/status" ]; then
+        debug_log "ERROR" "/usr/lib/opkg/status not found or is empty."
+        return 1
+    fi
+
+    # opkg statusファイルから、最も古いインストール時刻（通常はフラッシュ時刻）を取得
+    # awkスクリプトの堅牢性向上のため、OLDESTの初期化をBEGINブロックで行う
+    local flash_time
+    flash_time="$(awk '
+    BEGIN { OLDEST = "" }
+    $1 == "Installed-Time:" {
+        current_time = $2;
+        # 数字であるか簡単なチェック (より厳密なチェックも可能)
+        if (current_time ~ /^[0-9]+$/) {
+            if (OLDEST == "" || current_time < OLDEST) {
+                OLDEST = current_time;
+            }
+        }
+    }
+    END {
+        if (OLDEST != "") {
+            print OLDEST;
+        } else {
+            # OLDEST が見つからなかった場合のフォールバックまたはエラー処理
+            # ここでは空文字列を出力し、呼び出し元で対処する想定
+            # print "Error:CouldNotDetermineFlashTime"; # 代替案
+        }
+    }
+    ' /usr/lib/opkg/status)"
+
+    if [ -z "$flash_time" ]; then
+        debug_log "ERROR" "Could not determine the flash installation time from opkg status."
+        return 1
+    fi
+    debug_log "DEBUG" "Determined flash time (opkg oldest install time): $flash_time"
+
+    # opkg statusファイルから、フラッシュ時刻以降にユーザーによってインストールされたパッケージを抽出
+    awk -v ft="$flash_time" '
+    BEGIN { pkg = ""; usr = "" }
+    $1 == "Package:" { pkg = $2 }
+    $1 == "Status:" {
+        # "Status: install user installed" のような形式を想定
+        # $3 が "user" で $4 が "installed" であることを確認
+        if ($3 == "user" && $4 == "installed") {
+            usr = 1
+        } else {
+            usr = "" # 他のステータスならリセット
+        }
+    }
+    $1 == "Installed-Time:" && $2 ~ /^[0-9]+$/ { # Installed-Timeが数字であることを確認
+        if (usr == 1 && $2 != ft) {
+            print pkg
+        }
+        # Reset for next package block
+        pkg = ""; usr = "";
+    }
+    ' /usr/lib/opkg/status | sort
+}
+
+# Dependencies assumed to be defined elsewhere in the script:
+# fetch_file()
+# extract_makefile_block()
+# parse_packages_from_extracted_block()
+# debug_log()
+# color()
+# get_message()
+# CACHE_DIR (variable)
+# TMP_DIR (variable, for mktemp fallback)
+
+# ヘルパー関数: OpenWrtソースからデフォルトパッケージリストを生成し、指定ファイルに出力
+# (v16スクリプトの主要ロジックをベースとする)
+generate_default_package_list_from_source() {
+    local output_file_path="$1"
+    if [ -z "$output_file_path" ]; then
+        debug_log "ERROR" "Output file path not provided to generate_default_package_list_from_source."
+        return 1
+    fi
+
+    local _tmp_dir_generate # Function-local temporary directory variable
+    if command -v mktemp >/dev/null; then
+        _tmp_dir_generate=$(mktemp -d -p "${TMP_DIR:-/tmp}" "pkg_generate_defaults.XXXXXX") || {
+            debug_log "ERROR" "Failed to create temp dir for default package generation."
+            return 1
+        }
+    else
+        local _tmp_dir_basename_generate
+        _tmp_dir_basename_generate="pkg_generate_defaults_$$_$(date +%s)"
+        _tmp_dir_generate="${TMP_DIR:-/tmp}/${_tmp_dir_basename_generate}"
+        mkdir -p "$_tmp_dir_generate" || {
+            debug_log "ERROR" "Failed to create temp dir %s for default package generation." "$_tmp_dir_generate"
+            return 1
+        }
+    fi
+    debug_log "DEBUG" "Temporary directory for default package generation: $_tmp_dir_generate"
+
+    # Define local file paths within the temporary directory
+    local gen_pkg_list_target_mk_basic_tmp="${_tmp_dir_generate}/pkg_target_mk_basic.txt"
+    local gen_pkg_list_target_mk_router_additions_tmp="${_tmp_dir_generate}/pkg_target_mk_router_additions.txt"
+    local gen_pkg_list_target_mk_direct_tmp="${_tmp_dir_generate}/pkg_target_mk_direct.txt"
+    local gen_pkg_list_target_specific_tmp="${_tmp_dir_generate}/pkg_target_specific.txt"
+    local gen_pkg_list_device_specific_tmp="${_tmp_dir_generate}/pkg_device_specific.txt"
+    local gen_combined_list_for_processing_tmp="${_tmp_dir_generate}/combined_for_processing.txt"
+    # Output will be written directly to $output_file_path after processing
+
+    # --- Configuration (mirrors v16 logic) ---
+    local gen_device_profile_name_val 
+    local gen_assumed_device_type_val="router"
+
+    if [ -f "/etc/board.json" ] && command -v jsonfilter > /dev/null; then
+        local gen_board_name_raw_val
+        gen_board_name_raw_val=$(jsonfilter -e '@.model.id' < /etc/board.json 2>/dev/null)
+        gen_device_profile_name_val=$(echo "$gen_board_name_raw_val" | sed 's/\//_/g' | tr '[:upper:]' '[:lower:]')
+        if [ -z "$gen_device_profile_name_val" ]; then
+            gen_device_profile_name_val="radxa_zero-3w"
+        fi
+    else
+        gen_device_profile_name_val="radxa_zero-3w"
+    fi
+    debug_log "INFO" "Using device_profile_name='$gen_device_profile_name_val' for default pkg list generation."
+
+    local gen_distrib_target_val=""
+    local gen_distrib_release_val=""
+    local gen_openwrt_git_branch_val="main"
+
+    if [ -f "/etc/openwrt_release" ]; then
+        gen_distrib_target_val=$(. /etc/openwrt_release >/dev/null 2>&1; echo "$DISTRIB_TARGET")
+        gen_distrib_release_val=$(. /etc/openwrt_release >/dev/null 2>&1; echo "$DISTRIB_RELEASE")
+        if [ -z "$gen_distrib_target_val" ]; then 
+             gen_distrib_target_val=$(grep '^DISTRIB_TARGET=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2)
+             gen_distrib_release_val=$(grep '^DISTRIB_RELEASE=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2)
+        fi
+    else
+        gen_distrib_target_val="rockchip/armv8"
+    fi
+
+    if echo "$gen_distrib_release_val" | grep -q "SNAPSHOT"; then
+        gen_openwrt_git_branch_val="main"
+    elif echo "$gen_distrib_release_val" | grep -Eq '^[0-9]+\.[0-9]+'; then
+        local gen_major_minor_version_val
+        gen_major_minor_version_val=$(echo "$gen_distrib_release_val" | awk -F'.' '{print $1"."$2}')
+        gen_openwrt_git_branch_val="openwrt-${gen_major_minor_version_val}"
+    else
+        gen_openwrt_git_branch_val="main"
+    fi
+    debug_log "INFO" "Using OpenWrt Git branch: $gen_openwrt_git_branch_val for default pkg list generation."
+
+    local gen_target_base_val
+    local gen_image_target_suffix_val
+    gen_target_base_val=$(echo "$gen_distrib_target_val" | cut -d'/' -f1)
+    gen_image_target_suffix_val=$(echo "$gen_distrib_target_val" | cut -d'/' -f2)
+
+    if [ -z "$gen_target_base_val" ] || [ -z "$gen_image_target_suffix_val" ] || [ "$gen_target_base_val" = "$gen_distrib_target_val" ]; then
+        if [ "$gen_distrib_target_val" = "rockchip/armv8" ]; then
+            gen_target_base_val="rockchip"
+            gen_image_target_suffix_val="armv8"
+        else
+            debug_log "ERROR" "Cannot proceed with default package generation without valid target paths."
+            rm -rf "$_tmp_dir_generate"
+            return 1
+        fi
+    fi
+    debug_log "INFO" "Using target paths for default pkg list generation: base='$gen_target_base_val', suffix='$gen_image_target_suffix_val'"
+
+    for f_gen in "$gen_pkg_list_target_mk_basic_tmp" "$gen_pkg_list_target_mk_router_additions_tmp" "$gen_pkg_list_target_mk_direct_tmp" \
+             "$gen_pkg_list_target_specific_tmp" "$gen_pkg_list_device_specific_tmp" "$gen_combined_list_for_processing_tmp"; do
+        true > "$f_gen"
+    done
+    true > "$output_file_path" # Ensure output file is initially empty
+
+    local gen_success_flag=0 
+
+    # Tier 1 (generation)
+    local gen_target_mk_file_val="${_tmp_dir_generate}/target.mk.download"
+    local gen_target_mk_url_val="https://raw.githubusercontent.com/openwrt/openwrt/${gen_openwrt_git_branch_val}/include/target.mk"
+    if fetch_file "$gen_target_mk_url_val" "$gen_target_mk_file_val"; then
+        local gen_basic_block_content_val
+        gen_basic_block_content_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES.basic" ":=")
+        if [ -n "$gen_basic_block_content_val" ]; then parse_packages_from_extracted_block "$gen_basic_block_content_val" "DEFAULT_PACKAGES.basic" ":=" > "$gen_pkg_list_target_mk_basic_tmp"; fi
+        if [ ! -s "$gen_pkg_list_target_mk_basic_tmp" ]; then
+            local gen_basic_block_content_fallback_val
+            gen_basic_block_content_fallback_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES" ":=")
+            if [ -n "$gen_basic_block_content_fallback_val" ]; then parse_packages_from_extracted_block "$gen_basic_block_content_fallback_val" "DEFAULT_PACKAGES" ":=" > "$gen_pkg_list_target_mk_basic_tmp"; fi
+        fi
+        local gen_router_additions_block_content_val
+        gen_router_additions_block_content_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES.${gen_assumed_device_type_val}" ":=")
+        if [ -n "$gen_router_additions_block_content_val" ]; then parse_packages_from_extracted_block "$gen_router_additions_block_content_val" "DEFAULT_PACKAGES.${gen_assumed_device_type_val}" ":=" > "$gen_pkg_list_target_mk_router_additions_tmp"; fi
+        local gen_direct_block_content_val
+        gen_direct_block_content_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES" "+=")
+        if [ -n "$gen_direct_block_content_val" ]; then parse_packages_from_extracted_block "$gen_direct_block_content_val" "DEFAULT_PACKAGES" "+=" > "$gen_pkg_list_target_mk_direct_tmp"; fi
+    else
+        debug_log "ERROR" "Failed to process include/target.mk for default pkg list generation. Tier 1 skipped."
+        gen_success_flag=1 
+    fi
+
+    # Tier 2 (generation)
+    if [ "$gen_success_flag" -eq 0 ] && [ -n "$gen_target_base_val" ]; then
+        local gen_target_specific_mk_file_val="${_tmp_dir_generate}/target_${gen_target_base_val}.mk.download"
+        local gen_target_specific_mk_url_val="https://raw.githubusercontent.com/openwrt/openwrt/${gen_openwrt_git_branch_val}/target/linux/${gen_target_base_val}/Makefile"
+        if fetch_file "$gen_target_specific_mk_url_val" "$gen_target_specific_mk_file_val"; then
+            local gen_ts_block_content_val
+            gen_ts_block_content_val=$(extract_makefile_block "$gen_target_specific_mk_file_val" "DEFAULT_PACKAGES" "+=")
+            if [ -n "$gen_ts_block_content_val" ]; then parse_packages_from_extracted_block "$gen_ts_block_content_val" "DEFAULT_PACKAGES" "+=" > "$gen_pkg_list_target_specific_tmp"; fi
+        else
+            debug_log "WARNING" "Failed to process target/linux/$gen_target_base_val/Makefile for default pkg list generation. Tier 2 might be incomplete."
+        fi
+    elif [ -z "$gen_target_base_val" ]; then
+         debug_log "WARNING" "target_base is empty. Skipping Tier 2 for default pkg list generation."
+    fi
+
+    # Tier 3 (generation)
+    if [ "$gen_success_flag" -eq 0 ] && [ -n "$gen_target_base_val" ] && [ -n "$gen_image_target_suffix_val" ]; then
+        local gen_device_specific_mk_file_val="${_tmp_dir_generate}/image_${gen_image_target_suffix_val}.mk.download"
+        local gen_device_profile_block_tmp_val="${_tmp_dir_generate}/device_profile_block.txt"
+        local gen_device_specific_mk_url_val="https://raw.githubusercontent.com/openwrt/openwrt/${gen_openwrt_git_branch_val}/target/linux/${gen_target_base_val}/image/${gen_image_target_suffix_val}.mk"
+        if fetch_file "$gen_device_specific_mk_url_val" "$gen_device_specific_mk_file_val"; then
+            awk -v profile="Device/${gen_device_profile_name_val}" \
+                'BEGIN{found=0} $2==profile && $1=="define"{found=1} found{print} /^[[:space:]]*endef[[:space:]]*$/&&found{found=0}' \
+                "$gen_device_specific_mk_file_val" > "$gen_device_profile_block_tmp_val"
+            if [ -s "$gen_device_profile_block_tmp_val" ]; then
+                local gen_device_pkgs_block_content_val
+                gen_device_pkgs_block_content_val=$(extract_makefile_block "$gen_device_profile_block_tmp_val" "DEVICE_PACKAGES" ":=")
+                if [ -z "$gen_device_pkgs_block_content_val" ]; then gen_device_pkgs_block_content_val=$(extract_makefile_block "$gen_device_profile_block_tmp_val" "DEVICE_PACKAGES" "+="); fi
+                if [ -n "$gen_device_pkgs_block_content_val" ]; then
+                    parse_packages_from_extracted_block "$gen_device_pkgs_block_content_val" "DEVICE_PACKAGES" ":=" > "$gen_pkg_list_device_specific_tmp"
+                    if [ ! -s "$gen_pkg_list_device_specific_tmp" ]; then parse_packages_from_extracted_block "$gen_device_pkgs_block_content_val" "DEVICE_PACKAGES" "+=" > "$gen_pkg_list_device_specific_tmp"; fi
+                fi
+            else
+                 debug_log "WARNING" "Could not extract 'define Device/$gen_device_profile_name_val' block for default pkg list generation."
+            fi
+        else
+            debug_log "WARNING" "Failed to process image specific Makefile for Tier 3 for default pkg list generation."
+        fi
+    elif [ -z "$gen_target_base_val" ] || [ -z "$gen_image_target_suffix_val" ]; then
+        debug_log "WARNING" "target_base or image_target_suffix is empty. Skipping Tier 3 for default pkg list generation."
+    fi
+
+    # Combine (generation)
+    true > "$gen_combined_list_for_processing_tmp"
+    for list_file_gen in "$gen_pkg_list_target_mk_basic_tmp" "$gen_pkg_list_target_mk_router_additions_tmp" "$gen_pkg_list_target_mk_direct_tmp" \
+                     "$gen_pkg_list_target_specific_tmp" "$gen_pkg_list_device_specific_tmp"; do
+        if [ -s "$list_file_gen" ]; then cat "$list_file_gen" >> "$gen_combined_list_for_processing_tmp"; fi
+    done
+
+    if [ -s "$gen_combined_list_for_processing_tmp" ]; then
+        sort -u "$gen_combined_list_for_processing_tmp" | sed '/^$/d' > "$output_file_path" # Output to the specified file
+        debug_log "INFO" "Default package list successfully generated into $output_file_path."
+    else
+        debug_log "WARNING" "No default packages could be extracted from source. Output file $output_file_path will be empty."
+        true > "$output_file_path" # Ensure output file is at least an empty file
+    fi
+    
+    rm -rf "$_tmp_dir_generate" # Cleanup generation temp dir
+    return "$gen_success_flag"
+}
+
+
+# メイン関数: apkで明示的にインストールされたパッケージを取得し、デフォルトと比較
+get_installed_packages_apk() {
+    debug_log "DEBUG" "Function called: get_installed_packages_apk"
+    
+    local apk_world_list_file_val 
+    local default_pkgs_list_file_val 
+
+    # Ensure CACHE_DIR is defined and accessible for temporary diff files
+    if [ -z "$CACHE_DIR" ] || ! mkdir -p "$CACHE_DIR" 2>/dev/null || [ ! -w "$CACHE_DIR" ]; then # Try to create CACHE_DIR if it doesn't exist
+        debug_log "WARNING" "CACHE_DIR ('$CACHE_DIR') is not usable. Using /tmp for temporary diff files."
+        local tmp_diff_dir="/tmp"
+        apk_world_list_file_val="${tmp_diff_dir}/.apk_world_list_diff.tmp"
+        default_pkgs_list_file_val="${tmp_diff_dir}/.default_pkgs_list_diff.tmp"
+    else
+        apk_world_list_file_val="${CACHE_DIR}/.apk_world_list_diff.tmp"
+        default_pkgs_list_file_val="${CACHE_DIR}/.default_pkgs_list_diff.tmp"
+    fi
+    
+    # 1. /etc/apk/world からリスト取得 (リストA)
+    if [ -f "/etc/apk/world" ] && [ -s "/etc/apk/world" ]; then
+        debug_log "INFO" "Reading /etc/apk/world..."
+        sort "/etc/apk/world" > "$apk_world_list_file_val"
+    else
+        debug_log "INFO" "/etc/apk/world not found or is empty."
+        true > "$apk_world_list_file_val" 
+    fi
+
+    # 2. ソースからデフォルトパッケージリストを生成し、ファイルに保存 (リストB)
+    printf "\n%s\n" "$(color cyan "$(get_message "MSG_FETCHING_DEFAULT_PACKAGES_FROM_SOURCE")")"
+    if generate_default_package_list_from_source "$default_pkgs_list_file_val"; then
+        debug_log "INFO" "Default package list from source has been generated into $default_pkgs_list_file_val."
+    else
+        debug_log "ERROR" "Failed to generate default package list from source. Comparison will be incomplete."
+        # Ensure the file exists and is empty if generation failed critically
+        if [ ! -f "$default_pkgs_list_file_val" ]; then 
+             true > "$default_pkgs_list_file_val"
+        elif [ ! -s "$default_pkgs_list_file_val" ]; then # If it exists but is empty due to no pkgs found
+             debug_log "INFO" "Default package list from source was empty."
+        fi
+    fi
+
+    if [ ! -s "$apk_world_list_file_val" ] && [ ! -s "$default_pkgs_list_file_val" ]; then
+        printf "%s\n" "$(color yellow "$(get_message "MSG_APK_WORLD_AND_DEFAULTS_EMPTY")")"
+        rm -f "$apk_world_list_file_val" "$default_pkgs_list_file_val" 
+        return 0
+    fi
+    
+    # 3. 差分表示
+    printf "\n%s\n" "$(color green "$(get_message "MSG_PACKAGE_COMPARISON_TITLE")")"
+
+    printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGES_ONLY_IN_APK_WORLD_DESC")")"
+    local only_in_apk_world_val
+    if [ -s "$apk_world_list_file_val" ]; then 
+        only_in_apk_world_val=$(grep -vxFf "$default_pkgs_list_file_val" "$apk_world_list_file_val")
+    else
+        only_in_apk_world_val=""
+    fi
+
+    if [ -n "$only_in_apk_world_val" ]; then
+        echo "$only_in_apk_world_val"
+    else
+        printf "%s\n" "$(get_message "MSG_NONE")"
+    fi
+
+    printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGES_ONLY_IN_DEFAULTS_DESC")")"
+    local only_in_defaults_val
+    if [ -s "$default_pkgs_list_file_val" ]; then 
+        only_in_defaults_val=$(grep -vxFf "$apk_world_list_file_val" "$default_pkgs_list_file_val")
+    else
+        only_in_defaults_val=""
+    fi
+    
+    if [ -n "$only_in_defaults_val" ]; then
+        echo "$only_in_defaults_val"
+    else
+        printf "%s\n" "$(get_message "MSG_NONE")"
+    fi
+    
+    # Cleanup diff temp files
+    rm -f "$apk_world_list_file_val" "$default_pkgs_list_file_val" 
+    return 0
+}
+
+# インストール後のパッケージリストを表示 (入口関数)
 check_install_list() {
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
 
-    # パッケージマネージャの種類を確認
-    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
+    # パッケージマネージャの種類を確認 (キャッシュまたは動的検出)
+    # この例では、PACKAGE_MANAGER変数が事前に設定されていることを期待
+    if [ -z "$PACKAGE_MANAGER" ]; then
+        if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+            PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
+            debug_log "DEBUG" "Package manager read from cache: $PACKAGE_MANAGER"
+        elif command -v opkg >/dev/null 2>&1; then
+            PACKAGE_MANAGER="opkg"
+            debug_log "DEBUG" "Detected opkg package manager."
+        elif command -v apk >/dev/null 2>&1; then
+            PACKAGE_MANAGER="apk"
+            debug_log "DEBUG" "Detected apk package manager."
+        else
+            debug_log "ERROR" "Could not determine package manager."
+            PACKAGE_MANAGER="unknown" # or handle error appropriately
+        fi
+        # 必要であれば、検出結果をキャッシュに保存
+        # echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/package_manager.ch"
     fi
 
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "DEBUG" "Using opkg package manager"
-        FLASH_TIME="$(awk '
-        $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
-          OLDEST=$2
-        }
-        END {
-          print OLDEST
-        }
-        ' /usr/lib/opkg/status)"
 
-        awk -v FT="$FLASH_TIME" '
-        $1 == "Package:" {
-          PKG=$2
-          USR=""
-        }
-        $1 == "Status:" && $3 ~ "user" {
-          USR=1
-        }
-        $1 == "Installed-Time:" && USR && $2 != FT {
-          print PKG
-        }
-        ' /usr/lib/opkg/status | sort
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        debug_log "INFO" "Using opkg to list user-installed packages (post-flash)."
+        get_installed_packages_opkg
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        debug_log "DEBUG" "Using apk package manager"
-        if [ -f /etc/apk/world ] && [ -s /etc/apk/world ]; then # ファイルが存在し、かつ空でないことを確認
-            # /etc/apk/worldには明示的にインストールされたパッケージリスト
-            cat /etc/apk/world | sort
-        else
-            # /etc/apk/world が存在しない、または空の場合
-            debug_log "INFO" "/etc/apk/world not found or is empty. No user-installed packages to list by this method."
-        fi
+        debug_log "INFO" "Using apk to list explicitly installed packages."
+        get_installed_packages_apk
     else
-        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
+        debug_log "ERROR" "Unknown or undetermined package manager: '$PACKAGE_MANAGER'. Cannot list user-installed packages."
+        return 1 # Indicate an error or issue
     fi
 
     return 0 
