@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-00-04"
+SCRIPT_VERSION="2025.05.08-00-05"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -796,75 +796,95 @@ parse_package_options() {
 # パッケージリストから説明を取得する関数
 get_package_description() {
     local package_name="$1" # パッケージ名 (例: coreutils, luci-app-sqm)
-    local package_cache="${CACHE_DIR}/package_list.ch"
+    local package_cache="${CACHE_DIR}/package_list.ch" 
     local description=""
 
-    debug_log "DEBUG" "get_package_description: Attempting to get description for: $package_name from $package_cache"
-
-    # パッケージキャッシュの存在確認
-    if [ ! -f "$package_cache" ]; then
-        debug_log "DEBUG" "get_package_description: Package cache ($package_cache) not found. Cannot retrieve description."
-        return 1
-    fi
+    debug_log "DEBUG" "get_package_description: Attempting to get description for: $package_name"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # opkg の場合: "pkg - ver - desc" 形式を期待
+        debug_log "DEBUG" "get_package_description: Using opkg method from $package_cache"
+        if [ ! -f "$package_cache" ]; then
+            debug_log "DEBUG" "get_package_description (opkg): Package cache ($package_cache) not found."
+            return 1
+        fi
         local package_line
         package_line=$(grep "^${package_name} " "$package_cache" 2>/dev/null)
         if [ -z "$package_line" ]; then
-            debug_log "DEBUG" "get_package_description (opkg): Package $package_name not found in cache."
-            return 1
+            # opkgの場合、パッケージ名にバージョンが含まれている可能性があるため、前方一致も試す
+            package_line=$(grep "^${package_name}[[:space:]]*-" "$package_cache" 2>/dev/null | head -n 1)
+            if [ -z "$package_line" ]; then
+                debug_log "DEBUG" "get_package_description (opkg): Package $package_name not found in cache by exact or prefix match."
+                return 1
+            fi
         fi
-        description=$(echo "$package_line" | awk -F ' - ' '{if (NF >= 3) print $3; else if (NF >=2) print $2}') # 3番目、なければ2番目のフィールド
-        if [ -z "$description" ]; then # もしそれでも空なら、最初の '-' 以降を全て取る
-             description=$(echo "$package_line" | cut -d'-' -f2-)
+        
+        # ' - ' を区切り文字として3番目のフィールドを取得、なければ2番目
+        description=$(echo "$package_line" | awk -F ' - ' '{if (NF >= 3) {for(i=3;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else if (NF >= 2) { for(i=2;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else {print ""}}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        
+        if [ -z "$description" ] && echo "$package_line" | grep -q " - "; then
+             description=$(echo "$package_line" | cut -d'-' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         fi
 
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # apk の場合: "pkg-ver description:\nDescription text" 形式を期待
-        # まず、パッケージ名で始まる行を探す (例: "coreutils-1.2.3-r0 description:")
-        # grep でパッケージ名とバージョンを含む行から "description:" までを捉え、その次の行から説明文を取得
-        # awk を使って "description:" のある行の次の行から、次の空行または次のパッケージ情報行までを取得
-        description=$(awk -v pkg="^${package_name}(-[0-9a-zA-Z._~+]+)? description:$" '
-            $0 ~ pkg { found_pkg_desc_line=1; next }
-            found_pkg_desc_line == 1 && NF > 0 {
-                desc_line = $0
-                # 先頭の空白を除去 (apk info の出力に依存)
-                gsub(/^[ \t]+/, "", desc_line)
-                print desc_line
-                # 説明文は複数行にわたる可能性があるため、ここでは1行目のみ取得する
-                # より高度な複数行取得は複雑になるため、まずは主要な1行目を取得
-                found_pkg_desc_line=0 # 1行取得したらフラグをリセット
-            }
-            found_pkg_desc_line == 1 && NF == 0 { # 空行で説明の終わりとみなす
-                found_pkg_desc_line=0
-            }
-        ' "$package_cache")
+        debug_log "DEBUG" "get_package_description: Using apk method (calling 'apk info $package_name')"
+        local apk_info_output
+        apk_info_output=$(apk info "$package_name" 2>/dev/null)
+        local apk_info_status=$?
 
-        if [ -z "$description" ]; then
-             debug_log "DEBUG" "get_package_description (apk): Description not found for $package_name using primary awk method."
-             # フォールバック: 'apk info <pkg>' の出力から直接取得を試みる (コストが高いので注意)
-             # local apk_info_desc=$(apk info "$package_name" 2>/dev/null | awk '/description:/ {getline; gsub(/^[ \t]+/, ""); print; exit}')
-             # if [ -n "$apk_info_desc" ]; then
-             #    description="$apk_info_desc"
-             #    debug_log "DEBUG" "get_package_description (apk): Found description via direct 'apk info': $description"
-             # fi
+        if [ $apk_info_status -eq 0 ] && [ -n "$apk_info_output" ]; then
+            # "description:" 行の次の行から、最初の空行または次のセクションマーカーまでを取得
+            description=$(echo "$apk_info_output" | awk '
+                BEGIN {capture=0; desc_buffer=""}
+                tolower($0) ~ /description:/ {
+                    capture=1; 
+                    # "description:" の行自体に説明が続く場合も考慮 (例: description: Text)
+                    # まずはマーカーの行を処理
+                    desc_part = $0;
+                    sub(/^[^:]*:[[:space:]]*/, "", desc_part); # "description: "部分を削除
+                    if (length(desc_part) > 0) {
+                        desc_buffer = desc_buffer (desc_buffer == "" ? "" : " ") desc_part;
+                    }
+                    next; # 次の行へ
+                }
+                capture==1 && NF==0 { # 空行で説明の終わり
+                    exit;
+                }
+                capture==1 && $0 ~ /^[a-zA-Z0-9_-]+-[0-9a-zA-Z._~+]+(-r[0-9]+)? (webpage|commit|maintainer|license|triggers|depends|provides|replaces|conflicts|install_if|origin|arch|datahash|size|builddate|flag):/ {
+                    # 次のパッケージセクションマーカー (例: webpage:, commit:) で説明の終わり
+                    exit;
+                }
+                capture==1 { # 説明文の行
+                    current_line = $0;
+                    gsub(/^[ \t]+|[ \t]+$/, "", current_line); # 行頭・行末の空白を削除
+                    if (length(current_line) > 0) {
+                         desc_buffer = desc_buffer (desc_buffer == "" ? "" : "\n") current_line; # 改行を保持して連結
+                    }
+                }
+                END { if (length(desc_buffer)>0) print desc_buffer }
+            ')
+            # 取得した説明文が長すぎる場合、最初の1文または適切な長さに丸めることを検討 (ここでは未実装)
+            # 例: description=$(echo "$description" | cut -d'.' -f1)
+
+            if [ -z "$description" ]; then
+                 debug_log "DEBUG" "get_package_description (apk): 'description:' field not found or subsequent lines are empty/unparseable in 'apk info $package_name' output."
+            fi
+        else
+            debug_log "DEBUG" "get_package_description (apk): 'apk info $package_name' failed (status: $apk_info_status) or produced no output for '$package_name'."
         fi
     else
         debug_log "DEBUG" "get_package_description: Unknown package manager: $PACKAGE_MANAGER"
         return 1
     fi
 
-    # 説明が見つかった場合は出力
-    if [ -n "$description" ]; then
-        # 余分な空白や改行をトリム
-        description=$(echo "$description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    if [ -n "$description" ];
+    then
+        description=$(echo "$description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\\n/\n/g') # \nを実際の改行に
         debug_log "DEBUG" "get_package_description: Found description for $package_name: '$description'"
-        printf "%s" "$description" # printf を使用し、末尾の改行はつけない
+        printf "%s" "$description"
         return 0
     fi
 
-    debug_log "DEBUG" "get_package_description: No description found for package $package_name in $package_cache"
+    debug_log "DEBUG" "get_package_description: No description found for package $package_name."
     return 1
 }
 
