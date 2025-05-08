@@ -114,7 +114,6 @@ translate_with_google() {
                     gsub(/\\n/, "\n", out)
                     gsub(/\\r/, "", out)
                     gsub(/\\\\/, "\\", out)
-                    # Previous sanitization gsub lines have been removed.
                     print out
                     exit
                 }
@@ -133,6 +132,7 @@ translate_with_google() {
     printf ""
     return 1
 }
+
 OK_translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
