@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-06-00"
+SCRIPT_VERSION="2025.05.09-00-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -703,6 +703,7 @@ check_install_list() {
         cache_bust_param="_cb=$(date +%s%N)" 
         url_with_cb="${url_orig}?${cache_bust_param}"
         
+        # debug_log "DEBUG" "Fetching ${url_with_cb} to ${output_file}" # User's original script has this commented
         if $wget_base_cmd "$output_file" --timeout=30 --no-check-certificate "$url_with_cb"; then
             if [ ! -s "$output_file" ]; then
                 debug_log "DEBUG" "Downloaded file ${output_file} is empty. URL: ${url_with_cb}"
@@ -729,6 +730,7 @@ check_install_list() {
         else operator_for_regex=$(echo "$operator_raw" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
         full_regex="^[[:space:]]*${var_name_for_regex}[[:space:]]*${operator_for_regex}"
     
+        # Logic from v16 test script's extract_makefile_block
         awk -v pattern="${full_regex}" \
         'BEGIN{state=0}{if(state==0){if($0~pattern){state=1;current_line=$0;sub(/[[:space:]]*#.*$/,"",current_line);print current_line;if(!(current_line~/\\$/)){state=0}}}else{current_line=$0;sub(/[[:space:]]*#.*$/,"",current_line);print current_line;if(!(current_line~/\\$/)){state=0}}}' "$file_path"
     }
@@ -751,25 +753,34 @@ check_install_list() {
             else op_esc_awk=$(echo "$op_to_strip" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
             var_re_str_for_awk="^[[:space:]]*${var_esc_awk}[[:space:]]*${op_esc_awk}[[:space:]]*"
     
+            # Logic from v16 test script's parse_packages_from_extracted_block
             processed_line=$(echo "$processed_line" | awk \
                 -v var_re_str="$var_re_str_for_awk" \
                 -v var_to_filter_exact="$var_to_strip_orig" \
                 -v op_to_filter_exact="$op_to_strip" \
                 -v first_line_in_awk="$first_line_processed" \
                 '{
+                    # Remove EOL comments first from the whole line
                     sub(/[[:space:]]*#.*$/, "");
-                    if (first_line_in_awk == 0) { 
+
+                    if (first_line_in_awk == 0) { # Only strip VAR OP on the first line of the block
                         sub(var_re_str, ""); 
                     }
+                    
                     while (match($0, /\$\([^)]*\)/)) {
                         $0 = substr($0, 1, RSTART-1) substr($0, RSTART+RLENGTH);
                     }
+
                     gsub(/^[[:space:]]+|[[:space:]]+$/, ""); 
+
                     if (NF > 0) {
                         for (i=1; i<=NF; i++) {
+                            # More robust filtering
                             current_field = $i;
+                            # Exact match for var name or operator should be filtered
                             if (current_field == var_to_filter_exact) continue;
-                            if (current_field == op_to_filter_exact) continue; 
+                            if (current_field == op_to_filter_exact) continue;
+                            # Filter out common makefile elements that are not packages
                             if (current_field != "" && current_field != "\\" && current_field !~ /^(\(|\))$/ && current_field !~ /^(=|\+=|:=|\?=)$/) {
                                 print current_field;
                             }
@@ -783,16 +794,15 @@ check_install_list() {
         done
     }
 
-    # This printf outputs a colored message to the user. If this is also undesired, it needs specific instruction to change.
-    # For now, only the package list echos are changed to debug_log.
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
-    debug_log "DEBUG" "Function called: check_install_list"
+    debug_log "DEBUG" "Function called: check_install_list" # As per user's latest script
 
     local pkg_extract_tmp_dir; local pkg_extract_tmp_dir_basename
     local default_pkgs_tier1a_tmp; local default_pkgs_tier1b_tmp; local default_pkgs_tier1c_tmp
     local default_pkgs_tier2_tmp; local default_pkgs_tier3_tmp
     local default_pkgs_from_source_sorted_tmp; local default_pkgs_combined_tmp; local tmp_f
 
+    # Temporary directory creation - mktemp check removed as per user instruction
     pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
     pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
     mkdir -p "$pkg_extract_tmp_dir"
@@ -803,6 +813,7 @@ check_install_list() {
     fi
     debug_log "DEBUG" "Temporary directory for default package extraction: $pkg_extract_tmp_dir"
 
+    # Temporary file names from user's provided script
     default_pkgs_tier1a_tmp="${pkg_extract_tmp_dir}/pkgs_tier1a.txt"
     default_pkgs_tier1b_tmp="${pkg_extract_tmp_dir}/pkgs_tier1b.txt"
     default_pkgs_tier1c_tmp="${pkg_extract_tmp_dir}/pkgs_tier1c.txt"
@@ -948,12 +959,13 @@ check_install_list() {
     fi
     
     debug_log "DEBUG" "--- Combining all package lists ---"
-    true > "$default_pkgs_combined_tmp" 
+    true > "$default_pkgs_combined_tmp" # Ensure it's empty before appending
     for list_file in "$default_pkgs_tier1a_tmp" "$default_pkgs_tier1b_tmp" "$default_pkgs_tier1c_tmp" \
                      "$default_pkgs_tier2_tmp" "$default_pkgs_tier3_tmp"; do
         if [ -s "$list_file" ]; then cat "$list_file" >> "$default_pkgs_combined_tmp"; fi
     done
 
+    # SNAPSHOTの場合、apk-mbedtls をデフォルトリストに追加 (重複チェックあり)
     if echo "$distrib_release" | grep -q "SNAPSHOT"; then
         if ! grep -q -x "apk-mbedtls" "$default_pkgs_combined_tmp"; then
              debug_log "DEBUG" "SNAPSHOT build detected. Adding apk-mbedtls to combined list before final sort."
@@ -988,8 +1000,9 @@ check_install_list() {
 
     if [ "$PACKAGE_MANAGER" = "apk" ]; then
         debug_log "DEBUG" "APK package manager detected via PACKAGE_MANAGER. Reading /etc/apk/world."
-        source_of_installed_pkgs_msg="/etc/apk/world" # For debug message context
+        source_of_installed_pkgs_msg="/etc/apk/world"
         if [ -f "/etc/apk/world" ] && [ -s "/etc/apk/world" ]; then
+            # バージョンサフィックスを除去し、ソートして重複排除
             sed 's/=[^=]*$//; s/~[^~]*$//' "/etc/apk/world" | sort -u > "$installed_pkgs_list_tmp"
         else
             debug_log "DEBUG" "/etc/apk/world not found or is empty."
@@ -997,7 +1010,8 @@ check_install_list() {
         fi
     elif [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "OPKG package manager detected via PACKAGE_MANAGER. Running 'opkg list-installed'."
-        source_of_installed_pkgs_msg="'opkg list-installed'" # For debug message context
+        source_of_installed_pkgs_msg="'opkg list-installed'"
+        # opkg command existence check removed as per user instruction
         opkg list-installed | awk '{print $1}' | sed 's/=[^=]*$//; s/~[^~]*$//' | sort -u > "$installed_pkgs_list_tmp"
         if [ ! -s "$installed_pkgs_list_tmp" ]; then
              debug_log "DEBUG" "'opkg list-installed' yielded no packages or awk failed."
@@ -1014,12 +1028,7 @@ check_install_list() {
     else
         pkgs_only_in_installed_list=""
     fi
-    # --- MODIFIED: Output to debug_log instead of echo/printf ---
-    if [ -n "$pkgs_only_in_installed_list" ]; then
-        debug_log "DEBUG" "Packages only in installed list (source: %s):\n%s" "$source_of_installed_pkgs_msg" "$pkgs_only_in_installed_list"
-    else
-        debug_log "DEBUG" "Packages only in installed list (source: %s): (None)" "$source_of_installed_pkgs_msg"
-    fi
+    if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; else printf "(None)\n"; fi
 
     local pkgs_only_in_default_source_list
     if [ -s "$default_pkgs_from_source_sorted_tmp" ]; then 
@@ -1027,12 +1036,7 @@ check_install_list() {
     else
         pkgs_only_in_default_source_list=""
     fi
-    # --- MODIFIED: Output to debug_log instead of echo/printf ---
-    if [ -n "$pkgs_only_in_default_source_list" ]; then
-        debug_log "DEBUG" "Packages only in default source list (potentially missing from system):\n%s" "$pkgs_only_in_default_source_list"
-    else
-        debug_log "DEBUG" "Packages only in default source list (potentially missing from system): (None)"
-    fi
+    if [ -n "$pkgs_only_in_default_source_list" ]; then echo "$pkgs_only_in_default_source_list"; else printf "(None)\n"; fi
     
     rm -f "$installed_pkgs_list_tmp"; rm -rf "$pkg_extract_tmp_dir" 
     debug_log "DEBUG" "Cleaned up temporary files."
