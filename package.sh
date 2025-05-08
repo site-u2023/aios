@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-03-00"
+SCRIPT_VERSION="2025.05.08-04-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -360,70 +360,97 @@ check_install_list() {
     }
 
     # Helper function to extract a variable block from a Makefile
+    # (ユーザー指定の関数名と引数を維持し、ロジックを差し替え)
     extract_makefile_var() {
-        local file_path="$1"; local var_name_raw="$2"; local operator_raw="$3"
-        local var_name_for_regex; local operator_for_regex; local full_regex
-    
-        var_name_for_regex=$(echo "$var_name_raw" | sed 's/\./\\./g') 
-        operator_for_regex=""
-        if [ "$operator_raw" = "+=" ]; then operator_for_regex='\\+[[:space:]]*=';
-        elif [ "$operator_raw" = ":=" ]; then operator_for_regex=':[[:space:]]*=';
-        elif [ "$operator_raw" = "?=" ]; then operator_for_regex='\\?[[:space:]]*='; 
-        else operator_for_regex=$(echo "$operator_raw" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
-        full_regex="^[[:space:]]*${var_name_for_regex}[[:space:]]*${operator_for_regex}"
-    
-        awk -v pattern="${full_regex}" \
-        'BEGIN{state=0}{if(state==0){if($0~pattern){state=1;current_line=$0;sub(/[[:space:]]*#.*$/,"",current_line);print current_line;if(!(current_line~/\\$/)){state=0}}}else{current_line=$0;sub(/[[:space:]]*#.*$/,"",current_line);print current_line;if(!(current_line~/\\$/)){state=0}}}' "$file_path"
+        local file_path="$1"; local var_name_raw="$2"; local operator_raw="$3" # operator_raw は新しいロジックでは直接使用しない
+        local makefile_content
+        local extracted_block=""
+
+        if [ ! -f "$file_path" ] || [ ! -r "$file_path" ]; then
+            debug_log "DEBUG" "extract_makefile_var: File not found or not readable: $file_path"
+            return
+        fi
+        makefile_content=$(cat "$file_path")
+
+        if [ -z "$makefile_content" ] || [ -z "$var_name_raw" ]; then
+            return
+        fi
+
+        # grep -nm1 で変数定義の開始行を探す (演算子は緩やかにマッチ)
+        # operator_raw は直接使用せず、一般的な代入演算子を許容するパターンにする
+        local start_line_info=$(echo "$makefile_content" | grep -nm1 "^[[:space:]]*${var_name_raw}[[:space:]]*[:?+]?=")
+        
+        if [ -z "$start_line_info" ]; then
+            return
+        fi
+        local start_line_num=$(echo "$start_line_info" | cut -d: -f1)
+
+        # sed で複数行を結合してブロックを抽出
+        extracted_block=$(echo "$makefile_content" | tail -n "+${start_line_num}" | \
+            sed -nE \
+                -e '/^[[:space:]]*'"${var_name_raw}"'[[:space:]]*[:?+]?=/,$ {
+                    :loop
+                    /\\$/ {
+                        N
+                        s/\\\n//
+                        b loop
+                    }
+                    /^[[:space:]]*'"${var_name_raw}"'[[:space:]]*[:?+]?=/ {
+                        p
+                        q
+                    }
+                    q
+                }')
+        
+        echo "$extracted_block"
     }
 
     # Helper function to parse package names from an extracted Makefile variable block
+    # (ユーザー指定の関数名と引数を維持し、ロジックを差し替え)
     parse_pkgs_from_var_block() {
         local block_text="$1"; local var_to_strip_orig="$2"; local op_to_strip="$3"  
-        local first_line_processed=0; local line; local processed_line; local processed_line_final
-        local var_esc_awk; local op_esc_awk; local var_re_str_for_awk
-
+        
         if [ -z "$block_text" ]; then return; fi
-    
-        echo "$block_text" | while IFS= read -r line || [ -n "$line" ]; do
-            processed_line="$line"
-            var_esc_awk=$(echo "$var_to_strip_orig" | sed 's/\./\\./g')
-            op_esc_awk=""
-            if [ "$op_to_strip" = "+=" ]; then op_esc_awk='\\+[[:space:]]*=';
-            elif [ "$op_to_strip" = ":=" ]; then op_esc_awk=':[[:space:]]*=';
-            elif [ "$op_to_strip" = "?=" ]; then op_esc_awk='\\?[[:space:]]*=';
-            else op_esc_awk=$(echo "$op_to_strip" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
-            var_re_str_for_awk="^[[:space:]]*${var_esc_awk}[[:space:]]*${op_esc_awk}[[:space:]]*"
-    
-            processed_line=$(echo "$processed_line" | awk \
-                -v var_re_str="$var_re_str_for_awk" \
-                -v var_to_filter_exact="$var_to_strip_orig" \
-                -v op_to_filter_exact="$op_to_strip" \
-                -v first_line_in_awk="$first_line_processed" \
-                '{
-                    sub(/[[:space:]]*#.*$/, "");
-                    if (first_line_in_awk == 0) { 
-                        sub(var_re_str, ""); 
-                    }
-                    while (match($0, /\$\([^)]*\)/)) {
-                        $0 = substr($0, 1, RSTART-1) substr($0, RSTART+RLENGTH);
-                    }
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, ""); 
-                    if (NF > 0) {
-                        for (i=1; i<=NF; i++) {
-                            current_field = $i;
-                            if (current_field == var_to_filter_exact) continue;
-                            if (current_field == op_to_filter_exact) continue; 
-                            if (current_field != "" && current_field != "\\" && current_field !~ /^(\(|\))$/ && current_field !~ /^(=|\+=|:=|\?=)$/) {
-                                print current_field;
-                            }
-                        }
-                    }
-                }')
-            
-            if [ "$first_line_processed" -eq 0 ]; then first_line_processed=1; fi
-            processed_line_final=$(echo "$processed_line" | sed 's/\\[[:space:]]*$//' | sed '/^$/d')
-            if [ -n "$processed_line_final" ]; then echo "$processed_line_final"; fi
-        done
+
+        # var_to_strip_orig と op_to_strip を使って、awk の sub パターンを構築
+        local var_esc_awk=$(echo "$var_to_strip_orig" | sed 's/[].[^$*]/\\&/g') # より安全なエスケープ
+        local op_esc_awk=""
+        # operator_raw のエスケープとパターン化 (元のユーザー提供コードから引用・調整)
+        if [ "$op_to_strip" = "+=" ]; then op_esc_awk='\\+[[:space:]]*=';
+        elif [ "$op_to_strip" = ":=" ]; then op_esc_awk=':[[:space:]]*=';
+        elif [ "$op_to_strip" = "?=" ]; then op_esc_awk='\\?[[:space:]]*=';
+        elif [ "$op_to_strip" = "=" ]; then op_esc_awk='='; # 通常の =
+        else op_esc_awk=$(echo "$op_to_strip" | sed 's/[].[^$*+?():=|]/\\&/g'); fi # より汎用的なエスケープ
+
+        local strip_pattern_for_awk="^[[:space:]]*${var_esc_awk}[[:space:]]*${op_esc_awk}[[:space:]]*"
+
+        # awk スクリプト: 最初の行 (NR==1) のみ、指定されたパターンで先頭部分を除去
+        local awk_script_remove_var_def_custom='
+        BEGIN {
+            strip_pattern = ENVIRON["strip_pattern_for_awk_env"];
+        }
+        {
+            if (NR == 1) {
+                sub(strip_pattern, "", $0);
+            }
+            print $0;
+        }
+        '
+        # strip_pattern_for_awk を環境変数経由で awk に渡す
+        echo "$block_text" | \
+        strip_pattern_for_awk_env="$strip_pattern_for_awk" awk "${awk_script_remove_var_def_custom}" | \
+        sed -e ':a' -e 'N' -e '$!ba' -e 's/\\\n[[:space:]]*/ /g' | \
+        sed -e 's/^[[:space:]]*#.*//' -e 's/[[:space:]][[:space:]]*#.*//' | \
+        sed -e 's/\$(\([a-zA-Z0-9_.-]*\))//g' | \
+        tr -s '\\' ' ' | \
+        tr -s ' \t' '\n' | \
+        sed "s/'//g" | \
+        sed 's/"//g' | \
+        sed '/=/s/=.*//' | \
+        sed '/^$/d' | \
+        sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | \
+        sed '/^$/d' | \
+        sort -u
     }
 
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
@@ -536,7 +563,8 @@ check_install_list() {
         rm -rf "$pkg_extract_tmp_dir"
         return 1
     fi
-    local block_content_t1a=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.basic" ":=")
+    # Tier 1a: DEFAULT_PACKAGES.basic (or DEFAULT_PACKAGES as fallback)
+    local block_content_t1a=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.basic" ":=") # operator is for extract_makefile_var's original interface, new logic ignores it mostly
     if [ -n "$block_content_t1a" ]; then parse_pkgs_from_var_block "$block_content_t1a" "DEFAULT_PACKAGES.basic" ":=" > "$default_pkgs_tier1a_tmp"; fi
     if [ ! -s "$default_pkgs_tier1a_tmp" ]; then
         local block_content_t1a_fallback=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" ":=")
@@ -544,11 +572,13 @@ check_install_list() {
     fi
     if [ -s "$default_pkgs_tier1a_tmp" ]; then debug_log "DEBUG" "Parsed basic packages (Tier 1a) count: $(wc -l < "$default_pkgs_tier1a_tmp")"; else debug_log "DEBUG" "Basic packages list (Tier 1a) is empty."; fi
 
+    # Tier 1b: DEFAULT_PACKAGES.${assumed_device_type}
     local block_content_t1b=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.${assumed_device_type}" ":=")
     if [ -n "$block_content_t1b" ]; then parse_pkgs_from_var_block "$block_content_t1b" "DEFAULT_PACKAGES.${assumed_device_type}" ":=" > "$default_pkgs_tier1b_tmp"; fi
     if [ -s "$default_pkgs_tier1b_tmp" ]; then debug_log "DEBUG" "Parsed ${assumed_device_type} specific additions (Tier 1b) count: $(wc -l < "$default_pkgs_tier1b_tmp")"; else debug_log "DEBUG" "Could not extract block for DEFAULT_PACKAGES.${assumed_device_type} (additions)."; fi
 
-    local block_content_t1c=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" "+=")
+    # Tier 1c: DEFAULT_PACKAGES (additive)
+    local block_content_t1c=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" "+=") # operator "+="
     if [ -n "$block_content_t1c" ]; then parse_pkgs_from_var_block "$block_content_t1c" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier1c_tmp"; fi
     if [ -s "$default_pkgs_tier1c_tmp" ]; then debug_log "DEBUG" "Parsed direct additions (Tier 1c) count: $(wc -l < "$default_pkgs_tier1c_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for direct DEFAULT_PACKAGES += (Tier 1c)."; fi
 
@@ -561,7 +591,7 @@ check_install_list() {
             rm -rf "$pkg_extract_tmp_dir"
             return 1
         fi
-        local block_content_t2=$(extract_makefile_var "$target_specific_mk_download_path" "DEFAULT_PACKAGES" "+=")
+        local block_content_t2=$(extract_makefile_var "$target_specific_mk_download_path" "DEFAULT_PACKAGES" "+=") # operator "+="
         if [ -n "$block_content_t2" ]; then parse_pkgs_from_var_block "$block_content_t2" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier2_tmp"; fi
         if [ -s "$default_pkgs_tier2_tmp" ]; then debug_log "DEBUG" "Parsed target-specific additions (Tier 2) count: $(wc -l < "$default_pkgs_tier2_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for target-specific DEFAULT_PACKAGES += (Tier 2)."; fi
     else 
@@ -580,6 +610,7 @@ check_install_list() {
             rm -rf "$pkg_extract_tmp_dir"
             return 1
         fi
+        # Extract the 'define Device/...' block for the specific device profile
         awk -v profile_name_awk="$device_profile_name" \
             'BEGIN{found=0; profile_regex = "^define[[:space:]]+Device/" profile_name_awk "[[:space:]]*$"}
              $0 ~ profile_regex {found=1}
@@ -588,12 +619,20 @@ check_install_list() {
             "$device_specific_mk_download_path" > "$device_profile_block_tmp"
 
         if [ -s "$device_profile_block_tmp" ]; then
+            # Extract DEVICE_PACKAGES from the extracted device profile block
+            # Try with ":=" first, then with "+=" as a fallback
             local block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" ":=")
-            if [ -z "$block_content_t3" ]; then block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" "+="); fi
             if [ -n "$block_content_t3" ]; then
                 parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" ":=" > "$default_pkgs_tier3_tmp"
-                if [ ! -s "$default_pkgs_tier3_tmp" ]; then parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" "+=" > "$default_pkgs_tier3_tmp"; fi
             fi
+            
+            if [ ! -s "$default_pkgs_tier3_tmp" ]; then # If not found with ":=" or if parsing resulted in empty
+                block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" "+=")
+                if [ -n "$block_content_t3" ]; then
+                    parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" "+=" > "$default_pkgs_tier3_tmp"
+                fi
+            fi
+
             if [ -s "$default_pkgs_tier3_tmp" ]; then debug_log "DEBUG" "Parsed device-specific packages (Tier 3) count: $(wc -l < "$default_pkgs_tier3_tmp")"; else debug_log "DEBUG" "Could not parse DEVICE_PACKAGES for $device_profile_name."; fi
         else debug_log "DEBUG" "Could not extract 'define Device/$device_profile_name' block."; fi
     else 
@@ -632,7 +671,7 @@ check_install_list() {
     debug_log "DEBUG" "Determining installed packages based on PACKAGE_MANAGER global variable: '$PACKAGE_MANAGER'"
     if [ -z "$PACKAGE_MANAGER" ]; then
         debug_log "DEBUG" "CRITICAL - Global variable PACKAGE_MANAGER is not set. Run detect_and_save_package_manager first."
-        rm -rf "$pkg_extract_tmp_dir" "$installed_pkgs_list_tmp"
+        rm -rf "$pkg_extract_tmp_dir" # installed_pkgs_list_tmp might not exist yet
         return 1
     fi
 
@@ -664,8 +703,6 @@ check_install_list() {
     fi
     debug_log "DEBUG" "Installed packages list stored in '$installed_pkgs_list_tmp'."
     
-    # printf "\n--- Package Differences ---\n"
-    # printf "\nPackages ONLY in %s (User Installed/Explicitly Kept):\n" "$source_of_installed_pkgs_msg"
     local pkgs_only_in_installed_list
     if [ -s "$installed_pkgs_list_tmp" ]; then 
         pkgs_only_in_installed_list=$(grep -vxFf "$default_pkgs_from_source_sorted_tmp" "$installed_pkgs_list_tmp")
@@ -673,8 +710,7 @@ check_install_list() {
         pkgs_only_in_installed_list=""
     fi
     if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; else printf "(None)\n"; fi
-
-    # printf "\nPackages ONLY in Default OpenWrt Source List (Potentially Missing from %s):\n" "$source_of_installed_pkgs_msg"
+    
     local pkgs_only_in_default_source_list
     if [ -s "$default_pkgs_from_source_sorted_tmp" ]; then 
         pkgs_only_in_default_source_list=$(grep -vxFf "$installed_pkgs_list_tmp" "$default_pkgs_from_source_sorted_tmp")
