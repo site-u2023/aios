@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-00-06"
+SCRIPT_VERSION="2025.05.08-00-07"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -796,140 +796,106 @@ parse_package_options() {
 # @FUNCTION: get_package_description
 # @DESCRIPTION: Gets the description for a given package. If the current UI language
 #               is different from the default language, it attempts to translate
-#               the description using 'translate_package_description'.
+#               the description and appends a marker if translation occurred and changed the text.
 # @PARAM: $1 - package_name (string) - The name of the package.
-# @STDOUT: The (potentially translated) package description string.
-#          Outputs original description if translation is not needed or fails.
-# @RETURN: 0 if a description (original or translated) is found, 1 otherwise.
+# @STDOUT: The (potentially translated and marked) package description string, always ending with a newline if non-empty.
+#          Outputs only a newline if no description is found or package_name is empty.
+# @RETURN: 0 always (to simplify calling logic, success/failure indicated by output content).
 get_package_description() {
     local package_name="$1"
     local original_description=""
-    local description_to_display=""
+    local final_description_to_output=""
     local current_lang_code=""
-    local package_cache="${CACHE_DIR}/package_list.ch" # For opkg
+    local package_cache="${CACHE_DIR}/package_list.ch"
 
-    debug_log "DEBUG" "get_package_description: Starting for package: '$package_name'"
+    if [ -z "$package_name" ]; {
+        # debug_log "ERROR" "get_package_description: package_name is empty." # Minimal logging
+        printf "\n"; return 0; } # Consistent return
 
-    # 1. Get original description based on package manager
+    # debug_log "DEBUG" "get_package_description: For package: '$package_name'" # Minimal logging
+
+    # 1. Get original description
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "DEBUG" "get_package_description: Using opkg method from $package_cache"
-        if [ ! -f "$package_cache" ]; then
-            debug_log "DEBUG" "get_package_description (opkg): Package cache ($package_cache) not found."
-            printf "" # No description found
-            return 1
-        fi
-        local package_line
-        package_line=$(grep "^${package_name} " "$package_cache" 2>/dev/null)
-        if [ -z "$package_line" ]; then
-            package_line=$(grep "^${package_name}[[:space:]]*-" "$package_cache" 2>/dev/null | head -n 1)
-            if [ -z "$package_line" ]; then
-                debug_log "DEBUG" "get_package_description (opkg): Package '$package_name' not found in cache."
-                printf ""
-                return 1
+        # debug_log "DEBUG" "get_package_description: Using opkg." # Minimal
+        if [ -f "$package_cache" ]; then
+            local package_line
+            package_line=$(grep "^${package_name}[[:space:]]" "$package_cache" 2>/dev/null | head -n 1)
+            [ -z "$package_line" ] && package_line=$(grep "^${package_name}[[:space:]]*-" "$package_cache" 2>/dev/null | head -n 1)
+            if [ -n "$package_line" ]; then
+                original_description=$(echo "$package_line" | awk -F ' - ' '{if (NF >= 3) {for(i=3;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else if (NF >= 2) { for(i=2;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else {print ""}}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                [ -z "$original_description" ] && echo "$package_line" | grep -q " - " && original_description=$(echo "$package_line" | cut -d'-' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             fi
         fi
-        original_description=$(echo "$package_line" | awk -F ' - ' '{if (NF >= 3) {for(i=3;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else if (NF >= 2) { for(i=2;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else {print ""}}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        if [ -z "$original_description" ] && echo "$package_line" | grep -q " - "; then
-             original_description=$(echo "$package_line" | cut -d'-' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        fi
+        # [ -z "$original_description" ] && debug_log "DEBUG" "get_package_description (opkg): No desc." # Minimal
 
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        debug_log "DEBUG" "get_package_description: Using apk method (calling 'apk info $package_name')"
-        local apk_info_output
-        apk_info_output=$(apk info "$package_name" 2>/dev/null)
+        # debug_log "DEBUG" "get_package_description: Using apk." # Minimal
+        local apk_info_output; apk_info_output=$(apk info "$package_name" 2>/dev/null)
         local apk_info_status=$?
-
-        if [ $apk_info_status -eq 0 ] && [ -n "$apk_info_output" ]; then
+        if [ "$apk_info_status" -eq 0 ] && [ -n "$apk_info_output" ]; then
             original_description=$(echo "$apk_info_output" | awk '
                 BEGIN {capture=0; desc_buffer=""}
-                tolower($0) ~ /description:/ {
-                    capture=1; 
-                    desc_part = $0;
-                    sub(/^[^:]*:[[:space:]]*/, "", desc_part);
-                    if (length(desc_part) > 0) {
-                        desc_buffer = desc_buffer (desc_buffer == "" ? "" : " ") desc_part;
-                    }
-                    next;
-                }
+                tolower($0) ~ /^description:/ { capture=1; desc_part = $0; sub(/^[^:]*:[[:space:]]*/, "", desc_part); if (length(desc_part) > 0) { desc_buffer = desc_buffer (desc_buffer == "" ? "" : " ") desc_part; } next; }
                 capture==1 && NF==0 { exit; }
-                capture==1 && $0 ~ /^[a-zA-Z0-9_-]+-[0-9a-zA-Z._~+]+(-r[0-9]+)? (webpage|commit|maintainer|license|triggers|depends|provides|replaces|conflicts|install_if|origin|arch|datahash|size|builddate|flag):/ {
-                    exit;
-                }
-                capture==1 {
-                    current_line = $0;
-                    gsub(/^[ \t]+|[ \t]+$/, "", current_line);
-                    if (length(current_line) > 0) {
-                         desc_buffer = desc_buffer (desc_buffer == "" ? "" : "\n") current_line;
-                    }
-                }
-                END { if (length(desc_buffer)>0) print desc_buffer }
-            ')
-            if [ -z "$original_description" ]; then
-                 debug_log "DEBUG" "get_package_description (apk): 'description:' field not found or subsequent lines are empty in 'apk info $package_name' output."
-            fi
-        else
-            debug_log "DEBUG" "get_package_description (apk): 'apk info $package_name' failed (status: $apk_info_status) or produced no output for '$package_name'."
+                capture==1 && $0 ~ /^[a-zA-Z0-9._~+-]+-[0-9a-zA-Z._~+]+(-r[0-9]+)? (webpage|commit|maintainer|license|triggers|depends|provides|replaces|conflicts|install_if|origin|arch|datahash|size|builddate|flag):/ { exit; }
+                capture==1 { current_line = $0; gsub(/^[ \t]+|[ \t]+$/, "", current_line); if (length(current_line) > 0) { desc_buffer = desc_buffer (desc_buffer == "" ? "" : "\n") current_line; } }
+                END { if (length(desc_buffer)>0) print desc_buffer }')
         fi
+        # [ -z "$original_description" ] && debug_log "DEBUG" "get_package_description (apk): No desc (status: $apk_info_status)." # Minimal
     else
-        debug_log "ERROR" "get_package_description: Unknown package manager: '$PACKAGE_MANAGER'"
-        printf ""
-        return 1
+        # debug_log "ERROR" "get_package_description: Unknown PM: '$PACKAGE_MANAGER'" # Minimal
+        printf "\n"; return 0;
     fi
 
-    # 元の説明文が取得できなかった場合はここで終了
-    if [ -z "$original_description" ]; then
-        debug_log "DEBUG" "get_package_description: No original description found for '$package_name'."
-        printf ""
-        return 1
+    if [ -n "$original_description" ]; then
+        original_description=$(echo "$original_description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\\n/\n/g' -e $'s/\r//g')
+        # debug_log "DEBUG" "get_package_description: Original desc (processed): '$(echo "$original_description" | head -c 70)...'" # Minimal
+    else
+        # debug_log "DEBUG" "get_package_description: No original desc found." # Minimal
+        printf "\n"; return 0;
     fi
     
-    # 元の説明文をトリム
-    original_description=$(echo "$original_description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\\n/\n/g')
-    description_to_display="$original_description" # デフォルトは元の説明文
-    debug_log "DEBUG" "get_package_description: Original description for '$package_name': '$original_description'"
+    final_description_to_output="$original_description"
 
-    # 2. Translate if necessary
-    if [ -f "${CACHE_DIR}/message.ch" ]; then
-        current_lang_code=$(cat "${CACHE_DIR}/message.ch")
-    else
-        current_lang_code="$DEFAULT_LANGUAGE"
-    fi
-    debug_log "DEBUG" "get_package_description: Current UI language: '$current_lang_code', Default script language: '$DEFAULT_LANGUAGE'"
+    if [ -f "${CACHE_DIR}/message.ch" ]; then current_lang_code=$(cat "${CACHE_DIR}/message.ch"); else current_lang_code="$DEFAULT_LANGUAGE"; fi
+    # debug_log "DEBUG" "get_package_description: UI lang: '$current_lang_code', Default: '$DEFAULT_LANGUAGE'" # Minimal
 
+    local description_was_translated="false"
     if [ "$current_lang_code" != "$DEFAULT_LANGUAGE" ]; then
         if type translate_package_description >/dev/null 2>&1; then
-            debug_log "INFO" "get_package_description: Attempting to translate description for '$package_name' from '$DEFAULT_LANGUAGE' to '$current_lang_code'"
-            
-            local translated_output
-            # 翻訳元は DEFAULT_LANGUAGE と仮定
-            translated_output=$(translate_package_description "$original_description" "$current_lang_code" "$DEFAULT_LANGUAGE")
-            
-            if [ -n "$translated_output" ] && [ "$translated_output" != "$original_description" ]; then
-                description_to_display="$translated_output"
-                debug_log "INFO" "get_package_description: Description for '$package_name' translated successfully."
-                # 翻訳済みマーカーは、表示する側 (confirm呼び出し前) で付加することを推奨
-            elif [ -z "$translated_output" ]; then
-                 debug_log "DEBUG" "get_package_description: Translation returned empty for '$package_name'. Using original."
-            else
-                 debug_log "DEBUG" "get_package_description: Translation result same as original or failed for '$package_name'. Using original."
+            # debug_log "INFO" "get_package_description: Translating..." # Minimal
+            local translated_output_from_func; translated_output_from_func=$(translate_package_description "$original_description" "$current_lang_code" "$DEFAULT_LANGUAGE")
+            local translate_call_status=$?
+            local translated_output_trimmed; translated_output_trimmed=$(echo "$translated_output_from_func" | sed 's/\n$//')
+
+            if [ "$translate_call_status" -eq 0 ] && [ -n "$translated_output_trimmed" ] && [ "$translated_output_trimmed" != "$original_description" ]; then
+                final_description_to_output="$translated_output_trimmed"
+                description_was_translated="true"
+                # debug_log "INFO" "get_package_description: Translated successfully." # Minimal
+            # else
+                # Minimal logging for why translation wasn't used
+                # [ "$translate_call_status" -ne 0 ] && debug_log "WARN" "get_package_description: translate_package_description call failed."
+                # [ -z "$translated_output_trimmed" ] && debug_log "WARN" "get_package_description: Translation returned empty."
+                # [ "$translated_output_trimmed" = "$original_description" ] && debug_log "DEBUG" "get_package_description: Translation same as original."
             fi
-        else
-            debug_log "WARN" "get_package_description: 'translate_package_description' function not found. Cannot translate."
+        # else
+            # debug_log "WARN" "get_package_description: translate_package_description func not found." # Minimal
         fi
-    else
-        debug_log "DEBUG" "get_package_description: UI language is default. No translation needed for '$package_name'."
+    # else
+        # debug_log "DEBUG" "get_package_description: UI lang is default. No translation." # Minimal
     fi
 
-    # 最終的な説明文を出力
-    if [ -n "$description_to_display" ]; then
-        printf "%s" "$description_to_display"
-        return 0
-    else
-        # このケースは original_description が空の場合のみ発生するはず
-        debug_log "DEBUG" "get_package_description: Final description is empty for '$package_name'."
-        printf ""
-        return 1 # 実質的に説明なし
+    if [ "$description_was_translated" = "true" ]; then
+        local translated_marker_text=""
+        [ "$current_lang_code" = "ja" ] && translated_marker_text=" （機械翻訳）"
+        [ "$current_lang_code" != "$DEFAULT_LANGUAGE" ] && [ -z "$translated_marker_text" ] && translated_marker_text=" (Machine Translated)" # Generic for other translated langs
+        
+        [ -n "$translated_marker_text" ] && final_description_to_output="${final_description_to_output}${translated_marker_text}"
+        # [ -n "$translated_marker_text" ] && debug_log "DEBUG" "get_package_description: Appended marker." # Minimal
     fi
+    
+    if [ -n "$final_description_to_output" ]; then printf "%s\n" "$final_description_to_output"; else printf "\n"; fi
+    return 0
 }
 
 # パッケージリストから説明を取得する関数
