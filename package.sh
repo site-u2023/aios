@@ -662,7 +662,7 @@ package_main() {
         # メッセージキーは適切なものを get_message で取得するか、直接指定
         # 例: "MSG_CONFIRM_AUTO_INSTALL_ALL" のようなキーを messages.db に定義
         # ここでは仮のメッセージキーを使用
-        if ! confirm "MSG_PACKAGE_INSTALL_AUTO" "yn=yn"; then
+        if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
             debug_log "DEBUG" "User cancelled automatic package installation."
             printf "%s\n" "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")" # キャンセルメッセージ
             return 1 # 中断して終了
