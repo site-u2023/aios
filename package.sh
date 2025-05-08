@@ -334,7 +334,7 @@ install_usb_packages() {
 
 # インストール後のパッケージリストを表示
 check_install_list() {
-    printf "\n%s\n" "$(color blue "Packages installed after flashing")"
+    printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
 
     # パッケージマネージャの種類を確認
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
