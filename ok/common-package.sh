@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-02-00"
+SCRIPT_VERSION="2025.05.08-00-10"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -52,22 +52,73 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 #########################################################################
-# Last Update: 2025-03-14 06:00:00 (JST) 🚀
-# install_package: パッケージのインストール処理 (OpenWrt / Alpine Linux)
+# Last Update: 2025-04-12 05:23:31 (UTC) 🚀
+# install_package: パッケージインストール処理関数
+# 使用対象：OpenWrtとAlpine Linuxシステム向け
 #
-# 【概要】
-# 指定されたパッケージをインストールし、オプションに応じて以下の処理を実行する。
-# ✅ OpenWrt / Alpine の `opkg update` / `apk update` を適用（条件付き）
-# ✅ 言語パッケージ・設定ファイル (`local-package.db`) の適用
+# 【主な機能】
+#  ✅ パッケージインストールとリポジトリ更新
+#  ✅ 言語パッケージの自動処理
+#  ✅ サービスの自動設定
+#  ✅ インストール前の確認ダイアログ表示
 #
-# 【フロー】
-# 1️⃣ デバイスにパッケージがインストール済みか確認
-# 2️⃣ `update.ch` のキャッシュをチェックし、`opkg update / apk update` を実行
-# 3️⃣ インストール確認（yn オプションが指定された場合）
-# 4️⃣ パッケージのインストールを実行
-# 5️⃣ 言語パッケージの適用（nolang オプションでスキップ可能）
-# 6️⃣ `local-package.db` の適用（notpack オプションでスキップ可能）
-# 7️⃣ 設定の有効化（デフォルト enabled、disabled オプションで無効化）
+# 【基本構文】
+#   install_package [オプション...] <パッケージ名>
+#
+# 【オプション一覧】
+#   yn          - インストール前に確認ダイアログを表示
+#                 例: install_package yn luci-app-statistics
+#
+#   nolang      - 言語パッケージのインストールをスキップ
+#                 例: install_package nolang luci-app-firewall
+#
+#   force       - パッケージの強制再インストール
+#                 例: install_package force luci-app-opkg
+#
+#   notpack     - local-package.dbの設定適用をスキップ
+#                 例: install_package notpack htop
+#
+#   disabled    - サービスの自動設定をスキップ
+#                 ※パッケージは通常通りインストールし、サービス開始のみスキップ
+#                 例: install_package disabled irqbalance
+#
+#   hidden      - 一部の通知メッセージを表示しない
+#                 例: install_package hidden luci-i18n-base
+#
+#   silent      - 進捗・通知メッセージを全て抑制（エラー以外）
+#                 例: install_package silent htop
+#
+#   test        - テストモード（インストール前チェックをスキップ）
+#                 例: install_package test luci-app-opkg
+#
+#   desc="説明" - パッケージの説明文を指定
+#                 例: install_package yn luci-app-statistics "desc=統計情報を表示"
+#
+#   update      - パッケージリストの更新のみ実行
+#                 例: install_package update
+#
+#   list        - インストール済みパッケージの一覧表示
+#                 例: install_package list
+#
+# 【オプション組み合わせ例】
+#   確認ダイアログ付き通知抑制:
+#     install_package yn hidden luci-app-statistics
+#
+#   説明付き確認とサービス自動設定スキップ:
+#     install_package yn disabled luci-app-banip "desc=IPブロックツール"
+#
+#   完全サイレントモード（通知なし・確認なし）:
+#     install_package silent luci-i18n-base
+#
+# 【重要な動作特性】
+#  1. オプションは順不同で指定可能
+#  2. disabled: サービスの自動設定のみをスキップ（インストールは実行）
+#  3. silent: yn指定があっても確認ダイアログを表示しない
+#  4. hidden: 既にインストール済みの場合のメッセージなど一部通知のみ非表示
+#
+# 【返り値】
+#   0: 成功 または ユーザーがインストールをキャンセル
+#   1: エラー発生
 #########################################################################
 
 # インストール後のパッケージリストを表示
@@ -122,6 +173,7 @@ check_install_list() {
 
 # パッケージリストの更新
 update_package_list() {
+    local silent_mode="$1"  # silentモードパラメータを追加
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
@@ -153,10 +205,12 @@ update_package_list() {
         return 0
     fi
 
-    printf "  %s\n"
-
-    # スピナー開始
-    start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
+    # silent モードでない場合のみ表示
+    if [ "$silent_mode" != "yes" ]; then
+        printf "  %s\n"
+        # スピナー開始
+        start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
+    fi
 
     # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
@@ -170,8 +224,13 @@ update_package_list() {
         debug_log "DEBUG" "Running opkg update"
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
         if [ $? -ne 0 ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "Failed to update package lists with opkg"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
+            debug_log "DEBUG" "Failed to update package lists with opkg"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -180,8 +239,13 @@ update_package_list() {
         debug_log "DEBUG" "Saving package list to $package_cache"
         opkg list > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "Failed to save package list to $package_cache"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
+            debug_log "DEBUG" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -190,8 +254,13 @@ update_package_list() {
         debug_log "DEBUG" "Running apk update"
         apk update > "${LOG_DIR}/apk_update.log" 2>&1
         if [ $? -ne 0 ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "Failed to update package lists with apk"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
+            debug_log "DEBUG" "Failed to update package lists with apk"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
@@ -200,27 +269,39 @@ update_package_list() {
         debug_log "DEBUG" "Saving package list to $package_cache"
         apk search > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-            debug_log "ERROR" "Failed to save package list to $package_cache"
+            if [ "$silent_mode" != "yes" ]; then
+                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            else
+                # エラー時はsilentモードでもエラーメッセージを表示
+                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            fi
+            debug_log "DEBUG" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
             rm -f "$update_cache" 2>/dev/null
             return 1
         fi
     else
-        stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
-        debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
+        if [ "$silent_mode" != "yes" ]; then
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        else
+            # エラー時はsilentモードでもエラーメッセージを表示
+            printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        fi
+        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
         # タイムスタンプファイルを削除して、次回も更新を試みるようにする
         rm -f "$update_cache" 2>/dev/null
         return 1
     fi
 
-    # スピナー停止 (成功メッセージを表示)
-    stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    # スピナー停止（成功メッセージを表示）- silent モードでなければ表示
+    if [ "$silent_mode" != "yes" ]; then
+        stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+    fi
     
     # キャッシュのタイムスタンプを更新
     touch "$update_cache" 2>/dev/null
     if [ $? -ne 0 ]; then
-        debug_log "ERROR" "Failed to create/update cache file: $update_cache"
+        debug_log "DEBUG" "Failed to create/update cache file: $update_cache"
         # パッケージリストは更新できているのでエラー扱いはしない
         debug_log "WARN" "Cache timestamp could not be updated, next run will force update"
     else
@@ -245,10 +326,11 @@ local_package_db() {
 
     # `local-package.db` から `$package_name` に該当するセクションを抽出
     extract_commands() {
-        awk -v p="$package_name" '
-            $0 ~ "^\\[" pkg "\\]" {flag=1; next}
+        # ★ 修正: pkg 変数名を変更 (p から pkg へ) し、正規表現をより厳密に
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]$" {flag=1; next} # ★ セクション名を完全一致で検索
             $0 ~ "^\\[" {flag=0}
-            flag && $0 !~ "^#" {print}
+            flag && $0 !~ "^#" && $0 !~ "^[[:space:]]*$" {print} # ★ 空行も除外
         ' "${BASE_DIR}/local-package.db"
     }
 
@@ -257,32 +339,152 @@ local_package_db() {
     cmds=$(extract_commands)
 
     if [ -z "$cmds" ]; then
-        debug_log "DEBUG" "No commands found for package: $package_name"
-        return 1
+        debug_log "DEBUG" "No commands found for package: $package_name in ${BASE_DIR}/local-package.db" # ★ DBファイルパスをログに追加
+        return 1 # ★ コマンドが見つからない場合はエラーコード 1 を返すように変更
     fi
 
+    # ★ 修正: commands.ch のパスを修正 (BASE_DIR から CACHE_DIR へ)
+    local commands_file="${CACHE_DIR}/commands.ch"
     # **変数の置換**
-    printf "%s" "$cmds" > "${CACHE_DIR}/commands.ch"
+    printf "%s\n" "$cmds" > "$commands_file" # ★ 改行を追加
 
     # **環境変数 `CUSTOM_*` を自動検出して置換**
     CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
     for var_name in $CUSTOM_VARS; do
+        # ★ 修正: eval を使わずに変数の値を取得 (POSIX準拠のため eval は慎重に)
+        # シェルによっては printenv $var_name が使えるが、ash にはない可能性
+        # POSIX準拠のため、可能な限り eval を避けるが、ここでは必要悪か
+        # より安全な方法があれば検討したいが、ash の制約を考えると難しい
+        # 今回は元のロジックを維持しつつ、デバッグログを強化
         eval var_value=\$$var_name
         if [ -n "$var_value" ]; then
-            sed -i "s|\\\${$var_name}|$var_value|g" "${CACHE_DIR}/commands.ch"
-            debug_log "DEBUG" "Substituted: $var_name -> $var_value"
+            # ★ 修正: sed のデリミタを | に変更 (パスに / が含まれる可能性を考慮)
+            sed -i "s|\\\${$var_name}|$var_value|g" "$commands_file"
+            debug_log "DEBUG" "Substituted variable in $commands_file: $var_name -> $var_value"
         else
-            sed -i "s|.*\\\${$var_name}.*|# UNDEFINED: \0|g" "${CACHE_DIR}/commands.ch"
-            debug_log "DEBUG" "Undefined variable: $var_name"
+            # ★ 修正: 未定義変数の行をコメントアウトする処理を改善
+            # sed で直接コメントアウトし、マッチした行全体をコメント化
+            sed -i "/\${$var_name}/s/^/# UNDEFINED: /" "$commands_file"
+            debug_log "DEBUG" "Commented out line due to undefined variable: $var_name in $commands_file"
         fi
     done
 
     # **設定を適用**
-    . "${CACHE_DIR}/commands.ch"
+    # ★★★ 修正点: サブシェル内でコマンドを実行 ★★★
+    debug_log "DEBUG" "Executing commands from $commands_file in a subshell"
+    # ★ 修正点: commands.ch の内容をログに出力（デバッグ用）
+    debug_log "DEBUG" "Content of $commands_file before execution:"
+    # 各行の先頭に "> " を付けてログ出力
+    while IFS= read -r line; do
+        debug_log "DEBUG" "> $line"
+    done < "$commands_file"
+
+    ( . "$commands_file" ) # ★ コマンドをサブシェルで実行
+    local exit_status=$? # ★ サブシェルの終了ステータスを取得
+
+    if [ $exit_status -ne 0 ]; then
+        debug_log "DEBUG" "Error executing commands from $commands_file for package $package_name (Exit status: $exit_status)"
+        # ★★★ 修正点: エラー発生時に commands.ch の内容を再度ログ出力 ★★★
+        debug_log "DEBUG" "Content of $commands_file that caused the error:"
+        # 各行の先頭に "E> " を付けてログ出力
+        while IFS= read -r line; do
+            debug_log "DEBUG" "E> $line"
+        done < "$commands_file"
+        rm -f "$commands_file" # ★ エラー時はファイルを削除
+        return 1 # ★ エラーが発生した場合は 1 を返す
+    fi
+
+    debug_log "DEBUG" "Successfully executed commands from $commands_file for package $package_name"
+    # ★ 成功時は commands.ch を削除しても良いかもしれない (デバッグ用に残すか要検討)
+    rm -f "$commands_file" # ★ 成功時もファイルを削除
+
+    return 0 # ★ 成功時は 0 を返す
 }
 
 # パッケージインストール前のチェック
+# Returns: 0 - Ready to install (found in repository or FEED_DIR)
+#          1 - Already installed on device
+#          2 - Not found in repository or FEED_DIR (skip installation)
 package_pre_install() {
+    local package_name="$1"
+    local package_cache="${CACHE_DIR}/package_list.ch"
+
+    debug_log "DEBUG" "package_pre_install: Checking package: $package_name"
+
+    # デバイス内パッケージ確認用の名前（拡張子を除去）
+    local check_extension
+    check_extension=$(basename "$package_name" .ipk)
+    check_extension=$(basename "$check_extension" .apk)
+
+    debug_log "DEBUG" "package_pre_install: Package name for device check: $check_extension"
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        local opkg_output
+        opkg_output=$(opkg list-installed "$check_extension" 2>/dev/null)
+        if [ -n "$opkg_output" ]; then
+            debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" is already installed on the device (opkg list-installed stdout is not empty)"
+            return 1 # Already installed
+        else
+            debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" not found on device by opkg list-installed (stdout is empty). Will check repository."
+        fi
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        # Use 'apk info -e <package_name>' which returns 0 if installed, 1 otherwise.
+        if apk info -e "$check_extension" >/dev/null 2>&1; then
+            debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" is already installed on the device (apk info -e exited with 0)"
+            return 1 # Already installed
+        else
+            debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" not found on device by apk info -e (exited with non-0). Will check repository."
+        fi
+    fi
+
+    # リポジトリ内パッケージ確認
+    debug_log "DEBUG" "package_pre_install: Checking repository for package: $check_extension (also trying $package_name)"
+
+    if [ ! -f "$package_cache" ]; then
+        debug_log "DEBUG" "package_pre_install: Package cache ($package_cache) not found. Attempting to update (silent)."
+        # update_package_list を呼び出す際は silent モードを渡す (例: "yes")
+        update_package_list "yes" >/dev/null 2>&1
+
+        if [ ! -f "$package_cache" ]; then
+            debug_log "WARNING" "package_pre_install: Package cache ($package_cache) still not available after update attempt."
+            # キャッシュがなくてもローカルファイルインストールの可能性があるので処理は続行
+        fi
+    fi
+
+    # パッケージキャッシュが存在する場合のみチェック
+    if [ -f "$package_cache" ]; then
+        # apk search の出力形式は "package-name-version - description"
+        # check_extension (例: luci-app-sqm) が行頭にあり、その後ろがバージョンまたはスペースか行末で終わるものを探す
+        if grep -q -E "^${check_extension}(-[0-9a-zA-Z._~+]| |\$)" "$package_cache"; then
+            debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" found in repository cache ($package_cache)"
+            return 0  # パッケージがリポジトリに存在するのでインストール準備OK
+        # 元の package_name (拡張子付きの可能性あり) でも試す
+        elif [ "$package_name" != "$check_extension" ] && grep -q -E "^${package_name}(-[0-9a-zA-Z._~+]| |\$)" "$package_cache"; then
+            debug_log "DEBUG" "package_pre_install: Package \"$package_name\" (original arg) found in repository cache ($package_cache)"
+            return 0  # パッケージがリポジトリに存在するのでインストール準備OK
+        else
+            debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" (or \"$package_name\") not found by primary grep in cache ($package_cache)."
+        fi
+    else
+        debug_log "DEBUG" "package_pre_install: Package cache ($package_cache) does not exist. Cannot check repository."
+    fi
+
+    # キャッシュに存在しない場合、ローカルファイルとして存在するか確認 (例: /tmp/aios/feed/package.apk)
+    if [ -f "$package_name" ]; then
+        debug_log "DEBUG" "package_pre_install: Package \"$package_name\" found as a local file."
+        return 0  # ローカルファイルが見つかったのでインストール準備OK
+    fi
+    
+    # ここまで到達した場合、デバイスにもリポジトリにもローカルファイルとしても見つからない
+    debug_log "DEBUG" "package_pre_install: Package \"$check_extension\" (or \"$package_name\") ultimately not found. Will be skipped."
+    return 2  # Not found, skip installation
+}
+
+# パッケージインストール前のチェック
+# Returns: 0 - Ready to install (found in repository or FEED_DIR)
+#          1 - Already installed on device
+#          2 - Not found in repository or FEED_DIR (skip installation)
+OK_package_pre_install() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
 
@@ -305,14 +507,14 @@ package_pre_install() {
             return 1  # 既にインストールされている場合は終了
         fi
     fi
-  
+
     # リポジトリ内パッケージ確認
     debug_log "DEBUG" "Checking repository for package: $check_extension"
 
     if [ ! -f "$package_cache" ]; then
         debug_log "DEBUG" "Package cache not found. Attempting to update."
         update_package_list >/dev/null 2>&1
-        
+
         # 更新後も存在しない場合は警告を出すが処理は継続
         if [ ! -f "$package_cache" ]; then
             debug_log "WARNING" "Package cache still not available after update attempt"
@@ -337,13 +539,14 @@ package_pre_install() {
 
     debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
     # リポジトリにもFEED_DIRにも存在しないパッケージはスキップする
-    return 1  # 修正: 0から1に変更
+    return 2  # ★ 変更: 1から2に変更 (Not found)
 }
 
 # 通常パッケージのインストール処理
 install_normal_package() {
     local package_name="$1"
     local force_install="$2"
+    local silent_mode="$3"
     
     # 表示用の名前を作成（パスと拡張子を除去）
     local display_name
@@ -353,35 +556,62 @@ install_normal_package() {
     debug_log "DEBUG" "Starting installation process for: $package_name"
     debug_log "DEBUG" "Display name for messages: $display_name"
 
-    start_spinner "$(color blue "$display_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    # silent モードが有効でない場合のみスピナーを開始
+    if [ "$silent_mode" != "yes" ]; then
+        start_spinner "$(color blue "$display_name $(get_message "MSG_INSTALLING_PACKAGE")")"
+    fi
 
     if [ "$force_install" = "yes" ]; then
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add --force-reinstall "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         fi
     else
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             opkg install "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
             apk add "$package_name" > /dev/null 2>&1 || {
-                stop_spinner "$(color red "Failed to install package $display_name")"
+                # エラーの場合はsilentモードでもメッセージを表示
+                if [ "$silent_mode" != "yes" ]; then
+                    stop_spinner "$(color red "Failed to install package $display_name")"
+                else
+                    printf "%s\n" "$(color red "Failed to install package $display_name")"
+                fi
                 return 1
             }
         fi
     fi
 
-    stop_spinner "$(color green "$display_name $(get_message "MSG_INSTALL_SUCCESS")")"
+    # silent モードが有効でない場合のみスピナーを停止
+    if [ "$silent_mode" != "yes" ]; then
+        stop_spinner "$(color green "$display_name $(get_message "MSG_INSTALL_SUCCESS")")"
+    fi
+    
     return 0
 }
 
@@ -392,7 +622,7 @@ verify_package_manager() {
         debug_log "DEBUG" "Package manager detected: $PACKAGE_MANAGER"
         return 0
     else
-        debug_log "ERROR" "Cannot determine package manager. File not found: ${CACHE_DIR}/package_manager.ch"
+        debug_log "DEBUG" "Cannot determine package manager. File not found: ${CACHE_DIR}/package_manager.ch"
         return 1
     fi
 }
@@ -420,10 +650,10 @@ get_language_code() {
                 lang_code=$(head -n 1 "$luci_cache" | awk '{print $1}')
                 debug_log "DEBUG" "Retrieved language code after generating luci.ch: $lang_code"
             else
-                debug_log "ERROR" "Failed to generate luci.ch, using default language: en"
+                debug_log "DEBUG" "Failed to generate luci.ch, using default language: en"
             fi
         else
-            debug_log "ERROR" "get_available_language_packages() function not available"
+            debug_log "DEBUG" "get_available_language_packages() function not available"
         fi
     fi
     
@@ -432,26 +662,45 @@ get_language_code() {
 }
 
 # サービス設定
+# Handles starting and enabling services after installation.
+# Special handling for LuCI packages (restarts rpcd).
+# Other packages are started and enabled.
 configure_service() {
-    local package_name="$1"
-    local base_name="$2"
-    
-    debug_log "DEBUG" "Configuring service for: $package_name"
-    
-    # サービスが存在するかチェックし、処理を分岐
+    local package_name="$1" # Full package name/path, potentially unused here but passed for context
+    local base_name="$2"    # Base name of the package used for service script
+
+    debug_log "DEBUG" "Configuring service for: $package_name (Base: $base_name)"
+
+    # Check if the service script exists and is executable
     if [ -x "/etc/init.d/$base_name" ]; then
         if echo "$base_name" | grep -q "^luci-"; then
-            # Luci関連のパッケージの場合はrpcdを再起動
-            /etc/init.d/rpcd restart
-            debug_log "DEBUG" "$package_name is a LuCI package, rpcd has been restarted"
+            # LuCI packages require restarting rpcd to be recognized by the UI
+            debug_log "DEBUG" "$base_name is a LuCI package, restarting rpcd."
+            /etc/init.d/rpcd restart >/dev/null 2>&1
+            # We don't check rpcd restart status critically here, assume it works or logs errors itself
         else
-            /etc/init.d/"$base_name" restart
-            /etc/init.d/"$base_name" enable
-            debug_log "DEBUG" "$package_name has been restarted and enabled"
+            # ★★★ For non-LuCI packages, use start and enable ★★★
+            debug_log "DEBUG" "Starting service $base_name."
+            /etc/init.d/"$base_name" start >/dev/null 2>&1
+            local start_status=$?
+
+            debug_log "DEBUG" "Enabling service $base_name."
+            /etc/init.d/"$base_name" enable >/dev/null 2>&1
+            local enable_status=$?
+
+            if [ $start_status -eq 0 ] && [ $enable_status -eq 0 ]; then
+                 debug_log "DEBUG" "Service $base_name started and enabled successfully."
+            else
+                 # Log a warning if start or enable failed, but don't treat as critical error for install_package
+                 debug_log "WARNING" "Service $base_name start (status: $start_status) or enable (status: $enable_status) might have failed."
+            fi
         fi
     else
-        debug_log "DEBUG" "$package_name is not a service or the service script is not found"
+        # If no service script found, just log and continue
+        debug_log "DEBUG" "No executable service script found at /etc/init.d/$base_name, skipping service configuration."
     fi
+    # Always return 0, as service configuration failure is not treated as install_package failure
+    return 0
 }
 
 # オプション解析
@@ -468,47 +717,59 @@ parse_package_options() {
     PKG_OPTIONS_UNFORCE="no"
     PKG_OPTIONS_LIST="no"
     PKG_OPTIONS_PACKAGE_NAME=""
+    PKG_OPTIONS_SILENT="no"
     
-    # 新しい変数：説明文用
+    # 変数初期化：説明文用
     PKG_OPTIONS_DESCRIPTION=""
+
+    # 引数のデバッグ出力
+    debug_log "DEBUG" "parse_package_options: 受け取った引数 ($#): $*"
     
     # オプション解析
     while [ $# -gt 0 ]; do
+        # 現在処理中の引数をデバッグ出力
+        debug_log "DEBUG" "parse_package_options: 処理中の引数: $1"
+        
         case "$1" in
-            yn) PKG_OPTIONS_CONFIRM="yes" ;;
-            nolang) PKG_OPTIONS_SKIP_LANG="yes" ;;
-            force) PKG_OPTIONS_FORCE="yes" ;;
-            notpack) PKG_OPTIONS_SKIP_PACKAGE_DB="yes" ;;
-            disabled) PKG_OPTIONS_DISABLED="yes" ;;
-            hidden) PKG_OPTIONS_HIDDEN="yes" ;;
-            test) PKG_OPTIONS_TEST="yes" ;;
+            yn) PKG_OPTIONS_CONFIRM="yes"; debug_log "DEBUG" "Option: confirm=yes" ;;
+            nolang) PKG_OPTIONS_SKIP_LANG="yes"; debug_log "DEBUG" "Option: skip_lang=yes" ;;
+            force) PKG_OPTIONS_FORCE="yes"; debug_log "DEBUG" "Option: force=yes" ;;
+            notpack) PKG_OPTIONS_SKIP_PACKAGE_DB="yes"; debug_log "DEBUG" "Option: skip_package_db=yes" ;;
+            disabled) PKG_OPTIONS_DISABLED="yes"; debug_log "DEBUG" "Option: disabled=yes" ;;
+            hidden) PKG_OPTIONS_HIDDEN="yes"; debug_log "DEBUG" "Option: hidden=yes" ;;
+            test) PKG_OPTIONS_TEST="yes"; debug_log "DEBUG" "Option: test=yes" ;;
+            silent) PKG_OPTIONS_SILENT="yes"; debug_log "DEBUG" "Option: silent=yes" ;;  # silent オプションの追加
             desc=*) 
                 # 説明文オプション処理 - "desc=" 以降の文字列を取得
                 PKG_OPTIONS_DESCRIPTION="${1#desc=}"
-                debug_log "DEBUG" "Package description set to: $PKG_OPTIONS_DESCRIPTION" 
+                debug_log "DEBUG" "Option: description=$PKG_OPTIONS_DESCRIPTION" 
                 ;;
             update)
                 PKG_OPTIONS_UPDATE="yes"
+                debug_log "DEBUG" "Option: update=yes"
                 shift
                 if [ $# -gt 0 ]; then
                     PKG_OPTIONS_PACKAGE_UPDATE="$1"
+                    debug_log "DEBUG" "Package update: $PKG_OPTIONS_PACKAGE_UPDATE"
                     shift
                 fi
                 continue
                 ;;
-            unforce) PKG_OPTIONS_UNFORCE="yes" ;;
-            list) PKG_OPTIONS_LIST="yes" ;;
+            unforce) PKG_OPTIONS_UNFORCE="yes"; debug_log "DEBUG" "Option: unforce=yes" ;;
+            list) PKG_OPTIONS_LIST="yes"; debug_log "DEBUG" "Option: list=yes" ;;
             -*) 
-                debug_log "ERROR" "Unknown option: $1"
+                debug_log "DEBUG" "Unknown option: $1"
                 return 1 
                 ;;
             *)
                 if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ]; then
                     PKG_OPTIONS_PACKAGE_NAME="$1"
+                    debug_log "DEBUG" "Package name: $PKG_OPTIONS_PACKAGE_NAME"
                 else
+                    debug_log "DEBUG" "Additional argument after package name: $1"
                     # 既に説明文が設定されている場合は追加の引数として処理しない
                     if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-                        debug_log "DEBUG" "Ignoring unexpected additional argument: $1"
+                        debug_log "DEBUG" "Description already set, ignoring: $1"
                     else
                         # 追加の引数を説明文として扱う（旧動作との互換性のため）
                         debug_log "DEBUG" "Additional argument will be treated as description: $1"
@@ -522,15 +783,245 @@ parse_package_options() {
     
     # パッケージ名が指定されていない場合の処理
     if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ] && [ "$PKG_OPTIONS_LIST" != "yes" ] && [ "$PKG_OPTIONS_UPDATE" != "yes" ]; then
-        debug_log "ERROR" "No package name specified"
+        debug_log "DEBUG" "No package name specified"
         return 1
     fi
+    
+    # オプションに関する情報を出力
+    debug_log "DEBUG" "Options parsed: confirm=$PKG_OPTIONS_CONFIRM, force=$PKG_OPTIONS_FORCE, silent=$PKG_OPTIONS_SILENT, description='$PKG_OPTIONS_DESCRIPTION', package=$PKG_OPTIONS_PACKAGE_NAME"
     
     return 0
 }
 
-# パッケージリストから説明を取得する関数
+# @FUNCTION: get_package_description
+# @DESCRIPTION: Gets the description for a given package. If the current UI language
+#               is different from the default language, it attempts to translate
+#               the description.
+# @PARAM: $1 - package_name (string) - The name of the package.
+# @STDOUT: The (potentially translated) package description string, always ending with a newline if non-empty.
+#          Outputs only a newline if no description is found or package_name is empty.
+# @RETURN: 0 always (to simplify calling logic, success/failure indicated by output content).
 get_package_description() {
+    local package_name="$1"
+    local original_description=""
+    local final_description_to_output=""
+    local current_lang_code=""
+    local package_cache="${CACHE_DIR}/package_list.ch" # For opkg
+
+    if [ -z "$package_name" ]; then
+        # debug_log "ERROR" "get_package_description: package_name is empty."
+        printf "\n"; return 0;
+    fi
+
+    # debug_log "DEBUG" "get_package_description: For package: '$package_name'"
+
+    # 1. Get original description
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        # debug_log "DEBUG" "get_package_description: Using opkg."
+        if [ -f "$package_cache" ]; then
+            local package_line
+            package_line=$(grep "^${package_name}[[:space:]]" "$package_cache" 2>/dev/null | head -n 1)
+            [ -z "$package_line" ] && package_line=$(grep "^${package_name}[[:space:]]*-" "$package_cache" 2>/dev/null | head -n 1)
+
+            if [ -n "$package_line" ]; then
+                original_description=$(echo "$package_line" | awk -F ' - ' '{
+                    if (NF >= 3) {
+                        desc_part = $3; for(i=4; i<=NF; i++) desc_part = desc_part " - " $i; print desc_part;
+                    } else if (NF == 2) {
+                        print $2;
+                    } else {
+                        full_desc = ""; for(i=2; i<=NF; i++) { full_desc = full_desc (i==2 ? "" : " - ") $i; } print full_desc;
+                    }
+                }' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+                if [ -z "$original_description" ] && echo "$package_line" | grep -q " - "; then
+                     original_description=$(echo "$package_line" | cut -d'-' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                fi
+            fi
+        fi
+        # [ -z "$original_description" ] && debug_log "DEBUG" "get_package_description (opkg): No desc."
+
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        # debug_log "DEBUG" "get_package_description: Using apk for package '$package_name'."
+        local apk_info_output
+        apk_info_output=$(apk info "$package_name" 2>/dev/null)
+        local apk_info_status=$?
+
+        if [ "$apk_info_status" -eq 0 ] && [ -n "$apk_info_output" ]; then
+            original_description=$(echo "$apk_info_output" | awk '
+                BEGIN {
+                    capture_description = 0;
+                    description_buffer = "";
+                }
+                tolower($0) ~ / description:$/ {
+                    capture_description = 1;
+                    next;
+                }
+                capture_description == 1 {
+                    if (NF == 0) {
+                        capture_description = 0; # Stop capturing on empty line
+                    } else {
+                        if (description_buffer == "") {
+                            description_buffer = $0;
+                        } else {
+                            description_buffer = description_buffer "\n" $0;
+                        }
+                    }
+                }
+                END {
+                    if (description_buffer != "") {
+                        gsub(/^[[:space:]\n]+|[[:space:]\n]+$/, "", description_buffer);
+                        print description_buffer;
+                    }
+                }
+            ')
+        fi
+        # [ -z "$original_description" ] && debug_log "DEBUG" "get_package_description (apk): No desc (status: $apk_info_status). Output: $apk_info_output"
+    else
+        # debug_log "ERROR" "get_package_description: Unknown PM: '$PACKAGE_MANAGER'"
+        printf "\n"; return 0;
+    fi
+
+    if [ -n "$original_description" ]; then
+        original_description=$(echo "$original_description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\\n/\n/g' -e $'s/\r//g')
+        # debug_log "DEBUG" "get_package_description: Original desc (processed): '$(echo "$original_description" | head -c 70)...'"
+    else
+        # debug_log "DEBUG" "get_package_description: No original desc found for '$package_name'."
+        printf "\n"; return 0;
+    fi
+    
+    final_description_to_output="$original_description"
+
+    if [ -f "${CACHE_DIR}/message.ch" ]; then current_lang_code=$(cat "${CACHE_DIR}/message.ch"); else current_lang_code="$DEFAULT_LANGUAGE"; fi
+    # debug_log "DEBUG" "get_package_description: UI lang: '$current_lang_code', Default: '$DEFAULT_LANGUAGE'"
+
+    # MODIFIED: Translation marker logic completely removed.
+    if [ "$current_lang_code" != "$DEFAULT_LANGUAGE" ]; then
+        if type translate_package_description >/dev/null 2>&1; then
+            # debug_log "INFO" "get_package_description: Translating..."
+            local translated_output_from_func
+            translated_output_from_func=$(translate_package_description "$original_description" "$current_lang_code" "$DEFAULT_LANGUAGE")
+            local translate_call_status=$?
+            
+            local translated_output_trimmed
+            translated_output_trimmed=$(echo "$translated_output_from_func" | sed 's/\n$//')
+
+            if [ "$translate_call_status" -eq 0 ] && [ -n "$translated_output_trimmed" ] && \
+               [ "$translated_output_trimmed" != "$original_description" ] && \
+               [ "$translated_output_from_func" != "$original_description" ]; then
+                final_description_to_output="$translated_output_trimmed"
+                # debug_log "INFO" "get_package_description: Translated successfully. Output will be translated text without marker."
+            # else
+                # debug_log for why translation wasn't used (or was same as original)
+            fi
+        # else
+            # debug_log "WARN" "get_package_description: translate_package_description func not found."
+        fi
+    # else
+        # debug_log "DEBUG" "get_package_description: UI lang is default. No translation needed."
+    fi
+    
+    if [ -n "$final_description_to_output" ]; then printf "%s\n" "$final_description_to_output"; else printf "\n"; fi
+    return 0
+}
+
+# パッケージリストから説明を取得する関数
+OK2_get_package_description() {
+    local package_name="$1" # パッケージ名 (例: coreutils, luci-app-sqm)
+    local package_cache="${CACHE_DIR}/package_list.ch" 
+    local description=""
+
+    debug_log "DEBUG" "get_package_description: Attempting to get description for: $package_name"
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        debug_log "DEBUG" "get_package_description: Using opkg method from $package_cache"
+        if [ ! -f "$package_cache" ]; then
+            debug_log "DEBUG" "get_package_description (opkg): Package cache ($package_cache) not found."
+            return 1
+        fi
+        local package_line
+        package_line=$(grep "^${package_name} " "$package_cache" 2>/dev/null)
+        if [ -z "$package_line" ]; then
+            # opkgの場合、パッケージ名にバージョンが含まれている可能性があるため、前方一致も試す
+            package_line=$(grep "^${package_name}[[:space:]]*-" "$package_cache" 2>/dev/null | head -n 1)
+            if [ -z "$package_line" ]; then
+                debug_log "DEBUG" "get_package_description (opkg): Package $package_name not found in cache by exact or prefix match."
+                return 1
+            fi
+        fi
+        
+        # ' - ' を区切り文字として3番目のフィールドを取得、なければ2番目
+        description=$(echo "$package_line" | awk -F ' - ' '{if (NF >= 3) {for(i=3;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else if (NF >= 2) { for(i=2;i<=NF;i++) printf "%s%s", $i, (i==NF?"":" - ") } else {print ""}}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        
+        if [ -z "$description" ] && echo "$package_line" | grep -q " - "; then
+             description=$(echo "$package_line" | cut -d'-' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        fi
+
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        debug_log "DEBUG" "get_package_description: Using apk method (calling 'apk info $package_name')"
+        local apk_info_output
+        apk_info_output=$(apk info "$package_name" 2>/dev/null)
+        local apk_info_status=$?
+
+        if [ $apk_info_status -eq 0 ] && [ -n "$apk_info_output" ]; then
+            # "description:" 行の次の行から、最初の空行または次のセクションマーカーまでを取得
+            description=$(echo "$apk_info_output" | awk '
+                BEGIN {capture=0; desc_buffer=""}
+                tolower($0) ~ /description:/ {
+                    capture=1; 
+                    # "description:" の行自体に説明が続く場合も考慮 (例: description: Text)
+                    # まずはマーカーの行を処理
+                    desc_part = $0;
+                    sub(/^[^:]*:[[:space:]]*/, "", desc_part); # "description: "部分を削除
+                    if (length(desc_part) > 0) {
+                        desc_buffer = desc_buffer (desc_buffer == "" ? "" : " ") desc_part;
+                    }
+                    next; # 次の行へ
+                }
+                capture==1 && NF==0 { # 空行で説明の終わり
+                    exit;
+                }
+                capture==1 && $0 ~ /^[a-zA-Z0-9_-]+-[0-9a-zA-Z._~+]+(-r[0-9]+)? (webpage|commit|maintainer|license|triggers|depends|provides|replaces|conflicts|install_if|origin|arch|datahash|size|builddate|flag):/ {
+                    # 次のパッケージセクションマーカー (例: webpage:, commit:) で説明の終わり
+                    exit;
+                }
+                capture==1 { # 説明文の行
+                    current_line = $0;
+                    gsub(/^[ \t]+|[ \t]+$/, "", current_line); # 行頭・行末の空白を削除
+                    if (length(current_line) > 0) {
+                         desc_buffer = desc_buffer (desc_buffer == "" ? "" : "\n") current_line; # 改行を保持して連結
+                    }
+                }
+                END { if (length(desc_buffer)>0) print desc_buffer }
+            ')
+            # 取得した説明文が長すぎる場合、最初の1文または適切な長さに丸めることを検討 (ここでは未実装)
+            # 例: description=$(echo "$description" | cut -d'.' -f1)
+
+            if [ -z "$description" ]; then
+                 debug_log "DEBUG" "get_package_description (apk): 'description:' field not found or subsequent lines are empty/unparseable in 'apk info $package_name' output."
+            fi
+        else
+            debug_log "DEBUG" "get_package_description (apk): 'apk info $package_name' failed (status: $apk_info_status) or produced no output for '$package_name'."
+        fi
+    else
+        debug_log "DEBUG" "get_package_description: Unknown package manager: $PACKAGE_MANAGER"
+        return 1
+    fi
+
+    if [ -n "$description" ];
+    then
+        description=$(echo "$description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\\n/\n/g') # \nを実際の改行に
+        debug_log "DEBUG" "get_package_description: Found description for $package_name: '$description'"
+        printf "%s" "$description"
+        return 0
+    fi
+
+    debug_log "DEBUG" "get_package_description: No description found for package $package_name."
+    return 1
+}
+
+# パッケージリストから説明を取得する関数
+OK_get_package_description() {
     local package_name="$1"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local description=""
@@ -561,105 +1052,23 @@ get_package_description() {
     return 1
 }
 
-# オプション解析
-parse_package_options() {
-    # 変数初期化（既存の変数）
-    PKG_OPTIONS_CONFIRM="no"
-    PKG_OPTIONS_SKIP_LANG="no"
-    PKG_OPTIONS_FORCE="no"
-    PKG_OPTIONS_SKIP_PACKAGE_DB="no"
-    PKG_OPTIONS_DISABLED="no"
-    PKG_OPTIONS_HIDDEN="no"
-    PKG_OPTIONS_TEST="no"
-    PKG_OPTIONS_UPDATE="no"
-    PKG_OPTIONS_UNFORCE="no"
-    PKG_OPTIONS_LIST="no"
-    PKG_OPTIONS_PACKAGE_NAME=""
-    
-    # 変数初期化：説明文用
-    PKG_OPTIONS_DESCRIPTION=""
-
-    # 引数のデバッグ出力
-    debug_log "DEBUG" "parse_package_options: 受け取った引数 ($#): $*"
-    
-    # オプション解析
-    while [ $# -gt 0 ]; do
-        # 現在処理中の引数をデバッグ出力
-        debug_log "DEBUG" "parse_package_options: 処理中の引数: $1"
-        
-        case "$1" in
-            yn) PKG_OPTIONS_CONFIRM="yes"; debug_log "DEBUG" "Option: confirm=yes" ;;
-            nolang) PKG_OPTIONS_SKIP_LANG="yes"; debug_log "DEBUG" "Option: skip_lang=yes" ;;
-            force) PKG_OPTIONS_FORCE="yes"; debug_log "DEBUG" "Option: force=yes" ;;
-            notpack) PKG_OPTIONS_SKIP_PACKAGE_DB="yes"; debug_log "DEBUG" "Option: skip_package_db=yes" ;;
-            disabled) PKG_OPTIONS_DISABLED="yes"; debug_log "DEBUG" "Option: disabled=yes" ;;
-            hidden) PKG_OPTIONS_HIDDEN="yes"; debug_log "DEBUG" "Option: hidden=yes" ;;
-            test) PKG_OPTIONS_TEST="yes"; debug_log "DEBUG" "Option: test=yes" ;;
-            desc=*) 
-                # 説明文オプション処理 - "desc=" 以降の文字列を取得
-                PKG_OPTIONS_DESCRIPTION="${1#desc=}"
-                debug_log "DEBUG" "Option: description=$PKG_OPTIONS_DESCRIPTION" 
-                ;;
-            update)
-                PKG_OPTIONS_UPDATE="yes"
-                debug_log "DEBUG" "Option: update=yes"
-                shift
-                if [ $# -gt 0 ]; then
-                    PKG_OPTIONS_PACKAGE_UPDATE="$1"
-                    debug_log "DEBUG" "Package update: $PKG_OPTIONS_PACKAGE_UPDATE"
-                    shift
-                fi
-                continue
-                ;;
-            unforce) PKG_OPTIONS_UNFORCE="yes"; debug_log "DEBUG" "Option: unforce=yes" ;;
-            list) PKG_OPTIONS_LIST="yes"; debug_log "DEBUG" "Option: list=yes" ;;
-            -*) 
-                debug_log "ERROR" "Unknown option: $1"
-                return 1 
-                ;;
-            *)
-                if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ]; then
-                    PKG_OPTIONS_PACKAGE_NAME="$1"
-                    debug_log "DEBUG" "Package name: $PKG_OPTIONS_PACKAGE_NAME"
-                else
-                    debug_log "DEBUG" "Additional argument after package name: $1"
-                    # 既に説明文が設定されている場合は追加の引数として処理しない
-                    if [ -n "$PKG_OPTIONS_DESCRIPTION" ]; then
-                        debug_log "DEBUG" "Description already set, ignoring: $1"
-                    else
-                        # 追加の引数を説明文として扱う（旧動作との互換性のため）
-                        debug_log "DEBUG" "Additional argument will be treated as description: $1"
-                        PKG_OPTIONS_DESCRIPTION="$1"
-                    fi
-                fi
-                ;;
-        esac
-        shift
-    done
-    
-    # パッケージ名が指定されていない場合の処理
-    if [ -z "$PKG_OPTIONS_PACKAGE_NAME" ] && [ "$PKG_OPTIONS_LIST" != "yes" ] && [ "$PKG_OPTIONS_UPDATE" != "yes" ]; then
-        debug_log "ERROR" "No package name specified"
-        return 1
-    fi
-    
-    # オプションに関する情報を出力
-    debug_log "DEBUG" "Options parsed: confirm=$PKG_OPTIONS_CONFIRM, force=$PKG_OPTIONS_FORCE, description='$PKG_OPTIONS_DESCRIPTION', package=$PKG_OPTIONS_PACKAGE_NAME"
-    
-    return 0
-}
-
 # パッケージ処理メイン部分
+# Returns:
+#   0: Success (Already installed / Not found / User declined non-critical step)
+#   1: Error (Installation failed, local_package_db failed, etc.)
+#   2: User cancelled (Declined 'yn' prompt)
+#   3: New install success (Package installed and local_package_db applied successfully)
 process_package() {
     local package_name="$1"
     local base_name="$2"
     local confirm_install="$3"
     local force_install="$4"
     local skip_package_db="$5"
-    local set_disabled="$6"
+    # local set_disabled="$6" # This variable is currently unused within this function
     local test_mode="$7"
     local lang_code="$8"
-    local description="$9"  # 9番目の引数として説明文を直接受け取る
+    local description="$9"
+    local silent_mode="${10}"
 
     # 言語パッケージか通常パッケージかを判別
     case "$base_name" in
@@ -670,172 +1079,124 @@ process_package() {
             ;;
     esac
 
-    # test_mode が有効でなければパッケージの事前チェックを行う
+    # パッケージの事前チェック (test_mode でなければ実行)
+    local pre_install_status=0 # Default to 0 (Ready to install) if test_mode=yes
     if [ "$test_mode" != "yes" ]; then
-        if ! package_pre_install "$package_name"; then
-            debug_log "DEBUG" "Package $package_name is already installed or not found"
-            return 1
-        fi
+        package_pre_install "$package_name"
+        pre_install_status=$? # 戻り値を取得
+
+        case $pre_install_status in
+            0) # Ready to install
+                debug_log "DEBUG" "Package $package_name is ready for installation."
+                # Proceed
+                ;;
+            1) # Already installed
+                debug_log "DEBUG" "Package $package_name is already installed. Skipping."
+                return 0 # Skip as success
+                ;;
+            2) # Not found
+                debug_log "DEBUG" "Package $package_name not found, skipping installation."
+                return 0 # Skip as success (as per requirement)
+                ;;
+            *) # Unexpected status
+                debug_log "WARNING" "Unexpected status $pre_install_status from package_pre_install for $package_name."
+                return 1 # Treat unexpected status as error
+                ;;
+        esac
     else
-        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks for $package_name"
     fi
-    
-    # YN確認 (オプションで有効時のみ)
-    if [ "$confirm_install" = "yes" ]; then
-        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
+
+    # YN確認 (オプションで有効時のみ、かつ silent モードでない場合)
+    if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
         local display_name
         display_name=$(basename "$package_name")
-        display_name=${display_name%.*}  # 拡張子を除去
+        display_name=${display_name%.*}
 
-        debug_log "DEBUG" "Original package name: $package_name"
-        debug_log "DEBUG" "Displaying package name: $display_name"
-    
-        # 説明文の優先順位：
-        # 1. 関数の9番目の引数として指定された説明文を優先
-        # 2. なければパッケージリストから取得
-        if [ -n "$description" ]; then
-            debug_log "DEBUG" "Using provided description: $description"
-        else
-            # パッケージリストから説明を取得
+        debug_log "DEBUG" "Confirming installation for display name: $display_name"
+
+        # 説明文取得 (引数優先、なければリポジトリから)
+        if [ -z "$description" ]; then
             description=$(get_package_description "$package_name")
             debug_log "DEBUG" "Using repository description: $description"
+        else
+            debug_log "DEBUG" "Using provided description: $description"
         fi
-        
-        # パッケージ名を青色で表示するため、color関数で囲む
+
         local colored_name
         colored_name=$(color blue "$display_name")
-        
-        # 説明文があれば専用のメッセージキーを使用
+
+        local confirm_result=0
         if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ - パッケージ名を青色で表示
             if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$description"; then
-                debug_log "DEBUG" "User declined installation of $display_name with description"
-                return 0
+                confirm_result=1
             fi
         else
-            # 通常の確認メッセージ - パッケージ名を青色で表示
             if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then
-                debug_log "DEBUG" "User declined installation of $display_name"
-                return 0
+                confirm_result=1
             fi
         fi
+
+        # ★★★ ユーザーがキャンセルした場合 ★★★
+        if [ $confirm_result -ne 0 ]; then
+            debug_log "DEBUG" "User declined installation of $display_name"
+            return 2 # Return 2 for user cancellation
+        fi
+    elif [ "$confirm_install" = "yes" ] && [ "$silent_mode" = "yes" ]; then
+        debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name"
     fi
-     
+
     # パッケージのインストール
-    if ! install_normal_package "$package_name" "$force_install"; then
-        debug_log "DEBUG" "Failed to install package: $package_name"
-        return 1
+    if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
+        debug_log "ERROR" "Failed to install package: $package_name" # Changed DEBUG to ERROR
+        return 1 # Return 1 on installation failure
     fi
 
-    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
+    # ★★★ ローカルパッケージDBの適用 (インストール成功後、かつ skip_package_db でない場合) ★★★
     if [ "$skip_package_db" != "yes" ]; then
-        local_package_db "$base_name"
-    else
-        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
-    fi
-    
-    return 0
-}
-
-# パッケージ処理メイン部分
-OK_process_package() {
-    local package_name="$1"
-    local base_name="$2"
-    local confirm_install="$3"
-    local force_install="$4"
-    local skip_package_db="$5"
-    local set_disabled="$6"
-    local test_mode="$7"
-    local lang_code="$8"
-    local description="$9"  # 9番目の引数として説明文を直接受け取る
-
-    # 言語パッケージか通常パッケージかを判別
-    case "$base_name" in
-        luci-i18n-*)
-            # 言語パッケージの場合、package_name に言語コードを追加
-            package_name="${base_name}-${lang_code}"
-            debug_log "DEBUG" "Language package detected, using: $package_name"
-            ;;
-    esac
-
-    # test_mode が有効でなければパッケージの事前チェックを行う
-    if [ "$test_mode" != "yes" ]; then
-        if ! package_pre_install "$package_name"; then
-            debug_log "DEBUG" "Package $package_name is already installed or not found"
-            return 1
-        fi
-    else
-        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks"
-    fi
-    
-    # YN確認 (オプションで有効時のみ)
-    if [ "$confirm_install" = "yes" ]; then
-        # パッケージ名からパスと拡張子を除去した表示用の名前を作成
-        local display_name
-        display_name=$(basename "$package_name")
-        display_name=${display_name%.*}  # 拡張子を除去
-
-        debug_log "DEBUG" "Original package name: $package_name"
-        debug_log "DEBUG" "Displaying package name: $display_name"
-    
-        # 説明文の優先順位：
-        # 1. 関数の9番目の引数として指定された説明文を優先
-        # 2. なければパッケージリストから取得
-        if [ -n "$description" ]; then
-            debug_log "DEBUG" "Using provided description: $description"
+        # local_package_db を base_name で呼び出す
+        if ! local_package_db "$base_name"; then
+            # local_package_db が 1 (コマンド無し含む) または他のエラーを返した場合
+            debug_log "WARNING" "local_package_db application failed or skipped for $base_name. Continuing..."
+            # local_package_db の失敗はパッケージインストール自体の失敗とはしないため、ここでは return 1 しない
+            # ただし、新規インストール成功とは言えないので、戻り値は 0 とする
+            return 0
         else
-            # パッケージリストから説明を取得
-            description=$(get_package_description "$package_name")
-            debug_log "DEBUG" "Using repository description: $description"
+             debug_log "DEBUG" "local_package_db applied successfully for $base_name"
         fi
-        
-        # 説明文があれば専用のメッセージキーを使用
-        if [ -n "$description" ]; then
-            # 説明文付きの確認メッセージ
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$display_name" "desc=$description"; then
-                debug_log "DEBUG" "User declined installation of $display_name with description"
-                return 0
-            fi
-        else
-            # 通常の確認メッセージ
-            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$display_name"; then
-                debug_log "DEBUG" "User declined installation of $display_name"
-                return 0
-            fi
-        fi
-    fi
-     
-    # パッケージのインストール
-    if ! install_normal_package "$package_name" "$force_install"; then
-        debug_log "DEBUG" "Failed to install package: $package_name"
-        return 1
+    else
+        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
     fi
 
-    # **ローカルパッケージDBの適用 (インストール成功後に実行)**
-    if [ "$skip_package_db" != "yes" ]; then
-        local_package_db "$base_name"
-    else
-        debug_log "DEBUG" "Skipping local-package.db application for $package_name"
-    fi
-    
-    return 0
+    # ★★★ 新規インストール成功 ★★★
+    # ここまで到達した場合、インストールと (必要なら) local_package_db 適用が成功した
+    debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
+    return 3 # Return 3 for new install success
 }
 
 # **パッケージインストールのメイン関数**
+# Returns:
+#   0: Success (Already installed / Not found / User declined / DB apply skipped/failed)
+#   1: Error (Prerequisite failed, Installation failed)
+#   2: User cancelled ('yn' prompt declined)
+#   3: New install success (Package installed, DB applied, Service configured/skipped)
 install_package() {
     # オプション解析
     if ! parse_package_options "$@"; then
-        return 1
+        debug_log "ERROR" "Failed to parse package options." # Added error log
+        return 1 # Return 1 on option parsing failure
     fi
-    
-    # インストール一覧表示モードの場合
+
+    # インストール一覧表示モード
     if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
-        check_install_list
-        return 0
+        if [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
+            check_install_list
+        fi
+        return 0 # list is considered a success
     fi
-    
-    # **ベースネームを取得**
-    local BASE_NAME
+
+    # ベースネームを取得
+    local BASE_NAME="" # Initialize BASE_NAME
     if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
         BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
         BASE_NAME=$(basename "$BASE_NAME" .apk)
@@ -843,26 +1204,31 @@ install_package() {
 
     # update オプション処理
     if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
-        debug_log "DEBUG" "Updating package lists"
-        update_package_list
+        debug_log "DEBUG" "Executing package list update"
+        # update_package_list の戻り値をそのまま返す
+        update_package_list "$PKG_OPTIONS_SILENT"
         return $?
     fi
 
     # パッケージマネージャー確認
     if ! verify_package_manager; then
-        debug_log "ERROR" "Failed to verify package manager"
-        return 1
+        debug_log "ERROR" "Failed to verify package manager." # Changed DEBUG to ERROR
+        return 1 # Return 1 if verification fails
     fi
 
-    # **パッケージリスト更新**
-    update_package_list || return 1
+    # パッケージリスト更新 (エラー時は 1 を返す)
+    if ! update_package_list "$PKG_OPTIONS_SILENT"; then
+         debug_log "ERROR" "Failed to update package list." # Changed DEBUG to ERROR
+         return 1 # Return 1 if update fails
+    fi
 
     # 言語コード取得
     local lang_code
     lang_code=$(get_language_code)
-    
-    # パッケージ処理 - 説明文も渡す
-    if ! process_package \
+
+    # ★★★ パッケージ処理と戻り値の取得 ★★★
+    local process_status=0
+    process_package \
             "$PKG_OPTIONS_PACKAGE_NAME" \
             "$BASE_NAME" \
             "$PKG_OPTIONS_CONFIRM" \
@@ -871,79 +1237,43 @@ install_package() {
             "$PKG_OPTIONS_DISABLED" \
             "$PKG_OPTIONS_TEST" \
             "$lang_code" \
-            "$PKG_OPTIONS_DESCRIPTION"; then
-        return 1
-    fi
+            "$PKG_OPTIONS_DESCRIPTION" \
+            "$PKG_OPTIONS_SILENT"
+    process_status=$? # process_package の戻り値を取得
 
-    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
-    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
-        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
-    else
-        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
-    fi
-    
-    return 0
-}
+    debug_log "DEBUG" "process_package finished for $BASE_NAME with status: $process_status"
 
-# **パッケージインストールのメイン関数**
-OK_install_package() {
-    # オプション解析
-    if ! parse_package_options "$@"; then
-        return 1
-    fi
-    
-    # インストール一覧表示モードの場合
-    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
-        check_install_list
-        return 0
-    fi
-    
-    # **ベースネームを取得**
-    local BASE_NAME
-    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
-        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
-        BASE_NAME=$(basename "$BASE_NAME" .apk)
-    fi
+    # ★★★ process_package の戻り値に基づく後処理 ★★★
+    case $process_status in
+        0) # Success (Skipped, DB failed/skipped) or handled internally
+           # No special action needed here, will return 0
+           ;;
+        1) # Error during processing
+           debug_log "ERROR" "Error occurred during package processing for $BASE_NAME."
+           return 1 # Propagate error
+           ;;
+        2) # User cancelled
+           debug_log "DEBUG" "User cancelled installation for $BASE_NAME."
+           return 2 # Propagate user cancellation
+           ;;
+        3) # New install success
+           debug_log "DEBUG" "New installation successful for $BASE_NAME. Proceeding to service configuration."
+           # サービス関連の処理 (新規インストール成功時 かつ disabled でない場合)
+           if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
+               configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
+               # configure_service の失敗は install_package 全体の失敗とはしない (ログは内部で出力)
+           else
+               debug_log "DEBUG" "Skipping service handling for $BASE_NAME due to disabled option."
+           fi
+           # Fall through to return 3
+           ;;
+        *) # Unexpected status from process_package
+           debug_log "ERROR" "Unexpected status $process_status received from process_package for $BASE_NAME."
+           return 1 # Treat unexpected as error
+           ;;
+    esac
 
-    # update オプション処理
-    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
-        debug_log "DEBUG" "Updating package lists"
-        update_package_list
-        return $?
-    fi
-
-    # パッケージマネージャー確認
-    if ! verify_package_manager; then
-        debug_log "ERROR" "Failed to verify package manager"
-        return 1
-    fi
-
-    # **パッケージリスト更新**
-    update_package_list || return 1
-
-    # 言語コード取得
-    local lang_code
-    lang_code=$(get_language_code)
-    
-    # パッケージ処理
-    if ! process_package \
-            "$PKG_OPTIONS_PACKAGE_NAME" \
-            "$BASE_NAME" \
-            "$PKG_OPTIONS_CONFIRM" \
-            "$PKG_OPTIONS_FORCE" \
-            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
-            "$PKG_OPTIONS_DISABLED" \
-            "$PKG_OPTIONS_TEST" \
-            "$lang_code"; then
-        return 1
-    fi
-
-    # サービス関連の処理（disabled オプションが有効な場合は全スキップ）
-    if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
-        configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
-    else
-        debug_log "DEBUG" "Skipping service handling for $PKG_OPTIONS_PACKAGE_NAME due to disabled option"
-    fi
-    
-    return 0
+    # ★★★ 最終的な戻り値を返す ★★★
+    # process_status が 0, 1, 2, 3 のいずれかになる想定
+    return $process_status
 }
