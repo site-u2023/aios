@@ -99,6 +99,7 @@ translate_with_google() {
         
         if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
             if echo "$response_data" | grep -q '^\s*\[\[\["'; then
+                # MODIFIED: awk script reverted to only perform basic unescaping, no extra sanitization.
                 translated_text=$(printf %s "$response_data" | awk '
                 BEGIN { out = "" }
                 /^\s*\[\[\["/ {
@@ -113,23 +114,7 @@ translate_with_google() {
                     gsub(/\\n/, "\n", out)
                     gsub(/\\r/, "", out)
                     gsub(/\\\\/, "\\", out)
-
-                    # MODIFIED: Sanitize translated text
-                    # Remove "のための翻訳 - 日本語（日本語）" and similar patterns
-                    gsub(/のための翻訳\s*-\s*[[:alpha:]]+（[[:alpha:]]+）/, "", out);
-                    gsub(/のための翻訳/, "", out);
-                    # Remove trailing "- Language (Language)" or "- Language"
-                    gsub(/-\s*[[:alpha:]]+（[[:alpha:]]+）$/, "", out);
-                    gsub(/-\s*[[:alpha:]]+$/, "", out);
-                    # Remove "Translation for ... - Language (Language)" type patterns (more generic)
-                    # Example: "Translation for luci-app-statistics - Japanese (Japanese)"
-                    gsub(/[Tt]ranslation for [^-]+-\s*[[:alpha:]]+（[[:alpha:]]+）/, "", out);
-                    gsub(/[Tt]ranslation for [^-]+-\s*[[:alpha:]]+/, "", out);
-                    gsub(/[Tt]ranslation for/, "", out);
-                    
-                    # Trim leading/trailing whitespace that might be left after sanitization
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", out);
-
+                    # Previous sanitization gsub lines have been removed.
                     print out
                     exit
                 }
@@ -148,7 +133,6 @@ translate_with_google() {
     printf ""
     return 1
 }
-
 OK_translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
