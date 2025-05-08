@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.08-05-00"
+SCRIPT_VERSION="2025.05.08-06-00"
 
 # =========================================================
 # 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
@@ -333,132 +333,96 @@ install_usb_packages() {
 }
 
 check_install_list() {
-    # Helper function to fetch remote content
+    # Helper function to fetch remote content (v16: fetch_file logic)
     fetch_content() {
-        local url_orig="$1"
-        local output_file="$2"
-        local cache_bust_param
-        local url_with_cb
-        local ret_code
-        local wget_base_cmd="wget -qO"
-
-        cache_bust_param="_cb=$(date +%s%N)" 
-        url_with_cb="${url_orig}?${cache_bust_param}"
-        
-        debug_log "DEBUG" "Fetching ${url_with_cb} to ${output_file}"
-        if $wget_base_cmd "$output_file" --timeout=30 --no-check-certificate "$url_with_cb"; then
-            if [ ! -s "$output_file" ]; then
-                debug_log "DEBUG" "Downloaded file ${output_file} is empty. URL: ${url_with_cb}"
-                return 1
-            fi
+        local _url_orig="$1"; local _output_file="$2"; local _cache_bust_param="_cb=$(date +%s%N)"; local _url_with_cb="${_url_orig}?${_cache_bust_param}"
+        if wget -qO "$_output_file" --timeout=30 --no-check-certificate "$_url_with_cb"; then
+            if [ ! -s "$_output_file" ]; then debug_log "DEBUG" "ERROR: Downloaded file %s is empty. URL: %s" "$_output_file" "$_url_with_cb"; return 1; fi
             return 0
-        else
-            ret_code=$?
-            debug_log "DEBUG" "wget failed for ${url_with_cb} (exit code: ${ret_code})"
-            return 1
-        fi
+        else local ret_code=$?; debug_log "DEBUG" "ERROR: wget failed for %s (exit code: %s)" "$_url_with_cb" "$ret_code"; return 1; fi
     }
 
-    # Helper function to extract a variable block from a Makefile
-    # (ユーザー指定の関数名と引数を維持し、ロジックを差し替え)
+    # Helper function to extract a variable block from a Makefile (v16: extract_makefile_block logic)
     extract_makefile_var() {
-        local file_path="$1"; local var_name_raw="$2"; local operator_raw="$3" # operator_raw は新しいロジックでは直接使用しない
-        local makefile_content
-        local extracted_block=""
-
-        if [ ! -f "$file_path" ] || [ ! -r "$file_path" ]; then
-            # debug_log は check_install_list の外で定義されている想定
-            debug_log "DEBUG" "extract_makefile_var: File not found or not readable: $file_path"
-            return # 標準エラーではなく、単に何も出力しないことで処理を続ける
-        fi
-        makefile_content=$(cat "$file_path")
-
-        if [ -z "$makefile_content" ] || [ -z "$var_name_raw" ]; then
-            return
-        fi
-
-        # grep -nm1 で変数定義の開始行を探す (演算子は緩やかにマッチ)
-        # operator_raw は直接使用せず、一般的な代入演算子を許容するパターンにする
-        local start_line_info=$(echo "$makefile_content" | grep -nm1 "^[[:space:]]*${var_name_raw}[[:space:]]*[:?+]?=")
-        
-        if [ -z "$start_line_info" ]; then
-            return
-        fi
-        local start_line_num=$(echo "$start_line_info" | cut -d: -f1)
-
-        # sed で複数行を結合してブロックを抽出
-        extracted_block=$(echo "$makefile_content" | tail -n "+${start_line_num}" | \
-            sed -nE \
-                -e '/^[[:space:]]*'"${var_name_raw}"'[[:space:]]*[:?+]?=/,$ {
-                    :loop
-                    /\\$/ {
-                        N
-                        s/\\\n//
-                        b loop
-                    }
-                    /^[[:space:]]*'"${var_name_raw}"'[[:space:]]*[:?+]?=/ {
-                        p
-                        q
-                    }
-                    q # マッチしなくなったら終了
-                }')
-        
-        echo "$extracted_block"
+        local _file_path="$1"; local _var_name_raw="$2"; local _operator_raw="$3"
+        local _var_name_for_regex=$(echo "$_var_name_raw" | sed 's/\./\\./g')
+        local _operator_for_regex=""
+        if [ "$_operator_raw" = "+=" ]; then _operator_for_regex='\\+[[:space:]]*=';
+        elif [ "$_operator_raw" = ":=" ]; then _operator_for_regex=':[[:space:]]*=';
+        elif [ "$_operator_raw" = "?=" ]; then _operator_for_regex='\\?[[:space:]]*=';
+        else _operator_for_regex=$(echo "$_operator_raw" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
+        local _full_regex="^[[:space:]]*${_var_name_for_regex}[[:space:]]*${_operator_for_regex}"
+        awk -v pattern="${_full_regex}" \
+        'BEGIN{state=0}{if(state==0){if($0~pattern){state=1;current_line=$0;sub(/[[:space:]]*#.*$/,"",current_line);print current_line;if(!(current_line~/\\$/)){state=0}}}else{current_line=$0;sub(/[[:space:]]*#.*$/,"",current_line);print current_line;if(!(current_line~/\\$/)){state=0}}}' \
+        "$_file_path"
     }
 
-    # Helper function to parse package names from an extracted Makefile variable block
-    # (ユーザー指定の関数名と引数を維持し、ロジックを差し替え)
+    # Helper function to parse package names from an extracted Makefile variable block (v16: parse_packages_from_extracted_block logic)
     parse_pkgs_from_var_block() {
-        local block_text="$1"; local var_to_strip_orig="$2"; local op_to_strip="$3"  
-        
-        if [ -z "$block_text" ]; then return; fi
+        local _block_text="$1"
+        local _var_to_strip_orig="$2" 
+        local _op_to_strip="$3"
+        local _first_line_processed=0
+        local _line 
+        local _processed_line 
+        local _var_esc_awk 
+        local _op_esc_awk 
+        local _var_re_str_for_awk 
+        local _processed_line_final 
 
-        # var_to_strip_orig と op_to_strip を使って、awk の sub パターンを構築
-        local var_esc_awk=$(echo "$var_to_strip_orig" | sed 's/[].[^$*]/\\&/g') # awkの正規表現用にエスケープ
-        local op_esc_awk=""
-        # operator のエスケープとパターン化
-        if [ "$op_to_strip" = "+=" ]; then op_esc_awk='\\+[[:space:]]*=';
-        elif [ "$op_to_strip" = ":=" ]; then op_esc_awk=':[[:space:]]*=';
-        elif [ "$op_to_strip" = "?=" ]; then op_esc_awk='\\?[[:space:]]*=';
-        elif [ "$op_to_strip" = "=" ]; then op_esc_awk='='; # 通常の =
-        else op_esc_awk=$(echo "$op_to_strip" | sed 's/[].[^$*+?():=|]/\\&/g'); fi # その他の演算子の場合
+        if [ -z "$_block_text" ]; then return; fi
 
-        local strip_pattern_for_awk="^[[:space:]]*${var_esc_awk}[[:space:]]*${op_esc_awk}[[:space:]]*"
+        echo "$_block_text" | while IFS= read -r _line || [ -n "$_line" ]; do
+            _processed_line="$_line"
 
-        # awk スクリプト: 最初の行 (NR==1) のみ、指定されたパターンで先頭部分を除去
-        local awk_script_remove_var_def_custom='
-        BEGIN {
-            # シェル変数 strip_pattern_for_awk_env からパターンを受け取る
-            strip_pattern = ENVIRON["strip_pattern_for_awk_env"];
-        }
-        {
-            if (NR == 1) {
-                sub(strip_pattern, "", $0);
-            }
-            print $0;
-        }
-        '
-        # strip_pattern_for_awk を環境変数経由で awk に渡す
-        echo "$block_text" | \
-        strip_pattern_for_awk_env="$strip_pattern_for_awk" awk "${awk_script_remove_var_def_custom}" | \
-        sed -e ':a' -e 'N' -e '$!ba' -e 's/\\\n[[:space:]]*/ /g' | \
-        sed -e 's/^[[:space:]]*#.*//' -e 's/[[:space:]][[:space:]]*#.*//' | \
-        sed -e 's/\$(\([a-zA-Z0-9_.-]*\))//g' | \
-        tr -s '\\' ' ' | \
-        tr -s ' \t' '\n' | \
-        sed "s/'//g" | \
-        sed 's/"//g' | \
-        sed '/=/s/=.*//' | \
-        sed '/^$/d' | \
-        sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | \
-        sed '/^$/d' | \
-        sort -u
+            _var_esc_awk=$(echo "$_var_to_strip_orig" | sed 's/\./\\./g')
+            _op_esc_awk=""
+            if [ "$_op_to_strip" = "+=" ]; then _op_esc_awk='\\+[[:space:]]*=';
+            elif [ "$_op_to_strip" = ":=" ]; then _op_esc_awk=':[[:space:]]*=';
+            elif [ "$_op_to_strip" = "?=" ]; then _op_esc_awk='\\?[[:space:]]*=';
+            else _op_esc_awk=$(echo "$_op_to_strip" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
+            _var_re_str_for_awk="^[[:space:]]*${_var_esc_awk}[[:space:]]*${_op_esc_awk}[[:space:]]*"
+
+            _processed_line=$(echo "$_processed_line" | awk \
+                -v var_re_str="$_var_re_str_for_awk" \
+                -v var_to_filter_exact="$_var_to_strip_orig" \
+                -v op_to_filter_exact="$_op_to_strip" \
+                -v first_line="$_first_line_processed" \
+                '{
+                    sub(/[[:space:]]*#.*$/, "");
+                    if (first_line == 0) { 
+                        sub(var_re_str, "");
+                    }
+                    while (match($0, /\$\([^)]*\)/)) {
+                        $0 = substr($0, 1, RSTART-1) substr($0, RSTART+RLENGTH);
+                    }
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, ""); 
+                    if (NF > 0) {
+                        for (i=1; i<=NF; i++) {
+                            current_field = $i;
+                            if (current_field == var_to_filter_exact) continue;
+                            if (current_field == op_to_filter_exact) continue; 
+                            if (current_field != "" && current_field != "\\" && current_field !~ /^(\(|\))$/ && current_field !~ /^(=|\+=|:=|\?=)$/) {
+                                print current_field;
+                            }
+                        }
+                    }
+                }')
+            
+            if [ "$_first_line_processed" -eq 0 ]; then
+                _first_line_processed=1
+            fi
+            
+            _processed_line_final=$(echo "$_processed_line" | sed 's/\\[[:space:]]*$//' | sed '/^$/d')
+
+            if [ -n "$_processed_line_final" ]; then
+                echo "$_processed_line_final"
+            fi
+        done
     }
-
-    # --- ここから check_install_list 関数の本来の処理 ---
 
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
-    debug_log "DEBUG" "Function called: check_install_list"
+    debug_log "DEBUG" "Function called: check_install_list (using v16 logic for parsing)"
 
     local pkg_extract_tmp_dir; local pkg_extract_tmp_dir_basename
     local default_pkgs_tier1a_tmp; local default_pkgs_tier1b_tmp; local default_pkgs_tier1c_tmp
@@ -468,7 +432,7 @@ check_install_list() {
     if command -v mktemp >/dev/null; then
         pkg_extract_tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "pkg_extract.XXXXXX")
     else
-        pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)" # $$ は現在のシェルPID
+        pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
         pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
         mkdir -p "$pkg_extract_tmp_dir"
     fi
@@ -478,22 +442,22 @@ check_install_list() {
     fi
     debug_log "DEBUG" "Temporary directory for default package extraction: $pkg_extract_tmp_dir"
 
-    default_pkgs_tier1a_tmp="${pkg_extract_tmp_dir}/pkgs_tier1a.txt"
-    default_pkgs_tier1b_tmp="${pkg_extract_tmp_dir}/pkgs_tier1b.txt"
-    default_pkgs_tier1c_tmp="${pkg_extract_tmp_dir}/pkgs_tier1c.txt"
-    default_pkgs_tier2_tmp="${pkg_extract_tmp_dir}/pkgs_tier2.txt"
-    default_pkgs_tier3_tmp="${pkg_extract_tmp_dir}/pkgs_tier3.txt"
-    default_pkgs_from_source_sorted_tmp="${pkg_extract_tmp_dir}/default_pkgs_source_sorted.txt" 
-    default_pkgs_combined_tmp="${pkg_extract_tmp_dir}/default_pkgs_combined.txt"
+    default_pkgs_tier1a_tmp="${pkg_extract_tmp_dir}/pkg_target_mk_basic.txt"
+    default_pkgs_tier1b_tmp="${pkg_extract_tmp_dir}/pkg_target_mk_router_additions.txt"
+    default_pkgs_tier1c_tmp="${pkg_extract_tmp_dir}/pkg_target_mk_direct.txt"
+    default_pkgs_tier2_tmp="${pkg_extract_tmp_dir}/pkg_target_specific.txt"
+    default_pkgs_tier3_tmp="${pkg_extract_tmp_dir}/pkg_device_specific.txt"
+    default_pkgs_combined_tmp="${pkg_extract_tmp_dir}/combined_for_processing.txt"
+    default_pkgs_from_source_sorted_tmp="${pkg_extract_tmp_dir}/final_extracted_sorted.txt"
 
     for tmp_f in "$default_pkgs_tier1a_tmp" "$default_pkgs_tier1b_tmp" "$default_pkgs_tier1c_tmp" \
                   "$default_pkgs_tier2_tmp" "$default_pkgs_tier3_tmp" \
                   "$default_pkgs_from_source_sorted_tmp" "$default_pkgs_combined_tmp"; do
-        true > "$tmp_f" # ファイルを空にする
+        true > "$tmp_f"
     done
 
     local raw_device_profile_name=""
-    local device_profile_name=""
+    local device_profile_name="" 
     local assumed_device_type="router" 
     local distrib_target="" 
     local distrib_release="" 
@@ -505,158 +469,124 @@ check_install_list() {
     if [ -f "/tmp/sysinfo/board_name" ] && [ -s "/tmp/sysinfo/board_name" ]; then
         raw_device_profile_name=$(cat "/tmp/sysinfo/board_name")
         debug_log "DEBUG" "Raw board_name from /tmp/sysinfo/board_name: '${raw_device_profile_name}'"
-        
         if [ -n "$raw_device_profile_name" ]; then
             device_profile_name=$(echo "$raw_device_profile_name" | sed 's/,/_/g')
             debug_log "DEBUG" "Processed DEVICE_PROFILE_NAME: '${device_profile_name}' (commas to underscores)"
         else
             debug_log "DEBUG" "CRITICAL - /tmp/sysinfo/board_name exists but is empty. Cannot determine device profile."
-            rm -rf "$pkg_extract_tmp_dir"
-            return 1
+            rm -rf "$pkg_extract_tmp_dir"; return 1
         fi
     else
         debug_log "DEBUG" "CRITICAL - /tmp/sysinfo/board_name not found or empty. Cannot determine device profile."
-        rm -rf "$pkg_extract_tmp_dir"
-        return 1
+        rm -rf "$pkg_extract_tmp_dir"; return 1
     fi
     
     if [ -f "/etc/openwrt_release" ]; then
         distrib_release=$(grep '^DISTRIB_RELEASE=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2)
         distrib_target=$(grep '^DISTRIB_TARGET=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2)
-        
         if [ -z "$distrib_release" ] || [ -z "$distrib_target" ]; then
             debug_log "DEBUG" "CRITICAL - Could not read DISTRIB_RELEASE or DISTRIB_TARGET from /etc/openwrt_release."
-            rm -rf "$pkg_extract_tmp_dir"
-            return 1
+            rm -rf "$pkg_extract_tmp_dir"; return 1
         fi
         debug_log "DEBUG" "Read from /etc/openwrt_release: DISTRIB_TARGET='$distrib_target', DISTRIB_RELEASE='$distrib_release'"
     else
         debug_log "DEBUG" "CRITICAL - /etc/openwrt_release not found. Cannot determine target and release."
-        rm -rf "$pkg_extract_tmp_dir"
-        return 1
+        rm -rf "$pkg_extract_tmp_dir"; return 1
     fi
 
-    if echo "$distrib_release" | grep -q "SNAPSHOT"; then
-        openwrt_git_branch="main"
+    if echo "$distrib_release" | grep -q "SNAPSHOT"; then openwrt_git_branch="main";
     elif echo "$distrib_release" | grep -Eq '^[0-9]+\.[0-9]+'; then
-        local major_minor_version
-        major_minor_version=$(echo "$distrib_release" | awk -F'.' '{print $1"."$2}')
-        openwrt_git_branch="openwrt-$major_minor_version"
+        local major_minor_version=$(echo "$distrib_release" | awk -F'.' '{print $1"."$2}'); openwrt_git_branch="openwrt-${major_minor_version}"
     else
         debug_log "DEBUG" "CRITICAL - DISTRIB_RELEASE ('$distrib_release') has an unrecognized format. Cannot determine git branch."
-        rm -rf "$pkg_extract_tmp_dir"
-        return 1
+        rm -rf "$pkg_extract_tmp_dir"; return 1
     fi
     debug_log "DEBUG" "Using OpenWrt Git branch: $openwrt_git_branch"
 
-    target_base=$(echo "$distrib_target" | cut -d'/' -f1)
-    image_target_suffix=$(echo "$distrib_target" | cut -d'/' -f2)
-
+    target_base=$(echo "$distrib_target" | cut -d'/' -f1); image_target_suffix=$(echo "$distrib_target" | cut -d'/' -f2)
     if [ -z "$target_base" ] || [ -z "$image_target_suffix" ] || [ "$target_base" = "$distrib_target" ]; then
         debug_log "DEBUG" "CRITICAL - Could not reliably determine target_base/image_target_suffix from DISTRIB_TARGET: '$distrib_target'."
-        rm -rf "$pkg_extract_tmp_dir" 
-        return 1
+        rm -rf "$pkg_extract_tmp_dir"; return 1
     fi
     debug_log "DEBUG" "Using target paths: target_base='$target_base', image_target_suffix='$image_target_suffix'"
 
-    local target_mk_download_path="${pkg_extract_tmp_dir}/target.mk.download"
-    local target_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${openwrt_git_branch}/include/target.mk"
     debug_log "DEBUG" "--- Tier 1: Processing include/target.mk ---"
-    if ! fetch_content "$target_mk_url" "$target_mk_download_path"; then
-        debug_log "DEBUG" "CRITICAL - Failed to download include/target.mk. Cannot proceed."
-        rm -rf "$pkg_extract_tmp_dir"
-        return 1
-    fi
-    # Tier 1a: DEFAULT_PACKAGES.basic (or DEFAULT_PACKAGES as fallback)
-    local block_content_t1a=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.basic" ":=")
-    if [ -n "$block_content_t1a" ]; then parse_pkgs_from_var_block "$block_content_t1a" "DEFAULT_PACKAGES.basic" ":=" > "$default_pkgs_tier1a_tmp"; fi
-    if [ ! -s "$default_pkgs_tier1a_tmp" ]; then
-        local block_content_t1a_fallback=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" ":=") # フォールバックも同じ演算子で試すことが多い
-        if [ -n "$block_content_t1a_fallback" ]; then parse_pkgs_from_var_block "$block_content_t1a_fallback" "DEFAULT_PACKAGES" ":=" > "$default_pkgs_tier1a_tmp"; fi
-    fi
-    if [ -s "$default_pkgs_tier1a_tmp" ]; then debug_log "DEBUG" "Parsed basic packages (Tier 1a) count: $(wc -l < "$default_pkgs_tier1a_tmp")"; else debug_log "DEBUG" "Basic packages list (Tier 1a) is empty."; fi
+    local target_mk_file="${pkg_extract_tmp_dir}/target.mk.download" 
+    local target_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${openwrt_git_branch}/include/target.mk"
+    if fetch_content "$target_mk_url" "$target_mk_file"; then 
+        debug_log "DEBUG" "Extracting DEFAULT_PACKAGES.basic from %s" "$target_mk_file"
+        local basic_block_content=$(extract_makefile_var "$target_mk_file" "DEFAULT_PACKAGES.basic" ":=") 
+        if [ -n "$basic_block_content" ]; then parse_pkgs_from_var_block "$basic_block_content" "DEFAULT_PACKAGES.basic" ":=" > "$default_pkgs_tier1a_tmp"; fi 
+        if [ ! -s "$default_pkgs_tier1a_tmp" ]; then
+            debug_log "DEBUG" "DEFAULT_PACKAGES.basic was empty/not found. Fallback: Trying DEFAULT_PACKAGES :="
+            local basic_block_content_fallback=$(extract_makefile_var "$target_mk_file" "DEFAULT_PACKAGES" ":=")
+            if [ -n "$basic_block_content_fallback" ]; then parse_pkgs_from_var_block "$basic_block_content_fallback" "DEFAULT_PACKAGES" ":=" > "$default_pkgs_tier1a_tmp"; fi
+        fi
+        if [ -s "$default_pkgs_tier1a_tmp" ]; then debug_log "DEBUG" "Parsed basic packages (Tier 1a) count: $(wc -l < "$default_pkgs_tier1a_tmp")"; else debug_log "DEBUG" "Basic packages list (Tier 1a) is empty."; fi
 
-    # Tier 1b: DEFAULT_PACKAGES.${assumed_device_type}
-    local block_content_t1b=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.${assumed_device_type}" ":=")
-    if [ -n "$block_content_t1b" ]; then parse_pkgs_from_var_block "$block_content_t1b" "DEFAULT_PACKAGES.${assumed_device_type}" ":=" > "$default_pkgs_tier1b_tmp"; fi
-    if [ -s "$default_pkgs_tier1b_tmp" ]; then debug_log "DEBUG" "Parsed ${assumed_device_type} specific additions (Tier 1b) count: $(wc -l < "$default_pkgs_tier1b_tmp")"; else debug_log "DEBUG" "Could not extract block for DEFAULT_PACKAGES.${assumed_device_type} (additions)."; fi
+        debug_log "DEBUG" "Extracting DEFAULT_PACKAGES.%s (additions) from %s" "$assumed_device_type" "$target_mk_file"
+        local router_additions_block_content=$(extract_makefile_var "$target_mk_file" "DEFAULT_PACKAGES.${assumed_device_type}" ":=")
+        if [ -n "$router_additions_block_content" ]; then parse_pkgs_from_var_block "$router_additions_block_content" "DEFAULT_PACKAGES.${assumed_device_type}" ":=" > "$default_pkgs_tier1b_tmp"; fi
+        if [ -s "$default_pkgs_tier1b_tmp" ]; then debug_log "DEBUG" "Parsed %s specific additions (Tier 1b) count: $(wc -l < "$default_pkgs_tier1b_tmp")" "$assumed_device_type"; else debug_log "DEBUG" "Could not extract block for DEFAULT_PACKAGES.%s (additions)." "$assumed_device_type"; fi
 
-    # Tier 1c: DEFAULT_PACKAGES (additive)
-    local block_content_t1c=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" "+=") # 明示的に += を探す
-    if [ -n "$block_content_t1c" ]; then parse_pkgs_from_var_block "$block_content_t1c" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier1c_tmp"; fi
-    if [ -s "$default_pkgs_tier1c_tmp" ]; then debug_log "DEBUG" "Parsed direct additions (Tier 1c) count: $(wc -l < "$default_pkgs_tier1c_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for direct DEFAULT_PACKAGES += (Tier 1c)."; fi
+        debug_log "DEBUG" "Extracting direct DEFAULT_PACKAGES += from %s" "$target_mk_file"
+        local direct_block_content=$(extract_makefile_var "$target_mk_file" "DEFAULT_PACKAGES" "+=")
+        if [ -n "$direct_block_content" ]; then parse_pkgs_from_var_block "$direct_block_content" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier1c_tmp"; fi
+        if [ -s "$default_pkgs_tier1c_tmp" ]; then debug_log "DEBUG" "Parsed direct additions (Tier 1c) count: $(wc -l < "$default_pkgs_tier1c_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for direct DEFAULT_PACKAGES += (Tier 1c)."; fi
+    else debug_log "DEBUG" "CRITICAL - Failed to process include/target.mk. Skipping Tier 1."; fi
 
-    debug_log "DEBUG" "--- Tier 2: Processing target/linux/$target_base/Makefile ---"
-    local target_specific_mk_download_path="${pkg_extract_tmp_dir}/target_${target_base}.mk.download"
+    debug_log "DEBUG" "--- Tier 2: Processing target/linux/%s/Makefile ---" "$target_base"
+    local target_specific_mk_file="${pkg_extract_tmp_dir}/target_${target_base}.mk.download" 
     local target_specific_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${openwrt_git_branch}/target/linux/${target_base}/Makefile"
     if [ -n "$target_base" ]; then
-        if ! fetch_content "$target_specific_mk_url" "$target_specific_mk_download_path"; then
-            debug_log "DEBUG" "CRITICAL - Failed to download target/linux/$target_base/Makefile. Cannot proceed."
-            rm -rf "$pkg_extract_tmp_dir"
-            return 1
-        fi
-        local block_content_t2=$(extract_makefile_var "$target_specific_mk_download_path" "DEFAULT_PACKAGES" "+=") # ここも += を期待
-        if [ -n "$block_content_t2" ]; then parse_pkgs_from_var_block "$block_content_t2" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier2_tmp"; fi
-        if [ -s "$default_pkgs_tier2_tmp" ]; then debug_log "DEBUG" "Parsed target-specific additions (Tier 2) count: $(wc -l < "$default_pkgs_tier2_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for target-specific DEFAULT_PACKAGES += (Tier 2)."; fi
-    else 
-        debug_log "DEBUG" "CRITICAL - target_base is empty. Cannot proceed with Tier 2. (Should have been caught earlier)"
-        rm -rf "$pkg_extract_tmp_dir"
-        return 1
-    fi
+        if fetch_content "$target_specific_mk_url" "$target_specific_mk_file"; then
+            debug_log "DEBUG" "Extracting DEFAULT_PACKAGES += from %s (Tier 2)" "$target_specific_mk_file"
+            local ts_block_content=$(extract_makefile_var "$target_specific_mk_file" "DEFAULT_PACKAGES" "+=")
+            if [ -n "$ts_block_content" ]; then parse_pkgs_from_var_block "$ts_block_content" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier2_tmp"; fi
+            if [ -s "$default_pkgs_tier2_tmp" ]; then debug_log "DEBUG" "Parsed target-specific additions (Tier 2) count: $(wc -l < "$default_pkgs_tier2_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for target-specific DEFAULT_PACKAGES += (Tier 2)."; fi
+        else debug_log "DEBUG" "CRITICAL - Failed to process target/linux/%s/Makefile. Skipping Tier 2." "$target_base"; fi
+    else debug_log "DEBUG" "CRITICAL - target_base is empty. Skipping Tier 2."; fi
 
-    debug_log "DEBUG" "--- Tier 3: Processing target/linux/$target_base/image/$image_target_suffix.mk for device $device_profile_name ---"
-    local device_specific_mk_download_path="${pkg_extract_tmp_dir}/image_${image_target_suffix}.mk.download"
-    local device_profile_block_tmp="${pkg_extract_tmp_dir}/device_profile_block.txt" # awkの結果をファイルに
+    debug_log "DEBUG" "--- Tier 3: Processing target/linux/%s/image/%s.mk for device %s ---" "$target_base" "$image_target_suffix" "$device_profile_name"
+    local device_specific_mk_file="${pkg_extract_tmp_dir}/image_${image_target_suffix}.mk.download" 
+    local device_profile_block_tmp="${pkg_extract_tmp_dir}/device_profile_block.txt" 
     local device_specific_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${openwrt_git_branch}/target/linux/${target_base}/image/${image_target_suffix}.mk"
-    if [ -n "$target_base" ] && [ -n "$image_target_suffix" ] && [ -n "$device_profile_name" ]; then
-        if ! fetch_content "$device_specific_mk_url" "$device_specific_mk_download_path"; then
-            debug_log "DEBUG" "CRITICAL - Failed to download image specific Makefile for Tier 3. Cannot proceed."
-            rm -rf "$pkg_extract_tmp_dir"
-            return 1
-        fi
-        # awkで define Device/... ブロックを抽出して一時ファイルに保存
-        awk -v profile_name_awk="$device_profile_name" \
-            'BEGIN{found=0; profile_regex = "^define[[:space:]]+Device/" profile_name_awk "[[:space:]]*$"}
-             $0 ~ profile_regex {found=1}
-             found {print}
-             /^[[:space:]]*endef[[:space:]]*$/ && found {found=0}' \
-            "$device_specific_mk_download_path" > "$device_profile_block_tmp"
-
-        if [ -s "$device_profile_block_tmp" ]; then
-            # 抽出された define ブロック (ファイル) から DEVICE_PACKAGES を探す
-            local block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" ":=")
-            if [ -n "$block_content_t3" ]; then
-                parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" ":=" > "$default_pkgs_tier3_tmp"
-            fi
+    if [ -n "$target_base" ] && [ -n "$image_target_suffix" ] && [ -n "$device_profile_name" ]; then 
+        if fetch_content "$device_specific_mk_url" "$device_specific_mk_file"; then
+            debug_log "DEBUG" "Extracting 'define Device/%s' block..." "$device_profile_name"
+            awk -v profile_name_awk="$device_profile_name" \
+                'BEGIN{found=0; profile_regex = "^define[[:space:]]+Device/" profile_name_awk "[[:space:]]*$"}
+                 $0 ~ profile_regex {found=1}
+                 found {print}
+                 /^[[:space:]]*endef[[:space:]]*$/ && found {found=0}' \
+                "$device_specific_mk_file" > "$device_profile_block_tmp"
             
-            if [ ! -s "$default_pkgs_tier3_tmp" ]; then # ":=" で見つからないか、パース結果が空の場合
-                block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" "+=") # "+=" で試す
-                if [ -n "$block_content_t3" ]; then
-                    parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" "+=" > "$default_pkgs_tier3_tmp"
+            if [ -s "$device_profile_block_tmp" ]; then
+                local device_pkgs_block_content=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" ":=")
+                if [ -z "$device_pkgs_block_content" ]; then device_pkgs_block_content=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" "+="); fi
+                
+                if [ -n "$device_pkgs_block_content" ]; then
+                    parse_pkgs_from_var_block "$device_pkgs_block_content" "DEVICE_PACKAGES" ":=" > "$default_pkgs_tier3_tmp"
+                    if [ ! -s "$default_pkgs_tier3_tmp" ]; then parse_pkgs_from_var_block "$device_pkgs_block_content" "DEVICE_PACKAGES" "+=" > "$default_pkgs_tier3_tmp"; fi
                 fi
-            fi
+                if [ -s "$default_pkgs_tier3_tmp" ]; then debug_log "DEBUG" "Parsed device-specific packages (Tier 3) count: $(wc -l < "$default_pkgs_tier3_tmp")"; else debug_log "DEBUG" "Could not parse DEVICE_PACKAGES for %s." "$device_profile_name"; fi
+            else debug_log "DEBUG" "Could not extract 'define Device/%s' block." "$device_profile_name"; fi
+        else debug_log "DEBUG" "CRITICAL - Failed to process image specific Makefile for Tier 3."; fi
+    else debug_log "DEBUG" "CRITICAL - target_base, image_target_suffix or device_profile_name is empty. Skipping Tier 3."; fi
 
-            if [ -s "$default_pkgs_tier3_tmp" ]; then debug_log "DEBUG" "Parsed device-specific packages (Tier 3) count: $(wc -l < "$default_pkgs_tier3_tmp")"; else debug_log "DEBUG" "Could not parse DEVICE_PACKAGES for $device_profile_name."; fi
-        else debug_log "DEBUG" "Could not extract 'define Device/$device_profile_name' block."; fi
-    else 
-        debug_log "DEBUG" "CRITICAL - Skipping Tier 3 processing due to missing critical info. (Should have been caught earlier)"
-        rm -rf "$pkg_extract_tmp_dir"
-        return 1
-    fi
-    
     debug_log "DEBUG" "--- Combining all package lists ---"
-    true > "$default_pkgs_combined_tmp" # 結合前にファイルを空にする
     for list_file in "$default_pkgs_tier1a_tmp" "$default_pkgs_tier1b_tmp" "$default_pkgs_tier1c_tmp" \
                      "$default_pkgs_tier2_tmp" "$default_pkgs_tier3_tmp"; do
         if [ -s "$list_file" ]; then cat "$list_file" >> "$default_pkgs_combined_tmp"; fi
     done
 
+    debug_log "DEBUG" "Final extracted and sorted list of default packages:" 
     if [ -s "$default_pkgs_combined_tmp" ]; then
-        sort -u "$default_pkgs_combined_tmp" | sed '/^$/d' > "$default_pkgs_from_source_sorted_tmp"
+        sort -u "$default_pkgs_combined_tmp" | sed '/^$/d' > "$default_pkgs_from_source_sorted_tmp"; 
         debug_log "DEBUG" "Default package list generated. Count: $(wc -l < "$default_pkgs_from_source_sorted_tmp")"
-    else
-        debug_log "DEBUG" "No packages found or extracted from Makefiles. Default list will be empty."
-        true > "$default_pkgs_from_source_sorted_tmp" # 空の場合もソート済みファイルは空で作成
+    else 
+        debug_log "DEBUG" "No packages found or extracted from Makefiles. Default list will be empty." 
+        true > "$default_pkgs_from_source_sorted_tmp"; 
     fi
 
     local installed_pkgs_list_tmp 
@@ -670,11 +600,10 @@ check_install_list() {
     fi
     installed_pkgs_list_tmp="${tmp_dir_base}/.current_installed_pkgs.tmp"
     
-    # PACKAGE_MANAGER は detect_and_save_package_manager() で設定されるグローバル変数と仮定
     debug_log "DEBUG" "Determining installed packages based on PACKAGE_MANAGER global variable: '$PACKAGE_MANAGER'"
     if [ -z "$PACKAGE_MANAGER" ]; then
         debug_log "DEBUG" "CRITICAL - Global variable PACKAGE_MANAGER is not set. Run detect_and_save_package_manager first."
-        rm -rf "$pkg_extract_tmp_dir" # installed_pkgs_list_tmp はまだ存在しない可能性あり
+        rm -rf "$pkg_extract_tmp_dir"
         return 1
     fi
 
@@ -685,7 +614,7 @@ check_install_list() {
             sort "/etc/apk/world" > "$installed_pkgs_list_tmp"
         else
             debug_log "DEBUG" "/etc/apk/world not found or is empty."
-            true > "$installed_pkgs_list_tmp" # 空ファイルを作成
+            true > "$installed_pkgs_list_tmp" 
         fi
     elif [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "OPKG package manager detected via PACKAGE_MANAGER. Running 'opkg list-installed'."
@@ -712,16 +641,14 @@ check_install_list() {
     else
         pkgs_only_in_installed_list=""
     fi
-    # 標準出力に差分リストを表示
     if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; else printf "(None)\n"; fi
-    
+
     local pkgs_only_in_default_source_list
     if [ -s "$default_pkgs_from_source_sorted_tmp" ]; then 
         pkgs_only_in_default_source_list=$(grep -vxFf "$installed_pkgs_list_tmp" "$default_pkgs_from_source_sorted_tmp")
     else
         pkgs_only_in_default_source_list=""
     fi
-    # 標準出力に差分リストを表示
     if [ -n "$pkgs_only_in_default_source_list" ]; then echo "$pkgs_only_in_default_source_list"; else printf "(None)\n"; fi
     
     rm -f "$installed_pkgs_list_tmp"; rm -rf "$pkg_extract_tmp_dir" 
