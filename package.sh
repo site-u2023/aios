@@ -275,14 +275,58 @@ package_samba() {
     return 0
 }
 
-package_list() {
-    check_install_list
-    
-    return 0
+# インストール後のパッケージリストを表示
+check_install_list() {
+    printf "\n%s\n" "$(color blue "Packages installed after flashing.")"
+
+    # パッケージマネージャの種類を確認
+    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
+    fi
+
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+        # opkg用の処理 - 元のロジックを維持
+        debug_log "DEBUG" "Using opkg package manager"
+        FLASH_TIME="$(awk '
+        $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
+          OLDEST=$2
+        }
+        END {
+          print OLDEST
+        }
+        ' /usr/lib/opkg/status)"
+
+        awk -v FT="$FLASH_TIME" '
+        $1 == "Package:" {
+          PKG=$2
+          USR=""
+        }
+        $1 == "Status:" && $3 ~ "user" {
+          USR=1
+        }
+        $1 == "Installed-Time:" && USR && $2 != FT {
+          print PKG
+        }
+        ' /usr/lib/opkg/status | sort
+    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+        # apk用の処理
+        debug_log "DEBUG" "Using apk package manager"
+        if [ -f /etc/apk/world ]; then
+            # /etc/apk/worldには明示的にインストールされたパッケージリスト
+            cat /etc/apk/world | sort
+        else
+            # フォールバック：インストール済みパッケージを表示
+            apk info | sort
+        fi
+    else
+        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
+    fi
+
+    return 0    
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
-install_packages_list() {
+install_packages_version() {
     # OSバージョンファイルの確認
     if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
         debug_log "DEBUG" "OS version file not found, using default package function"
@@ -356,7 +400,7 @@ package_main() {
     fi
     
     # OSバージョンに基づいたパッケージインストール
-    install_packages_by_version
+    install_packages_version
     
     # USB関連パッケージのインストール
     install_usb_packages
