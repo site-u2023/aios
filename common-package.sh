@@ -418,19 +418,21 @@ package_pre_install() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         output=$(opkg list-installed "$check_extension" 2>&1)
         if [ -n "$output" ]; then  # 出力があった場合
-            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device"
+            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device (opkg output detected)"
             return 1  # 既にインストールされている場合は終了
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # Check if package is installed by using the exit status of 'apk info'
-        # 'apk info <package>' exits with 0 if installed, non-zero otherwise.
-        if apk info "$check_extension" >/dev/null 2>&1; then
-            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device (apk info exit status 0)"
+        # 'apk info <package>' exits with 0 even if not installed on some OpenWrt SNAPSHOT versions.
+        # Therefore, we check both the exit status AND if 'apk info' produces actual package information on stdout.
+        local apk_info_output
+        apk_info_output=$(apk info "$check_extension" 2>/dev/null) # Capture stdout, stderr to /dev/null
+        local apk_info_status=$?
+
+        if [ $apk_info_status -eq 0 ] && [ -n "$apk_info_output" ]; then
+            debug_log "DEBUG" "Package \"$check_extension\" is already installed on the device (apk info exit status 0 and stdout is not empty)"
             return 1  # Already installed
         else
-            # Package is not installed, or 'apk info' command failed for other reasons.
-            # Proceed to check repository.
-            debug_log "DEBUG" "Package \"$check_extension\" not found on device by 'apk info' (exit status non-zero). Will check repository."
+            debug_log "DEBUG" "Package \"$check_extension\" not found on device by 'apk info' (exit status $apk_info_status or stdout is empty). Will check repository."
         fi
     fi
 
@@ -439,7 +441,7 @@ package_pre_install() {
 
     if [ ! -f "$package_cache" ]; then
         debug_log "DEBUG" "Package cache not found. Attempting to update."
-        update_package_list >/dev/null 2>&1
+        update_package_list >/dev/null 2>&1 # silent update
 
         # 更新後も存在しない場合は警告を出すが処理は継続
         if [ ! -f "$package_cache" ]; then
@@ -451,21 +453,28 @@ package_pre_install() {
     # パッケージキャッシュが存在する場合のみチェック
     if [ -f "$package_cache" ]; then
         # パッケージがキャッシュ内に存在するか確認
-        if grep -q "^$package_name " "$package_cache"; then
-            debug_log "DEBUG" "Package $package_name found in repository"
+        # apk searchの出力形式に合わせてgrepのパターンを調整する必要があるかもしれない
+        # 例: "package-name-version - description"
+        # まずは完全一致で試す
+        if grep -q "^${check_extension}\b" "$package_cache"; then # \b は単語境界
+            debug_log "DEBUG" "Package $check_extension found in repository cache ($package_cache)"
             return 0  # パッケージが存在するのでOK
+        elif grep -q "^${package_name}\b" "$package_cache"; then # 元の package_name でも試す (拡張子付きの場合など)
+             debug_log "DEBUG" "Package $package_name found in repository cache ($package_cache)"
+             return 0
         fi
     fi
 
     # キャッシュに存在しない場合、FEED_DIR内を探してみる
+    # .apk や .ipk ファイルが直接指定された場合
     if [ -f "$package_name" ]; then
-        debug_log "DEBUG" "Package $package_name found in FEED_DIR: $FEED_DIR"
+        debug_log "DEBUG" "Package $package_name found as a local file in current directory or FEED_DIR"
         return 0  # FEED_DIR内にパッケージが見つかったのでOK
     fi
 
-    debug_log "DEBUG" "Package $package_name not found in repository or FEED_DIR"
+    debug_log "DEBUG" "Package $check_extension (or $package_name) not found in repository cache or as a local file. Skipping installation."
     # リポジトリにもFEED_DIRにも存在しないパッケージはスキップする
-    return 2  # ★ 変更: 1から2に変更 (Not found)
+    return 2
 }
 
 # パッケージインストール前のチェック
