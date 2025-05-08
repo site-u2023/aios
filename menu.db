@@ -4,9 +4,9 @@
 MENU_INTERNET selector MENU_INTERNET
 MENU_SYSTEM selector MENU_SYSTEM
 MENU_PACKAGES selector MENU_PACKAGES
-MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
-MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
-MENU_OTHERS download "other-utilities.sh" "chmod" "load"
+# MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
+# MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
+# MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 
 [MENU_INTERNET]
 MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
