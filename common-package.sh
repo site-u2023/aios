@@ -854,6 +854,237 @@ get_package_description() {
 process_package() {
     local package_name="$1"
     local base_name="$2"
+    local confirm_install_option="$3" # 元の yn オプションの値 (install_package から渡される PKG_OPTIONS_CONFIRM)
+    local force_install="$4"
+    local skip_package_db="$5"
+    # local set_disabled="$6" # This argument is $7 in the provided code, but seems unused. Let's assume it's $6 from the original.
+    local test_mode="$7" # This would be $8 in the provided code if $6 is used. Let's stick to the provided snippet's argument order.
+    local lang_code="$8" # $9 in provided
+    local description="$9" # ${10} in provided (but shell uses $N for N < 10, then ${N})
+    local silent_mode="${10}" # ${11} in provided
+
+    # --- PACKAGE_INSTALL_MODE による確認処理の変更 ---
+    # PACKAGE_INSTALL_MODE が未定義の場合は "manual" として扱う (安全のため)
+    local current_install_mode="${PACKAGE_INSTALL_MODE:-manual}"
+    local actual_confirm_install="$confirm_install_option" # デフォルトは渡されたオプション値
+
+    if [ "$current_install_mode" = "auto" ]; then
+        debug_log "DEBUG" "process_package: PACKAGE_INSTALL_MODE is 'auto'. Overriding confirm_install to 'no'."
+        actual_confirm_install="no" # 自動モードの場合は 'yn' オプションを強制的に 'no' (確認なし) にする
+    fi
+    # --- ここまで追加/変更 ---
+
+    # 言語パッケージか通常パッケージかを判別
+    case "$base_name" in
+        luci-i18n-*)
+            # 言語パッケージの場合、package_name に言語コードを追加
+            package_name="${base_name}-${lang_code}"
+            debug_log "DEBUG" "Language package detected, using: $package_name"
+            ;;
+    esac
+
+    # パッケージの事前チェック (test_mode でなければ実行)
+    local pre_install_status=0 # Default to 0 (Ready to install) if test_mode=yes
+    if [ "$test_mode" != "yes" ]; then
+        package_pre_install "$package_name"
+        pre_install_status=$? # 戻り値を取得
+
+        case $pre_install_status in
+            0) # Ready to install
+                debug_log "DEBUG" "Package $package_name is ready for installation."
+                # Proceed
+                ;;
+            1) # Already installed
+                debug_log "DEBUG" "Package $package_name is already installed. Skipping."
+                return 0 # Skip as success
+                ;;
+            2) # Not found
+                debug_log "DEBUG" "Package $package_name not found, skipping installation."
+                return 0 # Skip as success (as per requirement)
+                ;;
+            *) # Unexpected status
+                debug_log "WARNING" "Unexpected status $pre_install_status from package_pre_install for $package_name."
+                return 1 # Treat unexpected status as error
+                ;;
+        esac
+    else
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks for $package_name"
+    fi
+
+    # YN確認 (オプションで有効時のみ、かつ silent モードでない場合)
+    # --- 変更: confirm_install_option の代わりに actual_confirm_install を使用 ---
+    if [ "$actual_confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
+        local display_name
+        display_name=$(basename "$package_name")
+        display_name=${display_name%.*}
+
+        debug_log "DEBUG" "Confirming installation for display name: $display_name"
+
+        # 説明文取得 (引数優先、なければリポジトリから)
+        if [ -z "$description" ]; then
+            description=$(get_package_description "$package_name") # この関数は既存と仮定
+            debug_log "DEBUG" "Using repository description: $description"
+        else
+            debug_log "DEBUG" "Using provided description: $description"
+        fi
+
+        local colored_name
+        colored_name=$(color blue "$display_name") # この関数は既存と仮定
+
+        local confirm_result=0
+        if [ -n "$description" ]; then
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$description"; then # confirm関数は既存と仮定
+                confirm_result=1
+            fi
+        else
+            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then # confirm関数は既存と仮定
+                confirm_result=1
+            fi
+        fi
+
+        if [ $confirm_result -ne 0 ]; then
+            debug_log "DEBUG" "User declined installation of $display_name"
+            return 2 # Return 2 for user cancellation
+        fi
+    elif [ "$actual_confirm_install" = "yes" ] && [ "$silent_mode" = "yes" ]; then
+        # confirm_install_option が 'yes' で、かつ silent モードの場合
+        debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name (original yn was 'yes')"
+    elif [ "$confirm_install_option" = "yes" ] && [ "$current_install_mode" = "auto" ]; then
+        # confirm_install_option が 'yes' で、かつ自動モードの場合 (actual_confirm_install は 'no' になっている)
+        debug_log "DEBUG" "Auto mode: Confirmation for $package_name skipped due to PACKAGE_INSTALL_MODE=auto (original yn was 'yes')."
+    fi
+    # --- ここまで変更 ---
+
+    # パッケージのインストール
+    if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then # install_normal_package は既存と仮定
+        debug_log "ERROR" "Failed to install package: $package_name"
+        return 1 # Return 1 on installation failure
+    fi
+
+    # ローカルパッケージDBの適用 (インストール成功後、かつ skip_package_db でない場合)
+    if [ "$skip_package_db" != "yes" ]; then
+        if ! local_package_db "$base_name"; then # local_package_db は既存と仮定
+            debug_log "WARNING" "local_package_db application failed or skipped for $base_name. Continuing..."
+            return 0
+        else
+             debug_log "DEBUG" "local_package_db applied successfully for $base_name"
+        fi
+    else
+        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
+    fi
+
+    debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
+    return 3 # Return 3 for new install success
+}
+
+# **パッケージインストールのメイン関数**
+# Returns:
+#   0: Success (Already installed / Not found / User declined / DB apply skipped/failed)
+#   1: Error (Prerequisite failed, Installation failed)
+#   2: User cancelled ('yn' prompt declined)
+#   3: New install success (Package installed, DB applied, Service configured/skipped)
+install_package() {
+    # オプション解析
+    if ! parse_package_options "$@"; then # parse_package_options は既存と仮定
+        debug_log "ERROR" "Failed to parse package options."
+        return 1 # Return 1 on option parsing failure
+    fi
+
+    # インストール一覧表示モード
+    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
+        if [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
+            check_install_list # check_install_list は既存と仮定
+        fi
+        return 0 # list is considered a success
+    fi
+
+    # ベースネームを取得
+    local BASE_NAME="" # Initialize BASE_NAME
+    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
+        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
+        BASE_NAME=$(basename "$BASE_NAME" .apk)
+    fi
+
+    # update オプション処理
+    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
+        debug_log "DEBUG" "Executing package list update"
+        update_package_list "$PKG_OPTIONS_SILENT" # update_package_list は既存と仮定
+        return $?
+    fi
+
+    # パッケージマネージャー確認
+    if ! verify_package_manager; then # verify_package_manager は既存と仮定
+        debug_log "ERROR" "Failed to verify package manager."
+        return 1 # Return 1 if verification fails
+    fi
+
+    # パッケージリスト更新 (エラー時は 1 を返す)
+    if ! update_package_list "$PKG_OPTIONS_SILENT"; then # update_package_list は既存と仮定
+         debug_log "ERROR" "Failed to update package list."
+         return 1 # Return 1 if update fails
+    fi
+
+    # 言語コード取得
+    local lang_code
+    lang_code=$(get_language_code) # get_language_code は既存と仮定
+
+    # パッケージ処理と戻り値の取得
+    local process_status=0
+    # --- PKG_OPTIONS_CONFIRM をそのまま process_package に渡す ---
+    # process_package 内部で PACKAGE_INSTALL_MODE を見て最終的な確認有無を決定する
+    process_package \
+            "$PKG_OPTIONS_PACKAGE_NAME" \
+            "$BASE_NAME" \
+            "$PKG_OPTIONS_CONFIRM" \
+            "$PKG_OPTIONS_FORCE" \
+            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
+            "$PKG_OPTIONS_DISABLED" \
+            "$PKG_OPTIONS_TEST" \
+            "$lang_code" \
+            "$PKG_OPTIONS_DESCRIPTION" \
+            "$PKG_OPTIONS_SILENT"
+    process_status=$? # process_package の戻り値を取得
+
+    debug_log "DEBUG" "process_package finished for $BASE_NAME with status: $process_status"
+
+    # process_package の戻り値に基づく後処理
+    case $process_status in
+        0) # Success (Skipped, DB failed/skipped) or handled internally
+           ;;
+        1) # Error during processing
+           debug_log "ERROR" "Error occurred during package processing for $BASE_NAME."
+           return 1 # Propagate error
+           ;;
+        2) # User cancelled
+           debug_log "DEBUG" "User cancelled installation for $BASE_NAME."
+           return 2 # Propagate user cancellation
+           ;;
+        3) # New install success
+           debug_log "DEBUG" "New installation successful for $BASE_NAME. Proceeding to service configuration."
+           if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
+               configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME" # configure_service は既存と仮定
+           else
+               debug_log "DEBUG" "Skipping service handling for $BASE_NAME due to disabled option."
+           fi
+           ;;
+        *) # Unexpected status from process_package
+           debug_log "ERROR" "Unexpected status $process_status received from process_package for $BASE_NAME."
+           return 1 # Treat unexpected as error
+           ;;
+    esac
+
+    return $process_status
+}
+
+# パッケージ処理メイン部分
+# Returns:
+#   0: Success (Already installed / Not found / User declined non-critical step)
+#   1: Error (Installation failed, local_package_db failed, etc.)
+#   2: User cancelled (Declined 'yn' prompt)
+#   3: New install success (Package installed and local_package_db applied successfully)
+OK_process_package() {
+    local package_name="$1"
+    local base_name="$2"
     local confirm_install="$3"
     local force_install="$4"
     local skip_package_db="$5"
@@ -972,7 +1203,7 @@ process_package() {
 #   1: Error (Prerequisite failed, Installation failed)
 #   2: User cancelled ('yn' prompt declined)
 #   3: New install success (Package installed, DB applied, Service configured/skipped)
-install_package() {
+OK_install_package() {
     # オプション解析
     if ! parse_package_options "$@"; then
         debug_log "ERROR" "Failed to parse package options." # Added error log
