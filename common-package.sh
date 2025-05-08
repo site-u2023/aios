@@ -121,56 +121,6 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #   1: エラー発生
 #########################################################################
 
-# インストール後のパッケージリストを表示
-check_install_list() {
-    printf "\n%s\n" "$(color blue "Packages installed after flashing.")"
-
-    # パッケージマネージャの種類を確認
-    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
-    fi
-
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # opkg用の処理 - 元のロジックを維持
-        debug_log "DEBUG" "Using opkg package manager"
-        FLASH_TIME="$(awk '
-        $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
-          OLDEST=$2
-        }
-        END {
-          print OLDEST
-        }
-        ' /usr/lib/opkg/status)"
-
-        awk -v FT="$FLASH_TIME" '
-        $1 == "Package:" {
-          PKG=$2
-          USR=""
-        }
-        $1 == "Status:" && $3 ~ "user" {
-          USR=1
-        }
-        $1 == "Installed-Time:" && USR && $2 != FT {
-          print PKG
-        }
-        ' /usr/lib/opkg/status | sort
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # apk用の処理
-        debug_log "DEBUG" "Using apk package manager"
-        if [ -f /etc/apk/world ]; then
-            # /etc/apk/worldには明示的にインストールされたパッケージリスト
-            cat /etc/apk/world | sort
-        else
-            # フォールバック：インストール済みパッケージを表示
-            apk info | sort
-        fi
-    else
-        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
-    fi
-
-    return 0    
-}
-
 # パッケージリストの更新
 update_package_list() {
     local silent_mode="$1"  # silentモードパラメータを追加
