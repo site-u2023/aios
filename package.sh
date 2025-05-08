@@ -424,6 +424,196 @@ get_installed_packages_opkg() {
     ' /usr/lib/opkg/status | sort
 }
 
+# Helper function to fetch a file using wget
+# This function is part of the v16 logic and is a dependency for
+# generate_default_package_list_from_source.
+# It should be defined before generate_default_package_list_from_source.
+fetch_file() {
+    local _url_orig="$1"         # The original URL to fetch
+    local _output_file="$2"      # The file path to save the downloaded content
+    local _cache_bust_param    # Cache-busting parameter
+    local _url_with_cb         # URL with cache-busting parameter
+    local ret_code             # Stores the return code of wget
+
+    _cache_bust_param="_cb=$(date +%s)" # Simple cache buster using current timestamp
+    _url_with_cb="${_url_orig}?${_cache_bust_param}"
+
+    # debug_log "DEBUG" "Downloading $_url_with_cb to $_output_file" # Verbose logging
+    # ユーザー指示: OpenWrtデフォルトパッケージのみ利用 (wget)
+    # ユーザー指示: 元ソース状態厳守 (wgetオプション)
+    if ${BASE_WGET:-wget --no-check-certificate -q} -O "$_output_file" --timeout=30 "$_url_with_cb"; then
+        if [ ! -s "$_output_file" ]; then # Check if the downloaded file is empty
+            debug_log "ERROR" "Downloaded file '$_output_file' is empty. URL: '$_url_with_cb'"
+            return 1 # Failure
+        fi
+        # debug_log "DEBUG" "Successfully downloaded '$_url_orig'." # Verbose logging
+        return 0 # Success
+    else
+        ret_code=$?
+        debug_log "ERROR" "wget failed for '$_url_with_cb' (exit code: $ret_code)"
+        return $ret_code # Failure, return wget's exit code
+    fi
+}
+
+# Helper function to extract a multi-line Makefile variable block.
+# This function is part of the v16 logic and is a dependency for
+# generate_default_package_list_from_source.
+# It should be defined before generate_default_package_list_from_source.
+extract_makefile_block() {
+    local _file_path="$1"        # Path to the Makefile
+    local _var_name_raw="$2"     # Raw variable name (e.g., "DEFAULT_PACKAGES.basic")
+    local _operator_raw="$3"     # Raw operator (e.g., ":=", "+=")
+    local _var_name_for_regex  # Variable name escaped for regex
+    local _operator_for_regex  # Operator escaped for regex
+    local _full_regex          # Full regex to find the start of the block
+    
+    # Escape dots in variable name for regex (e.g., "DEFAULT_PACKAGES.basic" -> "DEFAULT_PACKAGES\.basic")
+    _var_name_for_regex=$(echo "$_var_name_raw" | sed 's/\./\\./g')
+    
+    # Prepare operator for regex, allowing optional spaces around operator characters
+    # This logic is from v16 and should be robust.
+    _operator_for_regex=""
+    if [ "$_operator_raw" = "+=" ]; then _operator_for_regex='\\+[[:space:]]*=';
+    elif [ "$_operator_raw" = ":=" ]; then _operator_for_regex=':[[:space:]]*=';
+    elif [ "$_operator_raw" = "?=" ]; then _operator_for_regex='\\?[[:space:]]*='; # ? needs shell escape for \? then regex escape for \?
+    else
+        # Generic escape for other potential operators, though less common for package lists
+        _operator_for_regex=$(echo "$_operator_raw" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g')
+    fi
+    
+    # Construct the full regex pattern to find the start of the block
+    # Looks for: optional_spaces VAR optional_spaces OP
+    _full_regex="^[[:space:]]*${_var_name_for_regex}[[:space:]]*${_operator_for_regex}"
+
+    # AWK script to find and print the block:
+    # state 0: searching for the start of the block
+    # state 1: in the block, printing lines until one does not end with '\' (line continuation)
+    awk -v pattern="${_full_regex}" '
+    BEGIN {
+        state = 0; # 0 = searching_for_start, 1 = in_block
+    }
+    {
+        if (state == 0) {
+            if ($0 ~ pattern) { # If current line matches the start pattern
+                state = 1;
+                current_line = $0;
+                # Remove EOL comments (anything after #) before printing
+                sub(/[[:space:]]*#.*$/, "", current_line);
+                print current_line;
+                # If this starting line does not end with a backslash, the block ends here
+                if (!(current_line ~ /\\$/)) {
+                    state = 0; # Reset state, block was a single line
+                }
+            }
+        } else { # state == 1 (already in_block)
+            current_line = $0;
+            sub(/[[:space:]]*#.*$/, "", current_line); # Remove EOL comments
+            print current_line;
+            # If this continuation line does not end with a backslash, the block ends here
+            if (!(current_line ~ /\\$/)) {
+                state = 0; # Reset state
+            }
+        }
+     }' "$_file_path"
+}
+
+# Helper function to parse packages from an already extracted Makefile block.
+# This function is part of the v16 logic and is a dependency for
+# generate_default_package_list_from_source.
+# It should be defined before generate_default_package_list_from_source.
+parse_packages_from_extracted_block() {
+    local _block_text="$1"          # The multi-line block text from extract_makefile_block
+    local _var_to_strip_orig="$2"   # Original variable name to strip (e.g., "DEFAULT_PACKAGES.basic")
+    local _op_to_strip="$3"         # Original operator to strip (e.g., ":=")
+    local _first_line_processed=0   # Flag to track if the first line of the block has been processed
+
+    if [ -z "$_block_text" ]; then
+        return # Nothing to parse
+    fi
+
+    # Process the block text line by line using a while loop
+    echo "$_block_text" | while IFS= read -r _line || [ -n "$_line" ]; do # POSIX compliant read loop
+        local _processed_line # Stores the line after processing
+        _processed_line="$_line"
+
+        # Prepare awk-safe versions of the variable and operator for regex stripping
+        local _var_esc_awk # Variable escaped for awk regex
+        _var_esc_awk=$(echo "$_var_to_strip_orig" | sed 's/\./\\./g')
+        local _op_esc_awk # Operator escaped for awk regex
+        if [ "$_op_to_strip" = "+=" ]; then _op_esc_awk='\\+[[:space:]]*=';
+        elif [ "$_op_to_strip" = ":=" ]; then _op_esc_awk=':[[:space:]]*=';
+        elif [ "$_op_to_strip" = "?=" ]; then _op_esc_awk='\\?[[:space:]]*=';
+        else _op_esc_awk=$(echo "$_op_to_strip" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
+        
+        # Regex to match "VAR OP " at the beginning of the first line
+        local _var_re_str_for_awk="^[[:space:]]*${_var_esc_awk}[[:space:]]*${_op_esc_awk}[[:space:]]*"
+
+        # AWK script to clean up the line and extract package names
+        _processed_line=$(echo "$_processed_line" | awk \
+            -v var_re_str="$_var_re_str_for_awk" \
+            -v var_to_filter_exact="$_var_to_strip_orig" \
+            -v op_to_filter_exact="$_op_to_strip" \
+            -v is_first_line_for_awk="$_first_line_processed" \
+            '{
+                # Remove EOL comments first from the whole line (robustly handles spaces before #)
+                sub(/[[:space:]]*#.*$/, "");
+
+                # On the first line of the block, remove the "VAR OP " part
+                if (is_first_line_for_awk == 0) { 
+                    sub(var_re_str, ""); 
+                }
+                
+                # Remove all Makefile $(...) variable expansions iteratively
+                while (match($0, /\$\([^)]*\)/)) {
+                    $0 = substr($0, 1, RSTART-1) substr($0, RSTART+RLENGTH);
+                }
+
+                # Trim leading/trailing whitespace from the processed line
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); 
+
+                # Iterate over fields (package names) and print valid ones
+                if (NF > 0) { # If there are any fields left
+                    for (i=1; i<=NF; i++) {
+                        current_field = $i;
+                        
+                        # Filter out the variable name itself or the operator if they appear as fields
+                        if (current_field == var_to_filter_exact) continue;
+                        
+                        # Prepare operator for exact match filtering (remove spaces for comparison if needed)
+                        # This handles cases like " + = " being passed as op_to_filter_exact
+                        current_op_no_space_for_awk = op_to_filter_exact; 
+                        gsub(/[[:space:]]/, "", current_op_no_space_for_awk);
+                        current_field_no_space_for_awk = current_field; 
+                        gsub(/[[:space:]]/, "", current_field_no_space_for_awk);
+                        if (current_op_no_space_for_awk != "" && current_field_no_space_for_awk == current_op_no_space_for_awk) continue;
+
+                        # Filter out common makefile elements that are not package names
+                        if (current_field != "" && \
+                            current_field != "\\" && \
+                            current_field !~ /^(\(|\))$/ && \
+                            current_field !~ /^(=|\+=|:=|\?=)$/ && \
+                            current_field !~ /^\$\(/ ) { # Also filter incomplete $(vars
+                            print current_field;
+                        }
+                    }
+                }
+            }')
+        
+        # Mark first line as processed for subsequent iterations (if block is multi-line)
+        if [ "$_first_line_processed" -eq 0 ]; then
+            _first_line_processed=1
+        fi
+        
+        # Final cleanup: remove trailing backslash (line continuation) and any resulting empty lines
+        local _processed_line_final
+        _processed_line_final=$(echo "$_processed_line" | sed 's/\\[[:space:]]*$//' | sed '/^$/d')
+
+        if [ -n "$_processed_line_final" ]; then
+            echo "$_processed_line_final"
+        fi
+    done
+}
+
 # Dependencies assumed to be defined elsewhere in the script:
 # fetch_file()
 # extract_makefile_block()
