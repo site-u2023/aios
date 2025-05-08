@@ -300,7 +300,7 @@ install_usb_packages() {
 }
 
 # インストール後のパッケージリストを表示
-check_install_list() {
+ok_check_install_list() {
     printf "\n%s\n" "$(color blue "Packages installed after flashing.")"
 
     # パッケージマネージャの種類を確認
