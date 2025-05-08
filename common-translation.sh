@@ -54,7 +54,116 @@ urlencode() {
     printf "%s\n" "$encoded"
 }
 
+# @FUNCTION: translate_with_google
+# @DESCRIPTION: Translates text using Google Translate API.
+# @PARAM: $1 - source_text (string)
+# @PARAM: $2 - target_lang_code (string)
+# @PARAM: $3 - [optional] source_lang_code (string) - Defaults to DEFAULT_LANGUAGE if not provided.
+# @STDOUT: Translated text.
+# @RETURN: 0 on success, 1 on failure.
 translate_with_google() {
+    local source_text="$1"
+    local target_lang_code="$2"
+    local source_lang="${3:-$DEFAULT_LANGUAGE}" # 第3引数があればそれを使い、なければDEFAULT_LANGUAGE
+
+    # ... (以降の処理はほぼ同じだが、source_lang 変数を API URL に使用する) ...
+
+    local ip_type_file="${CACHE_DIR}/ip_type.ch"
+    local wget_options=""
+    local retry_count=0
+    local api_url=""
+    local translated_text=""
+    local wget_exit_code=0
+    local response_data=""
+
+    mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
+
+    if [ ! -f "$ip_type_file" ]; then
+        debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch not found)" >&2
+        return 1
+    fi
+    wget_options=$(cat "$ip_type_file" 2>/dev/null)
+    if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
+        debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch is unknown or empty)" >&2
+        return 1
+    fi
+
+    local encoded_text
+    encoded_text=$(urlencode "$source_text")
+
+    if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "translate_with_google: Source ('$source_lang') or target ('$target_lang_code') language code is empty."
+        return 1
+    fi
+    api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
+    debug_log "DEBUG" "translate_with_google: API URL: $api_url" # API URLをデバッグログに出力
+
+    while [ $retry_count -lt "$API_MAX_RETRIES" ]; do
+        response_data=""
+        # wget の出力を response_data に確実に代入し、エラー出力は抑制しない（デバッグのため）
+        response_data=$(wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O - --user-agent="Mozilla/5.0" "$api_url" 2>&1)
+        wget_exit_code=$?
+
+        # wget の終了コードとレスポンス内容をデバッグ
+        debug_log "DEBUG" "translate_with_google: wget exit_code=$wget_exit_code, response_data (first 100 chars)='$(echo "$response_data" | head -c 100)'"
+
+        if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
+            # Google Translate の成功レスポンスは通常 JSON লাইক配列で始まる
+            if echo "$response_data" | grep -q '^\s*\[\[\["'; then
+                # 以前のawk処理で翻訳テキストを抽出
+                translated_text=$(printf "%s" "$response_data" | awk '
+                BEGIN { out = "" }
+                /^\s*\[\[\["/ {
+                    sub(/^\s*\[\[\["/, ""); # 先頭の [[[ を除去
+                    # 最初の翻訳結果だけを取得 (単純化のため)
+                    if (match($0, /"[^"]*"/)) {
+                         out = substr($0, RSTART + 1, RLENGTH - 2);
+                         # 特殊文字のデコード処理 (必要に応じて追加・修正)
+                         gsub(/\\u003d/, "=", out);
+                         gsub(/\\u003c/, "<", out);
+                         gsub(/\\u003e/, ">", out);
+                         gsub(/\\u0026/, "&", out);
+                         gsub(/\\"/, "\"", out);
+                         gsub(/\\n/, "\n", out); # \n を実際の改行に
+                         gsub(/\\r/, "", out);
+                         gsub(/\\\\/, "\\", out);
+                         print out;
+                         exit;
+                    }
+                }
+                END { if (out == "") print "" } # マッチしなかった場合は空を出力
+                ')
+                
+                if [ -n "$translated_text" ]; then
+                    printf "%s\n" "$translated_text" # 最後の改行は呼び出し側でトリムされることを想定
+                    return 0 # Success
+                else
+                    debug_log "DEBUG" "translate_with_google: Failed to parse translation from response: $response_data"
+                fi
+            else
+                debug_log "DEBUG" "translate_with_google: Response does not look like a valid Google Translate API success response. Response: $response_data"
+            fi
+        else
+            if [ "$wget_exit_code" -ne 0 ]; then
+                debug_log "DEBUG" "translate_with_google: wget failed with exit code $wget_exit_code. Response: $response_data"
+            elif [ -z "$response_data" ]; then
+                debug_log "DEBUG" "translate_with_google: wget succeeded (code 0) but response data is empty!"
+            fi
+        fi
+
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt "$API_MAX_RETRIES" ]; then
+            debug_log "DEBUG" "translate_with_google: Retrying in 1 second..."
+            sleep 1
+        fi
+    done
+
+    debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' from '$source_lang' to '$target_lang_code' after $API_MAX_RETRIES attempts."
+    printf "" # Output empty string on failure
+    return 1 # Failure
+}
+
+OK_translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
     local source_lang="$DEFAULT_LANGUAGE" # Use the global default language
