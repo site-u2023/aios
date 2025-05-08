@@ -747,11 +747,8 @@ get_package_description() {
     local package_cache="${CACHE_DIR}/package_list.ch" # For opkg
 
     if [ -z "$package_name" ]; then
-        # debug_log "ERROR" "get_package_description: package_name is empty."
         printf "\n"; return 0;
     fi
-
-    # debug_log "DEBUG" "get_package_description: For package: '$package_name'"
 
     # 1. Get original description
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
@@ -777,10 +774,8 @@ get_package_description() {
                 fi
             fi
         fi
-        # [ -z "$original_description" ] && debug_log "DEBUG" "get_package_description (opkg): No desc."
 
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # debug_log "DEBUG" "get_package_description: Using apk for package '$package_name'."
         local apk_info_output
         apk_info_output=$(apk info "$package_name" 2>/dev/null)
         local apk_info_status=$?
@@ -814,29 +809,23 @@ get_package_description() {
                 }
             ')
         fi
-        # [ -z "$original_description" ] && debug_log "DEBUG" "get_package_description (apk): No desc (status: $apk_info_status). Output: $apk_info_output"
     else
-        # debug_log "ERROR" "get_package_description: Unknown PM: '$PACKAGE_MANAGER'"
         printf "\n"; return 0;
     fi
 
     if [ -n "$original_description" ]; then
         original_description=$(echo "$original_description" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\\n/\n/g' -e $'s/\r//g')
-        # debug_log "DEBUG" "get_package_description: Original desc (processed): '$(echo "$original_description" | head -c 70)...'"
     else
-        # debug_log "DEBUG" "get_package_description: No original desc found for '$package_name'."
         printf "\n"; return 0;
     fi
     
     final_description_to_output="$original_description"
 
     if [ -f "${CACHE_DIR}/message.ch" ]; then current_lang_code=$(cat "${CACHE_DIR}/message.ch"); else current_lang_code="$DEFAULT_LANGUAGE"; fi
-    # debug_log "DEBUG" "get_package_description: UI lang: '$current_lang_code', Default: '$DEFAULT_LANGUAGE'"
 
     # MODIFIED: Translation marker logic completely removed.
     if [ "$current_lang_code" != "$DEFAULT_LANGUAGE" ]; then
         if type translate_package_description >/dev/null 2>&1; then
-            # debug_log "INFO" "get_package_description: Translating..."
             local translated_output_from_func
             translated_output_from_func=$(translate_package_description "$original_description" "$current_lang_code" "$DEFAULT_LANGUAGE")
             local translate_call_status=$?
@@ -848,15 +837,8 @@ get_package_description() {
                [ "$translated_output_trimmed" != "$original_description" ] && \
                [ "$translated_output_from_func" != "$original_description" ]; then
                 final_description_to_output="$translated_output_trimmed"
-                # debug_log "INFO" "get_package_description: Translated successfully. Output will be translated text without marker."
-            # else
-                # debug_log for why translation wasn't used (or was same as original)
             fi
-        # else
-            # debug_log "WARN" "get_package_description: translate_package_description func not found."
         fi
-    # else
-        # debug_log "DEBUG" "get_package_description: UI lang is default. No translation needed."
     fi
     
     if [ -n "$final_description_to_output" ]; then printf "%s\n" "$final_description_to_output"; else printf "\n"; fi
@@ -875,7 +857,6 @@ process_package() {
     local confirm_install="$3"
     local force_install="$4"
     local skip_package_db="$5"
-    # local set_disabled="$6" # This variable is currently unused within this function
     local test_mode="$7"
     local lang_code="$8"
     local description="$9"
@@ -1084,7 +1065,5 @@ install_package() {
            ;;
     esac
 
-    # ★★★ 最終的な戻り値を返す ★★★
-    # process_status が 0, 1, 2, 3 のいずれかになる想定
     return $process_status
 }
