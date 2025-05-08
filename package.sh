@@ -664,8 +664,8 @@ check_install_list() {
     fi
     debug_log "DEBUG" "Installed packages list stored in '$installed_pkgs_list_tmp'."
     
-    printf "\n--- Package Differences ---\n"
-    printf "\nPackages ONLY in %s (User Installed/Explicitly Kept):\n" "$source_of_installed_pkgs_msg"
+    # printf "\n--- Package Differences ---\n"
+    # printf "\nPackages ONLY in %s (User Installed/Explicitly Kept):\n" "$source_of_installed_pkgs_msg"
     local pkgs_only_in_installed_list
     if [ -s "$installed_pkgs_list_tmp" ]; then 
         pkgs_only_in_installed_list=$(grep -vxFf "$default_pkgs_from_source_sorted_tmp" "$installed_pkgs_list_tmp")
@@ -674,7 +674,7 @@ check_install_list() {
     fi
     if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; else printf "(None)\n"; fi
 
-    printf "\nPackages ONLY in Default OpenWrt Source List (Potentially Missing from %s):\n" "$source_of_installed_pkgs_msg"
+    # printf "\nPackages ONLY in Default OpenWrt Source List (Potentially Missing from %s):\n" "$source_of_installed_pkgs_msg"
     local pkgs_only_in_default_source_list
     if [ -s "$default_pkgs_from_source_sorted_tmp" ]; then 
         pkgs_only_in_default_source_list=$(grep -vxFf "$installed_pkgs_list_tmp" "$default_pkgs_from_source_sorted_tmp")
