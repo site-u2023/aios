@@ -367,8 +367,9 @@ check_install_list() {
         local extracted_block=""
 
         if [ ! -f "$file_path" ] || [ ! -r "$file_path" ]; then
+            # debug_log は check_install_list の外で定義されている想定
             debug_log "DEBUG" "extract_makefile_var: File not found or not readable: $file_path"
-            return
+            return # 標準エラーではなく、単に何も出力しないことで処理を続ける
         fi
         makefile_content=$(cat "$file_path")
 
@@ -399,7 +400,7 @@ check_install_list() {
                         p
                         q
                     }
-                    q
+                    q # マッチしなくなったら終了
                 }')
         
         echo "$extracted_block"
@@ -413,20 +414,21 @@ check_install_list() {
         if [ -z "$block_text" ]; then return; fi
 
         # var_to_strip_orig と op_to_strip を使って、awk の sub パターンを構築
-        local var_esc_awk=$(echo "$var_to_strip_orig" | sed 's/[].[^$*]/\\&/g') # より安全なエスケープ
+        local var_esc_awk=$(echo "$var_to_strip_orig" | sed 's/[].[^$*]/\\&/g') # awkの正規表現用にエスケープ
         local op_esc_awk=""
-        # operator_raw のエスケープとパターン化 (元のユーザー提供コードから引用・調整)
+        # operator のエスケープとパターン化
         if [ "$op_to_strip" = "+=" ]; then op_esc_awk='\\+[[:space:]]*=';
         elif [ "$op_to_strip" = ":=" ]; then op_esc_awk=':[[:space:]]*=';
         elif [ "$op_to_strip" = "?=" ]; then op_esc_awk='\\?[[:space:]]*=';
         elif [ "$op_to_strip" = "=" ]; then op_esc_awk='='; # 通常の =
-        else op_esc_awk=$(echo "$op_to_strip" | sed 's/[].[^$*+?():=|]/\\&/g'); fi # より汎用的なエスケープ
+        else op_esc_awk=$(echo "$op_to_strip" | sed 's/[].[^$*+?():=|]/\\&/g'); fi # その他の演算子の場合
 
         local strip_pattern_for_awk="^[[:space:]]*${var_esc_awk}[[:space:]]*${op_esc_awk}[[:space:]]*"
 
         # awk スクリプト: 最初の行 (NR==1) のみ、指定されたパターンで先頭部分を除去
         local awk_script_remove_var_def_custom='
         BEGIN {
+            # シェル変数 strip_pattern_for_awk_env からパターンを受け取る
             strip_pattern = ENVIRON["strip_pattern_for_awk_env"];
         }
         {
@@ -453,6 +455,8 @@ check_install_list() {
         sort -u
     }
 
+    # --- ここから check_install_list 関数の本来の処理 ---
+
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
     debug_log "DEBUG" "Function called: check_install_list"
 
@@ -464,7 +468,7 @@ check_install_list() {
     if command -v mktemp >/dev/null; then
         pkg_extract_tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "pkg_extract.XXXXXX")
     else
-        pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
+        pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)" # $$ は現在のシェルPID
         pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
         mkdir -p "$pkg_extract_tmp_dir"
     fi
@@ -485,7 +489,7 @@ check_install_list() {
     for tmp_f in "$default_pkgs_tier1a_tmp" "$default_pkgs_tier1b_tmp" "$default_pkgs_tier1c_tmp" \
                   "$default_pkgs_tier2_tmp" "$default_pkgs_tier3_tmp" \
                   "$default_pkgs_from_source_sorted_tmp" "$default_pkgs_combined_tmp"; do
-        true > "$tmp_f"
+        true > "$tmp_f" # ファイルを空にする
     done
 
     local raw_device_profile_name=""
@@ -564,10 +568,10 @@ check_install_list() {
         return 1
     fi
     # Tier 1a: DEFAULT_PACKAGES.basic (or DEFAULT_PACKAGES as fallback)
-    local block_content_t1a=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.basic" ":=") # operator is for extract_makefile_var's original interface, new logic ignores it mostly
+    local block_content_t1a=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES.basic" ":=")
     if [ -n "$block_content_t1a" ]; then parse_pkgs_from_var_block "$block_content_t1a" "DEFAULT_PACKAGES.basic" ":=" > "$default_pkgs_tier1a_tmp"; fi
     if [ ! -s "$default_pkgs_tier1a_tmp" ]; then
-        local block_content_t1a_fallback=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" ":=")
+        local block_content_t1a_fallback=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" ":=") # フォールバックも同じ演算子で試すことが多い
         if [ -n "$block_content_t1a_fallback" ]; then parse_pkgs_from_var_block "$block_content_t1a_fallback" "DEFAULT_PACKAGES" ":=" > "$default_pkgs_tier1a_tmp"; fi
     fi
     if [ -s "$default_pkgs_tier1a_tmp" ]; then debug_log "DEBUG" "Parsed basic packages (Tier 1a) count: $(wc -l < "$default_pkgs_tier1a_tmp")"; else debug_log "DEBUG" "Basic packages list (Tier 1a) is empty."; fi
@@ -578,7 +582,7 @@ check_install_list() {
     if [ -s "$default_pkgs_tier1b_tmp" ]; then debug_log "DEBUG" "Parsed ${assumed_device_type} specific additions (Tier 1b) count: $(wc -l < "$default_pkgs_tier1b_tmp")"; else debug_log "DEBUG" "Could not extract block for DEFAULT_PACKAGES.${assumed_device_type} (additions)."; fi
 
     # Tier 1c: DEFAULT_PACKAGES (additive)
-    local block_content_t1c=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" "+=") # operator "+="
+    local block_content_t1c=$(extract_makefile_var "$target_mk_download_path" "DEFAULT_PACKAGES" "+=") # 明示的に += を探す
     if [ -n "$block_content_t1c" ]; then parse_pkgs_from_var_block "$block_content_t1c" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier1c_tmp"; fi
     if [ -s "$default_pkgs_tier1c_tmp" ]; then debug_log "DEBUG" "Parsed direct additions (Tier 1c) count: $(wc -l < "$default_pkgs_tier1c_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for direct DEFAULT_PACKAGES += (Tier 1c)."; fi
 
@@ -591,7 +595,7 @@ check_install_list() {
             rm -rf "$pkg_extract_tmp_dir"
             return 1
         fi
-        local block_content_t2=$(extract_makefile_var "$target_specific_mk_download_path" "DEFAULT_PACKAGES" "+=") # operator "+="
+        local block_content_t2=$(extract_makefile_var "$target_specific_mk_download_path" "DEFAULT_PACKAGES" "+=") # ここも += を期待
         if [ -n "$block_content_t2" ]; then parse_pkgs_from_var_block "$block_content_t2" "DEFAULT_PACKAGES" "+=" > "$default_pkgs_tier2_tmp"; fi
         if [ -s "$default_pkgs_tier2_tmp" ]; then debug_log "DEBUG" "Parsed target-specific additions (Tier 2) count: $(wc -l < "$default_pkgs_tier2_tmp")"; else debug_log "DEBUG" "Could not extract or parse block for target-specific DEFAULT_PACKAGES += (Tier 2)."; fi
     else 
@@ -602,7 +606,7 @@ check_install_list() {
 
     debug_log "DEBUG" "--- Tier 3: Processing target/linux/$target_base/image/$image_target_suffix.mk for device $device_profile_name ---"
     local device_specific_mk_download_path="${pkg_extract_tmp_dir}/image_${image_target_suffix}.mk.download"
-    local device_profile_block_tmp="${pkg_extract_tmp_dir}/device_profile_block.txt"
+    local device_profile_block_tmp="${pkg_extract_tmp_dir}/device_profile_block.txt" # awkの結果をファイルに
     local device_specific_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${openwrt_git_branch}/target/linux/${target_base}/image/${image_target_suffix}.mk"
     if [ -n "$target_base" ] && [ -n "$image_target_suffix" ] && [ -n "$device_profile_name" ]; then
         if ! fetch_content "$device_specific_mk_url" "$device_specific_mk_download_path"; then
@@ -610,7 +614,7 @@ check_install_list() {
             rm -rf "$pkg_extract_tmp_dir"
             return 1
         fi
-        # Extract the 'define Device/...' block for the specific device profile
+        # awkで define Device/... ブロックを抽出して一時ファイルに保存
         awk -v profile_name_awk="$device_profile_name" \
             'BEGIN{found=0; profile_regex = "^define[[:space:]]+Device/" profile_name_awk "[[:space:]]*$"}
              $0 ~ profile_regex {found=1}
@@ -619,15 +623,14 @@ check_install_list() {
             "$device_specific_mk_download_path" > "$device_profile_block_tmp"
 
         if [ -s "$device_profile_block_tmp" ]; then
-            # Extract DEVICE_PACKAGES from the extracted device profile block
-            # Try with ":=" first, then with "+=" as a fallback
+            # 抽出された define ブロック (ファイル) から DEVICE_PACKAGES を探す
             local block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" ":=")
             if [ -n "$block_content_t3" ]; then
                 parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" ":=" > "$default_pkgs_tier3_tmp"
             fi
             
-            if [ ! -s "$default_pkgs_tier3_tmp" ]; then # If not found with ":=" or if parsing resulted in empty
-                block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" "+=")
+            if [ ! -s "$default_pkgs_tier3_tmp" ]; then # ":=" で見つからないか、パース結果が空の場合
+                block_content_t3=$(extract_makefile_var "$device_profile_block_tmp" "DEVICE_PACKAGES" "+=") # "+=" で試す
                 if [ -n "$block_content_t3" ]; then
                     parse_pkgs_from_var_block "$block_content_t3" "DEVICE_PACKAGES" "+=" > "$default_pkgs_tier3_tmp"
                 fi
@@ -642,7 +645,7 @@ check_install_list() {
     fi
     
     debug_log "DEBUG" "--- Combining all package lists ---"
-    true > "$default_pkgs_combined_tmp"
+    true > "$default_pkgs_combined_tmp" # 結合前にファイルを空にする
     for list_file in "$default_pkgs_tier1a_tmp" "$default_pkgs_tier1b_tmp" "$default_pkgs_tier1c_tmp" \
                      "$default_pkgs_tier2_tmp" "$default_pkgs_tier3_tmp"; do
         if [ -s "$list_file" ]; then cat "$list_file" >> "$default_pkgs_combined_tmp"; fi
@@ -653,7 +656,7 @@ check_install_list() {
         debug_log "DEBUG" "Default package list generated. Count: $(wc -l < "$default_pkgs_from_source_sorted_tmp")"
     else
         debug_log "DEBUG" "No packages found or extracted from Makefiles. Default list will be empty."
-        true > "$default_pkgs_from_source_sorted_tmp" 
+        true > "$default_pkgs_from_source_sorted_tmp" # 空の場合もソート済みファイルは空で作成
     fi
 
     local installed_pkgs_list_tmp 
@@ -667,11 +670,11 @@ check_install_list() {
     fi
     installed_pkgs_list_tmp="${tmp_dir_base}/.current_installed_pkgs.tmp"
     
-    # PACKAGE_MANAGER は detect_and_save_package_manager() で設定されるグローバル変数
+    # PACKAGE_MANAGER は detect_and_save_package_manager() で設定されるグローバル変数と仮定
     debug_log "DEBUG" "Determining installed packages based on PACKAGE_MANAGER global variable: '$PACKAGE_MANAGER'"
     if [ -z "$PACKAGE_MANAGER" ]; then
         debug_log "DEBUG" "CRITICAL - Global variable PACKAGE_MANAGER is not set. Run detect_and_save_package_manager first."
-        rm -rf "$pkg_extract_tmp_dir" # installed_pkgs_list_tmp might not exist yet
+        rm -rf "$pkg_extract_tmp_dir" # installed_pkgs_list_tmp はまだ存在しない可能性あり
         return 1
     fi
 
@@ -682,7 +685,7 @@ check_install_list() {
             sort "/etc/apk/world" > "$installed_pkgs_list_tmp"
         else
             debug_log "DEBUG" "/etc/apk/world not found or is empty."
-            true > "$installed_pkgs_list_tmp" 
+            true > "$installed_pkgs_list_tmp" # 空ファイルを作成
         fi
     elif [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "OPKG package manager detected via PACKAGE_MANAGER. Running 'opkg list-installed'."
@@ -709,6 +712,7 @@ check_install_list() {
     else
         pkgs_only_in_installed_list=""
     fi
+    # 標準出力に差分リストを表示
     if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; else printf "(None)\n"; fi
     
     local pkgs_only_in_default_source_list
@@ -717,6 +721,7 @@ check_install_list() {
     else
         pkgs_only_in_default_source_list=""
     fi
+    # 標準出力に差分リストを表示
     if [ -n "$pkgs_only_in_default_source_list" ]; then echo "$pkgs_only_in_default_source_list"; else printf "(None)\n"; fi
     
     rm -f "$installed_pkgs_list_tmp"; rm -rf "$pkg_extract_tmp_dir" 
