@@ -332,36 +332,6 @@ install_usb_packages() {
     return 0
 }
 
-# 元の check_install_list 関数を入口関数として利用
-# パッケージマネージャに応じて処理を分岐する
-
-# グローバル変数（またはスクリプトの早い段階で設定される変数）の想定
-# CACHE_DIR="/tmp/my_cache" # 例: キャッシュディレクトリ
-# PACKAGE_MANAGER="" # スクリプトの初期化段階で設定される想定
-
-# ログ出力関数のプレースホルダー (実際のログ関数に置き換えてください)
-debug_log() {
-    _level="$1"
-    _message="$2"
-    # 実際のログ記録処理 (例: printf "[%s] %s\n" "$_level" "$_message" >&2)
-    printf "[%s] %s\n" "$_level" "$_message"
-}
-
-# メッセージ取得関数のプレースホルダー (実際のメッセージ取得関数に置き換えてください)
-get_message() {
-    _key="$1"
-    # 実際のメッセージ取得処理 (例: echo "$_key")
-    echo "$_key"
-}
-
-# 色付け関数のプレースホルダー (実際のカラーリング関数に置き換えてください)
-color() {
-    _color_name="$1"
-    _text="$2"
-    # 実際のカラーリング処理 (例: echo "$_text")
-    echo "$_text"
-}
-
 # opkgでフラッシュ後にユーザーがインストールしたパッケージを取得する関数
 get_installed_packages_opkg() {
     debug_log "DEBUG" "Function called: get_installed_packages_opkg"
@@ -424,473 +394,440 @@ get_installed_packages_opkg() {
     ' /usr/lib/opkg/status | sort
 }
 
-# Helper function to fetch a file using wget
-# This function is part of the v16 logic and is a dependency for
-# generate_default_package_list_from_source.
-# It should be defined before generate_default_package_list_from_source.
-fetch_file() {
-    local _url_orig="$1"         # The original URL to fetch
-    local _output_file="$2"      # The file path to save the downloaded content
-    local _cache_bust_param    # Cache-busting parameter
-    local _url_with_cb         # URL with cache-busting parameter
-    local ret_code             # Stores the return code of wget
-
-    _cache_bust_param="_cb=$(date +%s)" # Simple cache buster using current timestamp
-    _url_with_cb="${_url_orig}?${_cache_bust_param}"
-
-    # debug_log "DEBUG" "Downloading $_url_with_cb to $_output_file" # Verbose logging
-    # ユーザー指示: OpenWrtデフォルトパッケージのみ利用 (wget)
-    # ユーザー指示: 元ソース状態厳守 (wgetオプション)
-    if ${BASE_WGET:-wget --no-check-certificate -q} -O "$_output_file" --timeout=30 "$_url_with_cb"; then
-        if [ ! -s "$_output_file" ]; then # Check if the downloaded file is empty
-            debug_log "ERROR" "Downloaded file '$_output_file' is empty. URL: '$_url_with_cb'"
-            return 1 # Failure
-        fi
-        # debug_log "DEBUG" "Successfully downloaded '$_url_orig'." # Verbose logging
-        return 0 # Success
-    else
-        ret_code=$?
-        debug_log "ERROR" "wget failed for '$_url_with_cb' (exit code: $ret_code)"
-        return $ret_code # Failure, return wget's exit code
-    fi
-}
-
-# Helper function to extract a multi-line Makefile variable block.
-# This function is part of the v16 logic and is a dependency for
-# generate_default_package_list_from_source.
-# It should be defined before generate_default_package_list_from_source.
-extract_makefile_block() {
-    local _file_path="$1"        # Path to the Makefile
-    local _var_name_raw="$2"     # Raw variable name (e.g., "DEFAULT_PACKAGES.basic")
-    local _operator_raw="$3"     # Raw operator (e.g., ":=", "+=")
-    local _var_name_for_regex  # Variable name escaped for regex
-    local _operator_for_regex  # Operator escaped for regex
-    local _full_regex          # Full regex to find the start of the block
-    
-    # Escape dots in variable name for regex (e.g., "DEFAULT_PACKAGES.basic" -> "DEFAULT_PACKAGES\.basic")
-    _var_name_for_regex=$(echo "$_var_name_raw" | sed 's/\./\\./g')
-    
-    # Prepare operator for regex, allowing optional spaces around operator characters
-    # This logic is from v16 and should be robust.
-    _operator_for_regex=""
-    if [ "$_operator_raw" = "+=" ]; then _operator_for_regex='\\+[[:space:]]*=';
-    elif [ "$_operator_raw" = ":=" ]; then _operator_for_regex=':[[:space:]]*=';
-    elif [ "$_operator_raw" = "?=" ]; then _operator_for_regex='\\?[[:space:]]*='; # ? needs shell escape for \? then regex escape for \?
-    else
-        # Generic escape for other potential operators, though less common for package lists
-        _operator_for_regex=$(echo "$_operator_raw" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g')
-    fi
-    
-    # Construct the full regex pattern to find the start of the block
-    # Looks for: optional_spaces VAR optional_spaces OP
-    _full_regex="^[[:space:]]*${_var_name_for_regex}[[:space:]]*${_operator_for_regex}"
-
-    # AWK script to find and print the block:
-    # state 0: searching for the start of the block
-    # state 1: in the block, printing lines until one does not end with '\' (line continuation)
-    awk -v pattern="${_full_regex}" '
-    BEGIN {
-        state = 0; # 0 = searching_for_start, 1 = in_block
-    }
-    {
-        if (state == 0) {
-            if ($0 ~ pattern) { # If current line matches the start pattern
-                state = 1;
-                current_line = $0;
-                # Remove EOL comments (anything after #) before printing
-                sub(/[[:space:]]*#.*$/, "", current_line);
-                print current_line;
-                # If this starting line does not end with a backslash, the block ends here
-                if (!(current_line ~ /\\$/)) {
-                    state = 0; # Reset state, block was a single line
-                }
-            }
-        } else { # state == 1 (already in_block)
-            current_line = $0;
-            sub(/[[:space:]]*#.*$/, "", current_line); # Remove EOL comments
-            print current_line;
-            # If this continuation line does not end with a backslash, the block ends here
-            if (!(current_line ~ /\\$/)) {
-                state = 0; # Reset state
-            }
-        }
-     }' "$_file_path"
-}
-
-# Helper function to parse packages from an already extracted Makefile block.
-# This function is part of the v16 logic and is a dependency for
-# generate_default_package_list_from_source.
-# It should be defined before generate_default_package_list_from_source.
-parse_packages_from_extracted_block() {
-    local _block_text="$1"          # The multi-line block text from extract_makefile_block
-    local _var_to_strip_orig="$2"   # Original variable name to strip (e.g., "DEFAULT_PACKAGES.basic")
-    local _op_to_strip="$3"         # Original operator to strip (e.g., ":=")
-    local _first_line_processed=0   # Flag to track if the first line of the block has been processed
-
-    if [ -z "$_block_text" ]; then
-        return # Nothing to parse
-    fi
-
-    # Process the block text line by line using a while loop
-    echo "$_block_text" | while IFS= read -r _line || [ -n "$_line" ]; do # POSIX compliant read loop
-        local _processed_line # Stores the line after processing
-        _processed_line="$_line"
-
-        # Prepare awk-safe versions of the variable and operator for regex stripping
-        local _var_esc_awk # Variable escaped for awk regex
-        _var_esc_awk=$(echo "$_var_to_strip_orig" | sed 's/\./\\./g')
-        local _op_esc_awk # Operator escaped for awk regex
-        if [ "$_op_to_strip" = "+=" ]; then _op_esc_awk='\\+[[:space:]]*=';
-        elif [ "$_op_to_strip" = ":=" ]; then _op_esc_awk=':[[:space:]]*=';
-        elif [ "$_op_to_strip" = "?=" ]; then _op_esc_awk='\\?[[:space:]]*=';
-        else _op_esc_awk=$(echo "$_op_to_strip" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
-        
-        # Regex to match "VAR OP " at the beginning of the first line
-        local _var_re_str_for_awk="^[[:space:]]*${_var_esc_awk}[[:space:]]*${_op_esc_awk}[[:space:]]*"
-
-        # AWK script to clean up the line and extract package names
-        _processed_line=$(echo "$_processed_line" | awk \
-            -v var_re_str="$_var_re_str_for_awk" \
-            -v var_to_filter_exact="$_var_to_strip_orig" \
-            -v op_to_filter_exact="$_op_to_strip" \
-            -v is_first_line_for_awk="$_first_line_processed" \
-            '{
-                # Remove EOL comments first from the whole line (robustly handles spaces before #)
-                sub(/[[:space:]]*#.*$/, "");
-
-                # On the first line of the block, remove the "VAR OP " part
-                if (is_first_line_for_awk == 0) { 
-                    sub(var_re_str, ""); 
-                }
-                
-                # Remove all Makefile $(...) variable expansions iteratively
-                while (match($0, /\$\([^)]*\)/)) {
-                    $0 = substr($0, 1, RSTART-1) substr($0, RSTART+RLENGTH);
-                }
-
-                # Trim leading/trailing whitespace from the processed line
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); 
-
-                # Iterate over fields (package names) and print valid ones
-                if (NF > 0) { # If there are any fields left
-                    for (i=1; i<=NF; i++) {
-                        current_field = $i;
-                        
-                        # Filter out the variable name itself or the operator if they appear as fields
-                        if (current_field == var_to_filter_exact) continue;
-                        
-                        # Prepare operator for exact match filtering (remove spaces for comparison if needed)
-                        # This handles cases like " + = " being passed as op_to_filter_exact
-                        current_op_no_space_for_awk = op_to_filter_exact; 
-                        gsub(/[[:space:]]/, "", current_op_no_space_for_awk);
-                        current_field_no_space_for_awk = current_field; 
-                        gsub(/[[:space:]]/, "", current_field_no_space_for_awk);
-                        if (current_op_no_space_for_awk != "" && current_field_no_space_for_awk == current_op_no_space_for_awk) continue;
-
-                        # Filter out common makefile elements that are not package names
-                        if (current_field != "" && \
-                            current_field != "\\" && \
-                            current_field !~ /^(\(|\))$/ && \
-                            current_field !~ /^(=|\+=|:=|\?=)$/ && \
-                            current_field !~ /^\$\(/ ) { # Also filter incomplete $(vars
-                            print current_field;
-                        }
-                    }
-                }
-            }')
-        
-        # Mark first line as processed for subsequent iterations (if block is multi-line)
-        if [ "$_first_line_processed" -eq 0 ]; then
-            _first_line_processed=1
-        fi
-        
-        # Final cleanup: remove trailing backslash (line continuation) and any resulting empty lines
-        local _processed_line_final
-        _processed_line_final=$(echo "$_processed_line" | sed 's/\\[[:space:]]*$//' | sed '/^$/d')
-
-        if [ -n "$_processed_line_final" ]; then
-            echo "$_processed_line_final"
-        fi
-    done
-}
-
-# Dependencies assumed to be defined elsewhere in the script:
-# fetch_file()
-# extract_makefile_block()
-# parse_packages_from_extracted_block()
-# debug_log()
-# color()
-# get_message()
-# CACHE_DIR (variable)
-# TMP_DIR (variable, for mktemp fallback)
-
-# ヘルパー関数: OpenWrtソースからデフォルトパッケージリストを生成し、指定ファイルに出力
-# (v16スクリプトの主要ロジックをベースとする)
-generate_default_package_list_from_source() {
-    local output_file_path="$1"
-    if [ -z "$output_file_path" ]; then
-        debug_log "ERROR" "Output file path not provided to generate_default_package_list_from_source."
-        return 1
-    fi
-
-    local _tmp_dir_generate # Function-local temporary directory variable
-    if command -v mktemp >/dev/null; then
-        _tmp_dir_generate=$(mktemp -d -p "${TMP_DIR:-/tmp}" "pkg_generate_defaults.XXXXXX") || {
-            debug_log "ERROR" "Failed to create temp dir for default package generation."
-            return 1
-        }
-    else
-        local _tmp_dir_basename_generate
-        _tmp_dir_basename_generate="pkg_generate_defaults_$$_$(date +%s)"
-        _tmp_dir_generate="${TMP_DIR:-/tmp}/${_tmp_dir_basename_generate}"
-        mkdir -p "$_tmp_dir_generate" || {
-            debug_log "ERROR" "Failed to create temp dir %s for default package generation." "$_tmp_dir_generate"
-            return 1
-        }
-    fi
-    debug_log "DEBUG" "Temporary directory for default package generation: $_tmp_dir_generate"
-
-    # Define local file paths within the temporary directory
-    local gen_pkg_list_target_mk_basic_tmp="${_tmp_dir_generate}/pkg_target_mk_basic.txt"
-    local gen_pkg_list_target_mk_router_additions_tmp="${_tmp_dir_generate}/pkg_target_mk_router_additions.txt"
-    local gen_pkg_list_target_mk_direct_tmp="${_tmp_dir_generate}/pkg_target_mk_direct.txt"
-    local gen_pkg_list_target_specific_tmp="${_tmp_dir_generate}/pkg_target_specific.txt"
-    local gen_pkg_list_device_specific_tmp="${_tmp_dir_generate}/pkg_device_specific.txt"
-    local gen_combined_list_for_processing_tmp="${_tmp_dir_generate}/combined_for_processing.txt"
-    # Output will be written directly to $output_file_path after processing
-
-    # --- Configuration (mirrors v16 logic) ---
-    local gen_device_profile_name_val 
-    local gen_assumed_device_type_val="router"
-
-    if [ -f "/etc/board.json" ] && command -v jsonfilter > /dev/null; then
-        local gen_board_name_raw_val
-        gen_board_name_raw_val=$(jsonfilter -e '@.model.id' < /etc/board.json 2>/dev/null)
-        gen_device_profile_name_val=$(echo "$gen_board_name_raw_val" | sed 's/\//_/g' | tr '[:upper:]' '[:lower:]')
-        if [ -z "$gen_device_profile_name_val" ]; then
-            gen_device_profile_name_val="radxa_zero-3w"
-        fi
-    else
-        gen_device_profile_name_val="radxa_zero-3w"
-    fi
-    debug_log "INFO" "Using device_profile_name='$gen_device_profile_name_val' for default pkg list generation."
-
-    local gen_distrib_target_val=""
-    local gen_distrib_release_val=""
-    local gen_openwrt_git_branch_val="main"
-
-    if [ -f "/etc/openwrt_release" ]; then
-        gen_distrib_target_val=$(. /etc/openwrt_release >/dev/null 2>&1; echo "$DISTRIB_TARGET")
-        gen_distrib_release_val=$(. /etc/openwrt_release >/dev/null 2>&1; echo "$DISTRIB_RELEASE")
-        if [ -z "$gen_distrib_target_val" ]; then 
-             gen_distrib_target_val=$(grep '^DISTRIB_TARGET=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2)
-             gen_distrib_release_val=$(grep '^DISTRIB_RELEASE=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2)
-        fi
-    else
-        gen_distrib_target_val="rockchip/armv8"
-    fi
-
-    if echo "$gen_distrib_release_val" | grep -q "SNAPSHOT"; then
-        gen_openwrt_git_branch_val="main"
-    elif echo "$gen_distrib_release_val" | grep -Eq '^[0-9]+\.[0-9]+'; then
-        local gen_major_minor_version_val
-        gen_major_minor_version_val=$(echo "$gen_distrib_release_val" | awk -F'.' '{print $1"."$2}')
-        gen_openwrt_git_branch_val="openwrt-${gen_major_minor_version_val}"
-    else
-        gen_openwrt_git_branch_val="main"
-    fi
-    debug_log "INFO" "Using OpenWrt Git branch: $gen_openwrt_git_branch_val for default pkg list generation."
-
-    local gen_target_base_val
-    local gen_image_target_suffix_val
-    gen_target_base_val=$(echo "$gen_distrib_target_val" | cut -d'/' -f1)
-    gen_image_target_suffix_val=$(echo "$gen_distrib_target_val" | cut -d'/' -f2)
-
-    if [ -z "$gen_target_base_val" ] || [ -z "$gen_image_target_suffix_val" ] || [ "$gen_target_base_val" = "$gen_distrib_target_val" ]; then
-        if [ "$gen_distrib_target_val" = "rockchip/armv8" ]; then
-            gen_target_base_val="rockchip"
-            gen_image_target_suffix_val="armv8"
-        else
-            debug_log "ERROR" "Cannot proceed with default package generation without valid target paths."
-            rm -rf "$_tmp_dir_generate"
-            return 1
-        fi
-    fi
-    debug_log "INFO" "Using target paths for default pkg list generation: base='$gen_target_base_val', suffix='$gen_image_target_suffix_val'"
-
-    for f_gen in "$gen_pkg_list_target_mk_basic_tmp" "$gen_pkg_list_target_mk_router_additions_tmp" "$gen_pkg_list_target_mk_direct_tmp" \
-             "$gen_pkg_list_target_specific_tmp" "$gen_pkg_list_device_specific_tmp" "$gen_combined_list_for_processing_tmp"; do
-        true > "$f_gen"
-    done
-    true > "$output_file_path" # Ensure output file is initially empty
-
-    local gen_success_flag=0 
-
-    # Tier 1 (generation)
-    local gen_target_mk_file_val="${_tmp_dir_generate}/target.mk.download"
-    local gen_target_mk_url_val="https://raw.githubusercontent.com/openwrt/openwrt/${gen_openwrt_git_branch_val}/include/target.mk"
-    if fetch_file "$gen_target_mk_url_val" "$gen_target_mk_file_val"; then
-        local gen_basic_block_content_val
-        gen_basic_block_content_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES.basic" ":=")
-        if [ -n "$gen_basic_block_content_val" ]; then parse_packages_from_extracted_block "$gen_basic_block_content_val" "DEFAULT_PACKAGES.basic" ":=" > "$gen_pkg_list_target_mk_basic_tmp"; fi
-        if [ ! -s "$gen_pkg_list_target_mk_basic_tmp" ]; then
-            local gen_basic_block_content_fallback_val
-            gen_basic_block_content_fallback_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES" ":=")
-            if [ -n "$gen_basic_block_content_fallback_val" ]; then parse_packages_from_extracted_block "$gen_basic_block_content_fallback_val" "DEFAULT_PACKAGES" ":=" > "$gen_pkg_list_target_mk_basic_tmp"; fi
-        fi
-        local gen_router_additions_block_content_val
-        gen_router_additions_block_content_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES.${gen_assumed_device_type_val}" ":=")
-        if [ -n "$gen_router_additions_block_content_val" ]; then parse_packages_from_extracted_block "$gen_router_additions_block_content_val" "DEFAULT_PACKAGES.${gen_assumed_device_type_val}" ":=" > "$gen_pkg_list_target_mk_router_additions_tmp"; fi
-        local gen_direct_block_content_val
-        gen_direct_block_content_val=$(extract_makefile_block "$gen_target_mk_file_val" "DEFAULT_PACKAGES" "+=")
-        if [ -n "$gen_direct_block_content_val" ]; then parse_packages_from_extracted_block "$gen_direct_block_content_val" "DEFAULT_PACKAGES" "+=" > "$gen_pkg_list_target_mk_direct_tmp"; fi
-    else
-        debug_log "ERROR" "Failed to process include/target.mk for default pkg list generation. Tier 1 skipped."
-        gen_success_flag=1 
-    fi
-
-    # Tier 2 (generation)
-    if [ "$gen_success_flag" -eq 0 ] && [ -n "$gen_target_base_val" ]; then
-        local gen_target_specific_mk_file_val="${_tmp_dir_generate}/target_${gen_target_base_val}.mk.download"
-        local gen_target_specific_mk_url_val="https://raw.githubusercontent.com/openwrt/openwrt/${gen_openwrt_git_branch_val}/target/linux/${gen_target_base_val}/Makefile"
-        if fetch_file "$gen_target_specific_mk_url_val" "$gen_target_specific_mk_file_val"; then
-            local gen_ts_block_content_val
-            gen_ts_block_content_val=$(extract_makefile_block "$gen_target_specific_mk_file_val" "DEFAULT_PACKAGES" "+=")
-            if [ -n "$gen_ts_block_content_val" ]; then parse_packages_from_extracted_block "$gen_ts_block_content_val" "DEFAULT_PACKAGES" "+=" > "$gen_pkg_list_target_specific_tmp"; fi
-        else
-            debug_log "WARNING" "Failed to process target/linux/$gen_target_base_val/Makefile for default pkg list generation. Tier 2 might be incomplete."
-        fi
-    elif [ -z "$gen_target_base_val" ]; then
-         debug_log "WARNING" "target_base is empty. Skipping Tier 2 for default pkg list generation."
-    fi
-
-    # Tier 3 (generation)
-    if [ "$gen_success_flag" -eq 0 ] && [ -n "$gen_target_base_val" ] && [ -n "$gen_image_target_suffix_val" ]; then
-        local gen_device_specific_mk_file_val="${_tmp_dir_generate}/image_${gen_image_target_suffix_val}.mk.download"
-        local gen_device_profile_block_tmp_val="${_tmp_dir_generate}/device_profile_block.txt"
-        local gen_device_specific_mk_url_val="https://raw.githubusercontent.com/openwrt/openwrt/${gen_openwrt_git_branch_val}/target/linux/${gen_target_base_val}/image/${gen_image_target_suffix_val}.mk"
-        if fetch_file "$gen_device_specific_mk_url_val" "$gen_device_specific_mk_file_val"; then
-            awk -v profile="Device/${gen_device_profile_name_val}" \
-                'BEGIN{found=0} $2==profile && $1=="define"{found=1} found{print} /^[[:space:]]*endef[[:space:]]*$/&&found{found=0}' \
-                "$gen_device_specific_mk_file_val" > "$gen_device_profile_block_tmp_val"
-            if [ -s "$gen_device_profile_block_tmp_val" ]; then
-                local gen_device_pkgs_block_content_val
-                gen_device_pkgs_block_content_val=$(extract_makefile_block "$gen_device_profile_block_tmp_val" "DEVICE_PACKAGES" ":=")
-                if [ -z "$gen_device_pkgs_block_content_val" ]; then gen_device_pkgs_block_content_val=$(extract_makefile_block "$gen_device_profile_block_tmp_val" "DEVICE_PACKAGES" "+="); fi
-                if [ -n "$gen_device_pkgs_block_content_val" ]; then
-                    parse_packages_from_extracted_block "$gen_device_pkgs_block_content_val" "DEVICE_PACKAGES" ":=" > "$gen_pkg_list_device_specific_tmp"
-                    if [ ! -s "$gen_pkg_list_device_specific_tmp" ]; then parse_packages_from_extracted_block "$gen_device_pkgs_block_content_val" "DEVICE_PACKAGES" "+=" > "$gen_pkg_list_device_specific_tmp"; fi
-                fi
-            else
-                 debug_log "WARNING" "Could not extract 'define Device/$gen_device_profile_name_val' block for default pkg list generation."
-            fi
-        else
-            debug_log "WARNING" "Failed to process image specific Makefile for Tier 3 for default pkg list generation."
-        fi
-    elif [ -z "$gen_target_base_val" ] || [ -z "$gen_image_target_suffix_val" ]; then
-        debug_log "WARNING" "target_base or image_target_suffix is empty. Skipping Tier 3 for default pkg list generation."
-    fi
-
-    # Combine (generation)
-    true > "$gen_combined_list_for_processing_tmp"
-    for list_file_gen in "$gen_pkg_list_target_mk_basic_tmp" "$gen_pkg_list_target_mk_router_additions_tmp" "$gen_pkg_list_target_mk_direct_tmp" \
-                     "$gen_pkg_list_target_specific_tmp" "$gen_pkg_list_device_specific_tmp"; do
-        if [ -s "$list_file_gen" ]; then cat "$list_file_gen" >> "$gen_combined_list_for_processing_tmp"; fi
-    done
-
-    if [ -s "$gen_combined_list_for_processing_tmp" ]; then
-        sort -u "$gen_combined_list_for_processing_tmp" | sed '/^$/d' > "$output_file_path" # Output to the specified file
-        debug_log "INFO" "Default package list successfully generated into $output_file_path."
-    else
-        debug_log "WARNING" "No default packages could be extracted from source. Output file $output_file_path will be empty."
-        true > "$output_file_path" # Ensure output file is at least an empty file
-    fi
-    
-    rm -rf "$_tmp_dir_generate" # Cleanup generation temp dir
-    return "$gen_success_flag"
-}
-
-
-# メイン関数: apkで明示的にインストールされたパッケージを取得し、デフォルトと比較
 get_installed_packages_apk() {
     debug_log "DEBUG" "Function called: get_installed_packages_apk"
-    
-    local apk_world_list_file_val 
-    local default_pkgs_list_file_val 
 
-    # Ensure CACHE_DIR is defined and accessible for temporary diff files
-    if [ -z "$CACHE_DIR" ] || ! mkdir -p "$CACHE_DIR" 2>/dev/null || [ ! -w "$CACHE_DIR" ]; then # Try to create CACHE_DIR if it doesn't exist
-        debug_log "WARNING" "CACHE_DIR ('$CACHE_DIR') is not usable. Using /tmp for temporary diff files."
-        local tmp_diff_dir="/tmp"
-        apk_world_list_file_val="${tmp_diff_dir}/.apk_world_list_diff.tmp"
-        default_pkgs_list_file_val="${tmp_diff_dir}/.default_pkgs_list_diff.tmp"
-    else
-        apk_world_list_file_val="${CACHE_DIR}/.apk_world_list_diff.tmp"
-        default_pkgs_list_file_val="${CACHE_DIR}/.default_pkgs_list_diff.tmp"
-    fi
+    # --- Start: APK Default Package Extraction Logic ---
+    # Helper functions for APK default package extraction
+
+    # --- APK Helper Function: apk_fetch_file ---
+    apk_fetch_file() {
+        local url_orig="$1"
+        local output_file="$2"
+        local cache_bust_param
+        local url_with_cb
+        local ret_code
+        local wget_cmd
+
+        cache_bust_param="_cb=$(date +%s)"
+        url_with_cb="${url_orig}?${cache_bust_param}"
+        
+        if [ -n "$BASE_WGET" ]; then
+            wget_cmd="$BASE_WGET -O" 
+        else
+            wget_cmd="wget -qO" 
+        fi
+
+        debug_log "DEBUG" "APK: Downloading ${url_with_cb} to ${output_file}"
+        if $wget_cmd "$output_file" --timeout=30 "$url_with_cb"; then 
+            if [ ! -s "$output_file" ]; then
+                debug_log "ERROR" "APK: Downloaded file ${output_file} is empty. URL: ${url_with_cb}"
+                return 1
+            fi
+            return 0
+        else
+            ret_code=$?
+            debug_log "ERROR" "APK: wget failed for ${url_with_cb} (exit code: ${ret_code})"
+            return 1
+        fi
+    }
+
+    # --- APK Helper Function: apk_extract_makefile_block ---
+    apk_extract_makefile_block() {
+        local file_path="$1"
+        local var_name_raw="$2"
+        local operator_raw="$3"
+        local var_name_for_regex
+        local operator_for_regex
+        local full_regex
     
-    # 1. /etc/apk/world からリスト取得 (リストA)
-    if [ -f "/etc/apk/world" ] && [ -s "/etc/apk/world" ]; then
-        debug_log "INFO" "Reading /etc/apk/world..."
-        sort "/etc/apk/world" > "$apk_world_list_file_val"
+        var_name_for_regex=$(echo "$var_name_raw" | sed 's/\./\\./g') 
+        operator_for_regex=""
+        if [ "$operator_raw" = "+=" ]; then operator_for_regex='\\+[[:space:]]*=';
+        elif [ "$operator_raw" = ":=" ]; then operator_for_regex=':[[:space:]]*=';
+        elif [ "$operator_raw" = "?=" ]; then operator_for_regex='\\?[[:space:]]*='; 
+        else operator_for_regex=$(echo "$operator_raw" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
+    
+        full_regex="^[[:space:]]*${var_name_for_regex}[[:space:]]*${operator_for_regex}"
+    
+        awk -v pattern="${full_regex}" \
+        'BEGIN{state=0}
+         {
+            if (state == 0) {
+                if ($0 ~ pattern) {
+                    state = 1;
+                    current_line = $0;
+                    sub(/[[:space:]]*#.*$/, "", current_line); 
+                    print current_line;
+                    if (!(current_line ~ /\\$/)) { 
+                        state = 0;
+                    }
+                }
+            } else { 
+                current_line = $0;
+                sub(/[[:space:]]*#.*$/, "", current_line); 
+                print current_line;
+                if (!(current_line ~ /\\$/)) { 
+                    state = 0;
+                }
+            }
+         }' "$file_path"
+    }
+
+    # --- APK Helper Function: apk_parse_packages_from_extracted_block ---
+    apk_parse_packages_from_extracted_block() {
+        local block_text="$1"
+        local var_to_strip_orig="$2" 
+        local op_to_strip="$3"  
+        local first_line_processed=0
+        local line # for read loop
+        local processed_line # for awk output
+        local processed_line_final # for final sed processing
+        local var_esc_awk # awk safe var
+        local op_esc_awk # awk safe op
+        local var_re_str_for_awk # awk regex string
+
+        if [ -z "$block_text" ]; then return; fi
+    
+        echo "$block_text" | while IFS= read -r line || [ -n "$line" ]; do
+            processed_line="$line"
+    
+            var_esc_awk=$(echo "$var_to_strip_orig" | sed 's/\./\\./g')
+            op_esc_awk=""
+            if [ "$op_to_strip" = "+=" ]; then op_esc_awk='\\+[[:space:]]*=';
+            elif [ "$op_to_strip" = ":=" ]; then op_esc_awk=':[[:space:]]*=';
+            elif [ "$op_to_strip" = "?=" ]; then op_esc_awk='\\?[[:space:]]*=';
+            else op_esc_awk=$(echo "$op_to_strip" | sed 's/[+?*.:\[\]^${}\\|=()]/\\&/g'); fi
+            var_re_str_for_awk="^[[:space:]]*${var_esc_awk}[[:space:]]*${op_esc_awk}[[:space:]]*"
+    
+            processed_line=$(echo "$processed_line" | awk \
+                -v var_re_str="$var_re_str_for_awk" \
+                -v var_to_filter_exact="$var_to_strip_orig" \
+                -v op_to_filter_exact="$op_to_strip" \
+                -v is_first_line_for_awk="$first_line_processed" \
+                '{
+                    sub(/[[:space:]]*#.*$/, "");
+                    if (is_first_line_for_awk == 0) { 
+                        sub(var_re_str, ""); 
+                    }
+                    while (match($0, /\$\([^)]*\)/)) {
+                        $0 = substr($0, 1, RSTART-1) substr($0, RSTART+RLENGTH);
+                    }
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, ""); 
+                    if (NF > 0) {
+                        for (i=1; i<=NF; i++) {
+                            current_field = $i;
+                            if (current_field == var_to_filter_exact) continue;
+                            current_op_no_space_for_awk = op_to_filter_exact; 
+                            gsub(/[[:space:]]/, "", current_op_no_space_for_awk);
+                            current_field_no_space_for_awk = current_field; 
+                            gsub(/[[:space:]]/, "", current_field_no_space_for_awk);
+                            if (current_op_no_space_for_awk != "" && current_field_no_space_for_awk == current_op_no_space_for_awk) continue;
+                            if (current_field != "" && current_field != "\\" && current_field !~ /^(\(|\))$/ && current_field !~ /^(=|\+=|:=|\?=)$/ && current_field !~ /^\$\(/ ) {
+                                print current_field;
+                            }
+                        }
+                    }
+                }')
+            
+            if [ "$first_line_processed" -eq 0 ]; then
+                first_line_processed=1
+            fi
+            
+            processed_line_final=$(echo "$processed_line" | sed 's/\\[[:space:]]*$//' | sed '/^$/d')
+    
+            if [ -n "$processed_line_final" ]; then
+                echo "$processed_line_final"
+            fi
+        done
+    }
+
+    # --- APK Temporary files and directory setup ---
+    local apk_tmp_dir
+    local apk_tmp_dir_basename
+    local apk_pkg_list_target_mk_basic_tmp
+    local apk_pkg_list_target_mk_router_additions_tmp
+    local apk_pkg_list_target_mk_direct_tmp
+    local apk_pkg_list_target_specific_tmp
+    local apk_pkg_list_device_specific_tmp
+    local apk_final_extracted_list_sorted_tmp # This will hold the default package list
+    local apk_combined_list_for_processing_tmp
+    local apk_f # loop var for file init
+
+    if command -v mktemp >/dev/null; then
+        apk_tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "apk_pkg_extract.XXXXXX") || {
+            debug_log "ERROR" "APK: Failed to create temp dir using mktemp for default package extraction."
+            return 1
+        }
     else
-        debug_log "INFO" "/etc/apk/world not found or is empty."
-        true > "$apk_world_list_file_val" 
+        apk_tmp_dir_basename="apk_pkg_extract_$$_$(date +%s)"
+        apk_tmp_dir="${TMP_DIR:-/tmp}/${apk_tmp_dir_basename}"
+        mkdir -p "$apk_tmp_dir" || {
+            debug_log "ERROR" "APK: Failed to create temp dir ${apk_tmp_dir} for default package extraction."
+            return 1
+        }
+    fi
+    debug_log "DEBUG" "APK: Temporary directory for default package extraction: $apk_tmp_dir"
+
+    apk_pkg_list_target_mk_basic_tmp="${apk_tmp_dir}/pkg_target_mk_basic.txt"
+    apk_pkg_list_target_mk_router_additions_tmp="${apk_tmp_dir}/pkg_target_mk_router_additions.txt"
+    apk_pkg_list_target_mk_direct_tmp="${apk_tmp_dir}/pkg_target_mk_direct.txt"
+    apk_pkg_list_target_specific_tmp="${apk_tmp_dir}/pkg_target_specific.txt"
+    apk_pkg_list_device_specific_tmp="${apk_tmp_dir}/pkg_device_specific.txt"
+    apk_final_extracted_list_sorted_tmp="${apk_tmp_dir}/final_extracted_sorted.txt" 
+    apk_combined_list_for_processing_tmp="${apk_tmp_dir}/combined_for_processing.txt"
+
+    for apk_f in "$apk_pkg_list_target_mk_basic_tmp" "$apk_pkg_list_target_mk_router_additions_tmp" \
+                  "$apk_pkg_list_target_mk_direct_tmp" "$apk_pkg_list_target_specific_tmp" \
+                  "$apk_pkg_list_device_specific_tmp" "$apk_final_extracted_list_sorted_tmp" \
+                  "$apk_combined_list_for_processing_tmp"; do
+        true > "$apk_f"
+    done
+
+    # --- APK Configuration ---
+    local apk_device_profile_name
+    local apk_assumed_device_type="router"
+    local apk_distrib_target=""
+    local apk_distrib_release=""
+    local apk_openwrt_git_branch="main"
+    local apk_target_base
+    local apk_image_target_suffix
+    local apk_target_mk_file
+    local apk_target_mk_url
+    local apk_basic_block_content
+    local apk_basic_block_content_fallback
+    local apk_router_additions_block_content
+    local apk_direct_block_content
+    local apk_target_specific_mk_file
+    local apk_target_specific_mk_url
+    local apk_ts_block_content
+    local apk_device_specific_mk_file
+    local apk_device_profile_block_tmp
+    local apk_device_specific_mk_url
+    local apk_device_pkgs_block_content
+    local apk_list_file # for loop
+
+    if [ -f "/etc/board.json" ] && command -v jsonfilter > /dev/null; then
+        local apk_board_name_raw
+        apk_board_name_raw=$(jsonfilter -e '@.model.id' < /etc/board.json 2>/dev/null)
+        apk_device_profile_name=$(echo "$apk_board_name_raw" | sed 's/[\/,]/_/g' | tr '[:upper:]' '[:lower:]')
+        if [ -z "$apk_device_profile_name" ]; then
+            debug_log "WARNING" "APK: Could not determine DEVICE_PROFILE_NAME from /etc/board.json, using default 'radxa_zero_3w'."
+            apk_device_profile_name="radxa_zero_3w" 
+        else
+            debug_log "INFO" "APK: Using DEVICE_PROFILE_NAME='$apk_device_profile_name' (sanitized) from /etc/board.json"
+        fi
+    else
+        debug_log "INFO" "APK: /etc/board.json or jsonfilter not found, using default DEVICE_PROFILE_NAME='radxa_zero_3w'."
+        apk_device_profile_name="radxa_zero_3w" 
     fi
 
-    # 2. ソースからデフォルトパッケージリストを生成し、ファイルに保存 (リストB)
-    printf "\n%s\n" "$(color cyan "$(get_message "MSG_FETCHING_DEFAULT_PACKAGES_FROM_SOURCE")")"
-    if generate_default_package_list_from_source "$default_pkgs_list_file_val"; then
-        debug_log "INFO" "Default package list from source has been generated into $default_pkgs_list_file_val."
+    if [ -f "/etc/openwrt_release" ]; then
+        apk_distrib_target=$(. /etc/openwrt_release >/dev/null 2>&1; echo "$DISTRIB_TARGET")
+        apk_distrib_release=$(. /etc/openwrt_release >/dev/null 2>&1; echo "$DISTRIB_RELEASE")
+        if [ -z "$apk_distrib_target" ]; then apk_distrib_target=$(grep '^DISTRIB_TARGET=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2); fi
+        if [ -z "$apk_distrib_release" ]; then apk_distrib_release=$(grep '^DISTRIB_RELEASE=' "/etc/openwrt_release" 2>/dev/null | cut -d "'" -f 2); fi
+        debug_log "INFO" "APK: Read from /etc/openwrt_release: DISTRIB_TARGET='$apk_distrib_target', DISTRIB_RELEASE='$apk_distrib_release'"
     else
-        debug_log "ERROR" "Failed to generate default package list from source. Comparison will be incomplete."
-        # Ensure the file exists and is empty if generation failed critically
-        if [ ! -f "$default_pkgs_list_file_val" ]; then 
-             true > "$default_pkgs_list_file_val"
-        elif [ ! -s "$default_pkgs_list_file_val" ]; then # If it exists but is empty due to no pkgs found
-             debug_log "INFO" "Default package list from source was empty."
+        debug_log "WARNING" "APK: /etc/openwrt_release not found. Using default branch 'main' and target 'rockchip/armv8'."
+        apk_distrib_target="rockchip/armv8"
+    fi
+
+    if echo "$apk_distrib_release" | grep -q "SNAPSHOT"; then
+        apk_openwrt_git_branch="main"
+    elif echo "$apk_distrib_release" | grep -Eq '^[0-9]+\.[0-9]+'; then
+        local apk_major_minor_version
+        apk_major_minor_version=$(echo "$apk_distrib_release" | awk -F'.' '{print $1"."$2}')
+        apk_openwrt_git_branch="openwrt-$apk_major_minor_version"
+    else
+        debug_log "INFO" "APK: DISTRIB_RELEASE ('$apk_distrib_release') is not SNAPSHOT or a recognized version, using git branch 'main'."
+        apk_openwrt_git_branch="main"
+    fi
+    debug_log "INFO" "APK: Using OpenWrt Git branch: $apk_openwrt_git_branch"
+
+    apk_target_base=$(echo "$apk_distrib_target" | cut -d'/' -f1)
+    apk_image_target_suffix=$(echo "$apk_distrib_target" | cut -d'/' -f2)
+
+    if [ -z "$apk_target_base" ] || [ -z "$apk_image_target_suffix" ] || [ "$apk_target_base" = "$apk_distrib_target" ]; then
+        debug_log "ERROR" "APK: Could not reliably determine target_base/image_target_suffix from DISTRIB_TARGET: '$apk_distrib_target'."
+        if [ "$apk_distrib_target" = "rockchip/armv8" ]; then
+            debug_log "INFO" "APK: Falling back to target_base='rockchip', image_target_suffix='armv8'."
+            apk_target_base="rockchip"
+            apk_image_target_suffix="armv8"
+        else
+            debug_log "ERROR" "APK: Critical - Cannot proceed without valid target paths. Exiting default package extraction part."
+            rm -rf "$apk_tmp_dir" 
+            return 1 
         fi
     fi
+    debug_log "INFO" "APK: Using target paths: target_base='$apk_target_base', image_target_suffix='$apk_image_target_suffix'"
 
-    if [ ! -s "$apk_world_list_file_val" ] && [ ! -s "$default_pkgs_list_file_val" ]; then
-        printf "%s\n" "$(color yellow "$(get_message "MSG_APK_WORLD_AND_DEFAULTS_EMPTY")")"
-        rm -f "$apk_world_list_file_val" "$default_pkgs_list_file_val" 
+    # --- APK Tier 1: Global/Basic packages ---
+    debug_log "INFO" "APK: --- Tier 1: Processing include/target.mk ---"
+    apk_target_mk_file="${apk_tmp_dir}/target.mk.download"
+    apk_target_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${apk_openwrt_git_branch}/include/target.mk"
+    if apk_fetch_file "$apk_target_mk_url" "$apk_target_mk_file"; then
+        apk_basic_block_content=$(apk_extract_makefile_block "$apk_target_mk_file" "DEFAULT_PACKAGES.basic" ":=")
+        if [ -n "$apk_basic_block_content" ]; then
+            apk_parse_packages_from_extracted_block "$apk_basic_block_content" "DEFAULT_PACKAGES.basic" ":=" > "$apk_pkg_list_target_mk_basic_tmp"
+        fi
+        if [ ! -s "$apk_pkg_list_target_mk_basic_tmp" ]; then 
+            apk_basic_block_content_fallback=$(apk_extract_makefile_block "$apk_target_mk_file" "DEFAULT_PACKAGES" ":=")
+            if [ -n "$apk_basic_block_content_fallback" ]; then
+                 apk_parse_packages_from_extracted_block "$apk_basic_block_content_fallback" "DEFAULT_PACKAGES" ":=" > "$apk_pkg_list_target_mk_basic_tmp"
+            fi
+        fi
+        apk_router_additions_block_content=$(apk_extract_makefile_block "$apk_target_mk_file" "DEFAULT_PACKAGES.${apk_assumed_device_type}" ":=")
+        if [ -n "$apk_router_additions_block_content" ]; then
+            apk_parse_packages_from_extracted_block "$apk_router_additions_block_content" "DEFAULT_PACKAGES.${apk_assumed_device_type}" ":=" > "$apk_pkg_list_target_mk_router_additions_tmp"
+        fi
+        apk_direct_block_content=$(apk_extract_makefile_block "$apk_target_mk_file" "DEFAULT_PACKAGES" "+=")
+        if [ -n "$apk_direct_block_content" ]; then
+            apk_parse_packages_from_extracted_block "$apk_direct_block_content" "DEFAULT_PACKAGES" "+=" > "$apk_pkg_list_target_mk_direct_tmp"
+        fi
+    else
+        debug_log "ERROR" "APK: Failed to process include/target.mk. Skipping Tier 1."
+    fi
+
+    # --- APK Tier 2: Target-specific packages ---
+    debug_log "INFO" "APK: --- Tier 2: Processing target/linux/$apk_target_base/Makefile ---"
+    apk_target_specific_mk_file="${apk_tmp_dir}/target_${apk_target_base}.mk.download"
+    apk_target_specific_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${apk_openwrt_git_branch}/target/linux/${apk_target_base}/Makefile"
+    if [ -n "$apk_target_base" ]; then 
+        if apk_fetch_file "$apk_target_specific_mk_url" "$apk_target_specific_mk_file"; then
+            apk_ts_block_content=$(apk_extract_makefile_block "$apk_target_specific_mk_file" "DEFAULT_PACKAGES" "+=")
+            if [ -n "$apk_ts_block_content" ]; then
+                apk_parse_packages_from_extracted_block "$apk_ts_block_content" "DEFAULT_PACKAGES" "+=" > "$apk_pkg_list_target_specific_tmp"
+            fi
+        else
+            debug_log "WARNING" "APK: Failed to download or process target/linux/$apk_target_base/Makefile. Skipping Tier 2."
+        fi
+    else
+        debug_log "WARNING" "APK: target_base is empty. Skipping Tier 2."
+    fi
+
+    # --- APK Tier 3: Device-specific packages ---
+    debug_log "INFO" "APK: --- Tier 3: Processing target/linux/$apk_target_base/image/$apk_image_target_suffix.mk for device $apk_device_profile_name ---"
+    apk_device_specific_mk_file="${apk_tmp_dir}/image_${apk_image_target_suffix}.mk.download"
+    apk_device_profile_block_tmp="${apk_tmp_dir}/device_profile_block.txt"
+    apk_device_specific_mk_url="https://raw.githubusercontent.com/openwrt/openwrt/${apk_openwrt_git_branch}/target/linux/${apk_target_base}/image/${apk_image_target_suffix}.mk"
+    if [ -n "$apk_target_base" ] && [ -n "$apk_image_target_suffix" ]; then 
+        if apk_fetch_file "$apk_device_specific_mk_url" "$apk_device_specific_mk_file"; then
+            awk -v profile="Device/${apk_device_profile_name}" \
+                'BEGIN{found=0} $2==profile && $1=="define"{found=1} found{print} /^[[:space:]]*endef[[:space:]]*$/&&found{found=0}' \
+                "$apk_device_specific_mk_file" > "$apk_device_profile_block_tmp"
+            if [ -s "$apk_device_profile_block_tmp" ]; then
+                apk_device_pkgs_block_content=$(apk_extract_makefile_block "$apk_device_profile_block_tmp" "DEVICE_PACKAGES" ":=")
+                if [ -z "$apk_device_pkgs_block_content" ]; then 
+                     apk_device_pkgs_block_content=$(apk_extract_makefile_block "$apk_device_profile_block_tmp" "DEVICE_PACKAGES" "+=")
+                fi
+                if [ -n "$apk_device_pkgs_block_content" ]; then
+                    apk_parse_packages_from_extracted_block "$apk_device_pkgs_block_content" "DEVICE_PACKAGES" ":=" > "$apk_pkg_list_device_specific_tmp"
+                    if [ ! -s "$apk_pkg_list_device_specific_tmp" ]; then
+                         apk_parse_packages_from_extracted_block "$apk_device_pkgs_block_content" "DEVICE_PACKAGES" "+=" > "$apk_pkg_list_device_specific_tmp"
+                    fi
+                fi
+            else
+                debug_log "WARNING" "APK: Could not extract 'define Device/$apk_device_profile_name' block from $(basename "$apk_device_specific_mk_file")."
+            fi
+        else
+            debug_log "WARNING" "APK: Failed to download or process image specific Makefile for Tier 3."
+        fi
+    else
+        debug_log "WARNING" "APK: target_base or image_target_suffix is empty. Skipping Tier 3."
+    fi
+
+    # --- APK Combine all package lists ---
+    debug_log "INFO" "APK: --- Combining all package lists ---"
+    true > "$apk_combined_list_for_processing_tmp" 
+    for apk_list_file in "$apk_pkg_list_target_mk_basic_tmp" "$apk_pkg_list_target_mk_router_additions_tmp" \
+                     "$apk_pkg_list_target_mk_direct_tmp" "$apk_pkg_list_target_specific_tmp" \
+                     "$apk_pkg_list_device_specific_tmp"; do
+        if [ -s "$apk_list_file" ]; then 
+            cat "$apk_list_file" >> "$apk_combined_list_for_processing_tmp"
+        fi
+    done
+
+    debug_log "INFO" "APK: Finalizing extracted list of default packages."
+    if [ -s "$apk_combined_list_for_processing_tmp" ]; then
+        sort -u "$apk_combined_list_for_processing_tmp" | sed '/^$/d' > "$apk_final_extracted_list_sorted_tmp"
+        debug_log "INFO" "APK: Default package list generated into '$apk_final_extracted_list_sorted_tmp'."
+    else
+        debug_log "WARNING" "APK: No packages found or extracted from Makefiles. Default list will be empty."
+        true > "$apk_final_extracted_list_sorted_tmp" 
+    fi
+    # --- End: APK Default Package Extraction Logic ---
+
+
+    # --- Start: Diff Logic ---
+    local diff_apk_world_list_file # Stores sorted list from /etc/apk/world for diff
+    local diff_default_pkgs_list_file # This is the APK output: apk_final_extracted_list_sorted_tmp
+    local diff_tmp_dir_base # Base directory for diff temporary files
+
+    if [ -n "$CACHE_DIR" ] && mkdir -p "$CACHE_DIR" 2>/dev/null && [ -w "$CACHE_DIR" ]; then
+        diff_tmp_dir_base="$CACHE_DIR"
+    else
+        diff_tmp_dir_base="${TMP_DIR:-/tmp}" 
+        debug_log "WARNING" "CACHE_DIR ('$CACHE_DIR') is not usable for apk_world temp. Using '$diff_tmp_dir_base'."
+    fi
+    diff_apk_world_list_file="${diff_tmp_dir_base}/.apk_world_list_for_diff.tmp"
+    
+    diff_default_pkgs_list_file="$apk_final_extracted_list_sorted_tmp"
+
+
+    debug_log "INFO" "Diff: Reading /etc/apk/world for comparison..."
+    if [ -f "/etc/apk/world" ] && [ -s "/etc/apk/world" ]; then
+        sort "/etc/apk/world" > "$diff_apk_world_list_file"
+        debug_log "DEBUG" "Diff: /etc/apk/world content sorted into '$diff_apk_world_list_file'."
+    else
+        debug_log "INFO" "Diff: /etc/apk/world not found or is empty."
+        true > "$diff_apk_world_list_file" 
+    fi
+
+    if [ ! -s "$diff_apk_world_list_file" ] && [ ! -s "$diff_default_pkgs_list_file" ]; then
+        printf "\nINFO: /etc/apk/world is empty AND no default packages were extracted. No comparison possible.\n"
+        rm -f "$diff_apk_world_list_file" 
+        rm -rf "$apk_tmp_dir" 
         return 0
     fi
     
-    # 3. 差分表示
-    printf "\n%s\n" "$(color green "$(get_message "MSG_PACKAGE_COMPARISON_TITLE")")"
+    # --- Perform and Print Diff ---
+    printf "\n--- Package Differences ---\n"
 
-    printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGES_ONLY_IN_APK_WORLD_DESC")")"
-    local only_in_apk_world_val
-    if [ -s "$apk_world_list_file_val" ]; then 
-        only_in_apk_world_val=$(grep -vxFf "$default_pkgs_list_file_val" "$apk_world_list_file_val")
+    printf "\nPackages ONLY in /etc/apk/world (User Installed/Explicitly Kept):\n"
+    local diff_only_in_apk_world
+    if [ -s "$diff_apk_world_list_file" ]; then 
+        diff_only_in_apk_world=$(grep -vxFf "$diff_default_pkgs_list_file" "$diff_apk_world_list_file")
     else
-        only_in_apk_world_val=""
+        diff_only_in_apk_world=""
     fi
 
-    if [ -n "$only_in_apk_world_val" ]; then
-        echo "$only_in_apk_world_val"
+    if [ -n "$diff_only_in_apk_world" ]; then
+        echo "$diff_only_in_apk_world"
     else
-        printf "%s\n" "$(get_message "MSG_NONE")"
+        printf "(None)\n"
     fi
 
-    printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGES_ONLY_IN_DEFAULTS_DESC")")"
-    local only_in_defaults_val
-    if [ -s "$default_pkgs_list_file_val" ]; then 
-        only_in_defaults_val=$(grep -vxFf "$apk_world_list_file_val" "$default_pkgs_list_file_val")
+    printf "\nPackages ONLY in Default OpenWrt Source List (Potentially Missing from /etc/apk/world):\n"
+    local diff_only_in_defaults
+    if [ -s "$diff_default_pkgs_list_file" ]; then 
+        diff_only_in_defaults=$(grep -vxFf "$diff_apk_world_list_file" "$diff_default_pkgs_list_file")
     else
-        only_in_defaults_val=""
+        diff_only_in_defaults=""
     fi
     
-    if [ -n "$only_in_defaults_val" ]; then
-        echo "$only_in_defaults_val"
+    if [ -n "$diff_only_in_defaults" ]; then
+        echo "$diff_only_in_defaults"
     else
-        printf "%s\n" "$(get_message "MSG_NONE")"
+        printf "(None)\n"
     fi
     
-    # Cleanup diff temp files
-    rm -f "$apk_world_list_file_val" "$default_pkgs_list_file_val" 
+    # Cleanup
+    rm -f "$diff_apk_world_list_file" 
+    rm -rf "$apk_tmp_dir" 
+    debug_log "DEBUG" "Cleaned up temporary files for APK extraction and diff."
+    
+    debug_log "INFO" "Package difference check finished."
     return 0
 }
 
@@ -898,36 +835,25 @@ get_installed_packages_apk() {
 check_install_list() {
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
 
-    # パッケージマネージャの種類を確認 (キャッシュまたは動的検出)
-    # この例では、PACKAGE_MANAGER変数が事前に設定されていることを期待
-    if [ -z "$PACKAGE_MANAGER" ]; then
-        if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
-            PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
-            debug_log "DEBUG" "Package manager read from cache: $PACKAGE_MANAGER"
-        elif command -v opkg >/dev/null 2>&1; then
-            PACKAGE_MANAGER="opkg"
-            debug_log "DEBUG" "Detected opkg package manager."
-        elif command -v apk >/dev/null 2>&1; then
-            PACKAGE_MANAGER="apk"
-            debug_log "DEBUG" "Detected apk package manager."
-        else
-            debug_log "ERROR" "Could not determine package manager."
-            PACKAGE_MANAGER="unknown" # or handle error appropriately
-        fi
-        # 必要であれば、検出結果をキャッシュに保存
-        # echo "$PACKAGE_MANAGER" > "${CACHE_DIR}/package_manager.ch"
+    local cached_package_manager=""
+
+    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+        cached_package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
+        debug_log "DEBUG" "Package manager read from cache: $cached_package_manager"
+    else
+        debug_log "DEBUG" "Package manager cache file (${CACHE_DIR}/package_manager.ch) not found. This might lead to an error."
+        # return 1 # ここで即時リターンするかは要件によるが、今回は後続に任せる
     fi
 
-
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "INFO" "Using opkg to list user-installed packages (post-flash)."
+    if [ "$cached_package_manager" = "opkg" ]; then
+        debug_log "DEBUG" "Using opkg (from cache) to list user-installed packages (post-flash)."
         get_installed_packages_opkg
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        debug_log "INFO" "Using apk to list explicitly installed packages."
+    elif [ "$cached_package_manager" = "apk" ]; then
+        debug_log "DEBUG" "Using apk (from cache) to list explicitly installed packages."
         get_installed_packages_apk
     else
-        debug_log "ERROR" "Unknown or undetermined package manager: '$PACKAGE_MANAGER'. Cannot list user-installed packages."
-        return 1 # Indicate an error or issue
+        debug_log "DEBUG" "Unknown or invalid package manager in cache: '$cached_package_manager'. Cannot list user-installed packages."
+        return 1 # 不明な場合はエラー
     fi
 
     return 0 
