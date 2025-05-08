@@ -429,13 +429,11 @@ check_install_list() {
     local default_pkgs_tier2_tmp; local default_pkgs_tier3_tmp
     local default_pkgs_from_source_sorted_tmp; local default_pkgs_combined_tmp; local tmp_f
 
-    if command -v mktemp >/dev/null; then
-        pkg_extract_tmp_dir=$(mktemp -d -p "${TMP_DIR:-/tmp}" "pkg_extract.XXXXXX")
-    else
-        pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
-        pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
-        mkdir -p "$pkg_extract_tmp_dir"
-    fi
+    # Always use fallback for temporary directory creation (mktemp check removed as per user instruction)
+    pkg_extract_tmp_dir_basename="pkg_extract_$$_$(date +%s%N)"
+    pkg_extract_tmp_dir="${TMP_DIR:-/tmp}/${pkg_extract_tmp_dir_basename}"
+    mkdir -p "$pkg_extract_tmp_dir"
+
     if [ ! -d "$pkg_extract_tmp_dir" ]; then
          debug_log "DEBUG" "CRITICAL - Failed to create temp dir for default package extraction."
          return 1
