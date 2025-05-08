@@ -340,16 +340,12 @@ install_usb_packages() {
 
 # メイン処理
 package_main() {    
-
-    : "${PACKAGE_INSTALL_MODE:=manual}"
     
     # OSバージョンに基づいたパッケージインストール
     install_packages_by_version
     
     # USB関連パッケージのインストール
     install_usb_packages
-
-    : "${PACKAGE_INSTALL_MODE:=manual}"
     
 }
 
