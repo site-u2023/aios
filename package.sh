@@ -1022,18 +1022,21 @@ check_install_list() {
     fi
     debug_log "DEBUG" "Installed packages list stored in '$installed_pkgs_list_tmp'."
     
+    local pkgs_only_in_installed_list
+    if [ -s "$installed_pkgs_list_tmp" ]; then 
+        pkgs_only_in_installed_list=$(grep -vxFf "$default_pkgs_from_source_sorted_tmp" "$installed_pkgs_list_tmp")
+    else
+        pkgs_only_in_installed_list=""
+    fi
+    if [ -n "$pkgs_only_in_installed_list" ]; then echo "$pkgs_only_in_installed_list"; fi
+
     local pkgs_only_in_default_source_list
     if [ -s "$default_pkgs_from_source_sorted_tmp" ]; then 
         pkgs_only_in_default_source_list=$(grep -vxFf "$installed_pkgs_list_tmp" "$default_pkgs_from_source_sorted_tmp")
     else
         pkgs_only_in_default_source_list=""
     fi
-    # --- MODIFIED: Output to debug_log instead of echo/printf ---
-    if [ -n "$pkgs_only_in_default_source_list" ]; then
-        debug_log "DEBUG" "Packages only in default source list (potentially missing from system):\n%s" "$pkgs_only_in_default_source_list"
-    else
-        debug_log "DEBUG" "Packages only in default source list (potentially missing from system): (None)"
-    fi
+    if [ -n "$pkgs_only_in_default_source_list" ]; then echo "$pkgs_only_in_default_source_list"; fi
     
     rm -f "$installed_pkgs_list_tmp"; rm -rf "$pkg_extract_tmp_dir" 
     debug_log "DEBUG" "Cleaned up temporary files."
