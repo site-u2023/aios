@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-04-00-01"
+SCRIPT_VERSION="2025-05-08-00-00"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -1031,6 +1031,103 @@ create_language_db() {
 
     # 致命的エラー(1)が発生していなければ、最終的な成功ステータス(0 or 2)を返す
     return "$overall_success"
+}
+
+# @FUNCTION: translate_package_description
+# @DESCRIPTION: Translates a given package description string to the target language.
+#               Uses the first available function from AI_TRANSLATION_FUNCTIONS.
+# @PARAM: $1 - original_description (string) - The package description text to translate.
+# @PARAM: $2 - target_lang_code (string) - The target language code (e.g., "ja").
+# @PARAM: $3 - [optional] source_lang_code (string) - The source language code (defaults to DEFAULT_LANGUAGE).
+# @STDOUT: Translated description string. If translation fails or result is empty,
+#          it outputs the original_description.
+# @RETURN: 0 on successful translation (even if result is same as original due to API),
+#          1 if no translation function is available or if input is empty.
+#          The called translation function's exit code might indicate API specific errors.
+translate_package_description() {
+    local original_description="$1"
+    local target_lang_code="$2"
+    local source_lang_code="${3:-$DEFAULT_LANGUAGE}" # Use global DEFAULT_LANGUAGE if not provided
+
+    local translated_description=""
+    local selected_func=""
+    local func_name=""
+
+    debug_log "DEBUG" "translate_package_description: Original: '$original_description', TargetLang: '$target_lang_code', SourceLang: '$source_lang_code'"
+
+    # 入力チェック
+    if [ -z "$original_description" ]; then
+        debug_log "DEBUG" "translate_package_description: Original description is empty. Returning original (empty)."
+        printf "%s" "$original_description" # 空の元文字列をそのまま返す
+        return 1 # 処理対象なし
+    fi
+    if [ -z "$target_lang_code" ]; then
+        debug_log "DEBUG" "translate_package_description: Target language code is empty. Returning original description."
+        printf "%s" "$original_description"
+        return 1
+    fi
+
+    # 翻訳元と翻訳先が同じ言語の場合は翻訳処理をスキップ
+    if [ "$source_lang_code" = "$target_lang_code" ]; then
+        debug_log "DEBUG" "translate_package_description: Source and target languages are the same ('$target_lang_code'). Skipping translation."
+        printf "%s" "$original_description"
+        return 0
+    fi
+
+    # 利用可能な翻訳関数を選択 (translate_main と同様のロジック)
+    if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
+         debug_log "DEBUG" "translate_package_description: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
+         printf "%s" "$original_description" # フォールバック
+         return 1
+    fi
+    # POSIX準拠のループ (set -f; ...; set +f はファイル名展開を防ぐ)
+    set -f
+    # shellcheck disable=SC2086 # AI_TRANSLATION_FUNCTIONS は意図的にスペース区切りで展開
+    IFS=' ' eval 'set -- $AI_TRANSLATION_FUNCTIONS'
+    set +f
+    for func_name in "$@"; do
+        if type "$func_name" >/dev/null 2>&1; then
+            selected_func="$func_name"
+            break
+        fi
+    done
+
+    if [ -z "$selected_func" ]; then
+        debug_log "DEBUG" "translate_package_description: No available translation functions found. Returning original description."
+        printf "%s" "$original_description" # フォールバック
+        return 1
+    fi
+    debug_log "DEBUG" "translate_package_description: Using translation function: $selected_func"
+
+    # 選択された関数で翻訳を実行
+    # translate_with_google は翻訳失敗時に空文字列と非ゼロステータスを返す想定
+    # また、source_lang は translate_with_google 内部で DEFAULT_LANGUAGE を参照するため、
+    # ここで source_lang_code を明示的に渡すように translate_with_google を修正するか、
+    # この関数から source_lang_code を渡す新しいラッパーを作る必要がある。
+    # 現状の translate_with_google は第3引数を取らないため、ここでは source_lang_code を渡さない。
+    # 必要であれば translate_with_google の改修を検討。
+    # → translate_with_google 側で source_lang を引数で受け取れるように修正するのが望ましい。
+    #   ここでは一旦、既存の translate_with_google をそのまま使う前提で進める。
+    #   (translate_with_google は内部で DEFAULT_LANGUAGE を source_lang として使う)
+
+    # translate_with_google が source_lang を引数で受け取れるように修正する前提で、
+    # source_lang_code を渡すように変更 (この修正は別途必要)
+    # translated_description=$("$selected_func" "$original_description" "$target_lang_code" "$source_lang_code")
+    # ↓ 現状の translate_with_google に合わせる場合 (source_lang は DEFAULT_LANGUAGE 固定)
+    translated_description=$("$selected_func" "$original_description" "$target_lang_code")
+    local translate_exit_status=$?
+
+    if [ "$translate_exit_status" -eq 0 ] && [ -n "$translated_description" ]; then
+        debug_log "DEBUG" "translate_package_description: Translation successful. Translated: '$translated_description'"
+        printf "%s" "$translated_description"
+        return 0
+    else
+        debug_log "DEBUG" "translate_package_description: Translation failed (status $translate_exit_status) or returned empty. Original: '$original_description'"
+        printf "%s" "$original_description" # 翻訳失敗時は元の説明文を返す
+        # 翻訳API自体が失敗したのか、結果が空だったのかを区別したい場合は $translate_exit_status を利用
+        return 0 # 呼び出し側では翻訳結果の有無で判断するため、ここでは成功として返す
+                 # (APIエラー等を呼び出し側に伝えたい場合は $translate_exit_status を返す)
+    fi
 }
 
 # 翻訳情報を表示する関数
