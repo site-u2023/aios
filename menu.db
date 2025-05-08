@@ -43,7 +43,7 @@ MENU_DSLITE_TRANS_WEST download "internet-ds-lite-config.sh" "chmod" "load"; app
 MENU_SYSTEM printf "\n%s\n" "$(color yellow "Coming soon")"
 
 [MENU_PACKAGES]
-MENU_PACKAGES_AUTO_INSTALL download "package-auto.sh" "chmod" "load"; detect_and_run_installer standard
-MENU_PACKAGES_MANUAL_INSTALL download "package-manual.sh" "chmod" "load"; package_manual_main
-MENU_PACKAGES_SAMBA download "package-manual.sh" "chmod" "load"; package_samba
-MENU_PACKAGES_LIST download "package-manual.sh" "chmod" "load"; package_list
+MENU_PACKAGES_AUTO_INSTALL export PACKAGE_INSTALL_MODE="auto"; download "package.sh" "chmod" "load"; main_package_installer standard
+MENU_PACKAGES_MANUAL_INSTALL export PACKAGE_INSTALL_MODE="manual"; download "package.sh" "chmod" "load"; main_package_installer manual
+MENU_PACKAGES_SAMBA export PACKAGE_INSTALL_MODE="manual"; download "package.sh" "chmod" "load"; package_samba_install_entry
+MENU_PACKAGES_LIST download "package.sh" "chmod" "load"; package_list_show_entry
