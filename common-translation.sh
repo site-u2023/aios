@@ -64,101 +64,89 @@ urlencode() {
 translate_with_google() {
     local source_text="$1"
     local target_lang_code="$2"
-    local source_lang="${3:-$DEFAULT_LANGUAGE}" # Use 3rd arg if provided, else DEFAULT_LANGUAGE
+    local source_lang="${3:-$DEFAULT_LANGUAGE}"
 
-    # --- network.ch依存をip_type.chに変更 ---
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     local wget_options=""
     local retry_count=0
-    # --- temp_file関連の変数は元から未使用 ---
     local api_url=""
     local translated_text=""
     local wget_exit_code=0
-    local response_data="" # Variable to store wget output
+    local response_data=""
 
-    # Ensure BASE_DIR exists (still needed for potential cache files, etc.)
-    # mkdir -p "$BASE_DIR" 2>/dev/null || { debug_log "DEBUG" "translate_with_google: Failed to create base directory $BASE_DIR"; return 1; }
-
-    # --- IPバージョン判定（ip_type.chの内容をそのままwget_optionsに） ---
     if [ ! -f "$ip_type_file" ]; then
-        # debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch not found)" >&2 # REMOVED
-        echo "Network is not available. (ip_type.ch not found)" >&2 # Original error output
+        echo "Network is not available. (ip_type.ch not found)" >&2
         return 1
     fi
     wget_options=$(cat "$ip_type_file" 2>/dev/null)
     if [ -z "$wget_options" ] || [ "$wget_options" = "unknown" ]; then
-        # debug_log "ERROR" "translate_with_google: Network is not available. (ip_type.ch is unknown or empty)" >&2 # REMOVED
-        echo "Network is not available. (ip_type.ch is unknown or empty)" >&2 # Original error output
+        echo "Network is not available. (ip_type.ch is unknown or empty)" >&2
         return 1
     fi
 
     local encoded_text
-    encoded_text=$(urlencode "$source_text") # urlencode function must be available
+    encoded_text=$(urlencode "$source_text")
 
     if [ -z "$source_lang" ] || [ -z "$target_lang_code" ]; then
-        # debug_log "DEBUG" "translate_with_google: Source or target language code is empty (source='$source_lang', target='$target_lang_code')." # REMOVED
         return 1
     fi
-    # API URL now uses the potentially overridden source_lang
     api_url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source_lang}&tl=${target_lang_code}&dt=t&q=${encoded_text}"
-    # debug_log "DEBUG" "translate_with_google: API URL: $api_url" # REMOVED
 
-    # RES_OPTIONSによるDNSタイムアウト短縮（関数内限定）
-    # export RES_OPTIONS="timeout:1 attempts:1"
-
-    # リトライループ
     while [ $retry_count -lt $API_MAX_RETRIES ]; do
         response_data=""
-        # Capture both stdout and stderr from wget to see API error messages if any
         response_data=$(wget --no-check-certificate $wget_options -T $API_TIMEOUT -q -O - --user-agent="Mozilla/5.0" "$api_url" 2>&1)
         wget_exit_code=$?
         
-        # REMOVED: All debug logs related to retry attempts, wget_exit_code, and response_data inside the loop
-
         if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
-            if echo "$response_data" | grep -q '^\s*\[\[\["'; then # Original check
-                # Original awk script is used here
+            if echo "$response_data" | grep -q '^\s*\[\[\["'; then
                 translated_text=$(printf %s "$response_data" | awk '
                 BEGIN { out = "" }
                 /^\s*\[\[\["/ {
-                sub(/^\s*\[\[\["/, "")
-                split($0, a, /","/)
-                out = a[1]
-                gsub(/\\u003d/, "=", out)
-                gsub(/\\u003c/, "<", out)
-                gsub(/\\u003e/, ">", out)
-                gsub(/\\u0026/, "&", out)
-                gsub(/\\"/, "\"", out)
-                gsub(/\\n/, "\n", out)
-                gsub(/\\r/, "", out)
-                gsub(/\\\\/, "\\", out)
-                print out
-                exit
-            }
-            ')
-                    
-                if [ -n "$translated_text" ]; then
-                    # debug_log "DEBUG" "translate_with_google: Translation parsed successfully." # REMOVED
-                    printf "%s\n" "$translated_text"
-                    return 0 # Success
-                fi
-                # If parsing failed (translated_text is empty), it will fall through to retry logic
-            fi
-            # If response_data is not in expected format, it will fall through to retry logic
-        fi
-        # If wget failed or response was empty, it will fall through to retry logic
+                    sub(/^\s*\[\[\["/, "")
+                    split($0, a, /","/)
+                    out = a[1]
+                    gsub(/\\u003d/, "=", out)
+                    gsub(/\\u003c/, "<", out)
+                    gsub(/\\u003e/, ">", out)
+                    gsub(/\\u0026/, "&", out)
+                    gsub(/\\"/, "\"", out)
+                    gsub(/\\n/, "\n", out)
+                    gsub(/\\r/, "", out)
+                    gsub(/\\\\/, "\\", out)
 
-        # --- Retry Logic ---
+                    # MODIFIED: Sanitize translated text
+                    # Remove "のための翻訳 - 日本語（日本語）" and similar patterns
+                    gsub(/のための翻訳\s*-\s*[[:alpha:]]+（[[:alpha:]]+）/, "", out);
+                    gsub(/のための翻訳/, "", out);
+                    # Remove trailing "- Language (Language)" or "- Language"
+                    gsub(/-\s*[[:alpha:]]+（[[:alpha:]]+）$/, "", out);
+                    gsub(/-\s*[[:alpha:]]+$/, "", out);
+                    # Remove "Translation for ... - Language (Language)" type patterns (more generic)
+                    # Example: "Translation for luci-app-statistics - Japanese (Japanese)"
+                    gsub(/[Tt]ranslation for [^-]+-\s*[[:alpha:]]+（[[:alpha:]]+）/, "", out);
+                    gsub(/[Tt]ranslation for [^-]+-\s*[[:alpha:]]+/, "", out);
+                    gsub(/[Tt]ranslation for/, "", out);
+                    
+                    # Trim leading/trailing whitespace that might be left after sanitization
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", out);
+
+                    print out
+                    exit
+                }
+                ')
+                if [ -n "$translated_text" ]; then
+                    printf "%s\n" "$translated_text"
+                    return 0
+                fi
+            fi
+        fi
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $API_MAX_RETRIES ]; then
-            # debug_log "DEBUG" "translate_with_google: Retrying in 1 second..." # REMOVED
             sleep 1
         fi
     done
-
-    # debug_log "DEBUG" "translate_with_google: Failed to translate '$source_text' after $API_MAX_RETRIES attempts." # REMOVED
-    printf "" # Output empty string on failure (Original behavior for failure after retries)
-    return 1 # Failure
+    printf ""
+    return 1
 }
 
 OK_translate_with_google() {
