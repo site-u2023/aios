@@ -50,20 +50,11 @@ en|MSG_LANGUAGE_SOURCE=Original language code{:} {i}
 en|MSG_LANGUAGE_CODE=Translation language code{:} {i}
 en|MSG_TRANSLATION_SUCCESS=Translation completed
 
-# package_auto.sh
-en|MENU_PACKAGE_STANDARD=Standard Installation (Recommended)
-en|MENU_PACKAGE_MINIMAL=Minimal Installation (Essential Only)
-en|MENU_PACKAGE_FULL=Full Installation (All Features)
-en|MSG_PACKAGE_AUTO_SELECT=Select installation type{:}
-en|MSG_PACKAGE_STANDARD=Standard Installation (Recommended)
-en|MSG_PACKAGE_MINIMAL=Minimal Installation (Essential Only)
-en|MSG_PACKAGE_FULL=Full Installation (All Features)
-en|MSG_PACKAGE_SKIP=Skip Installation
-en|MSG_PACKAGE_AUTO_SKIPPED=Package installation was skipped
-en|MSG_INSTALLING_PACKAGES=Installing packages...
-en|MSG_INSTALL_COMPLETED=Package installation completed successfully
+# package.sh
+en|MSG_PACKAGE_INSTALL_AUTO=Auto install recommended packages? {yn}
+en|MSG_PACKAGE_INSTALL_CANCELLED=Auto install cancelled
+en|MSG_PACKAGE_INSTALL_COMPLETED=Auto install completed successfully
 
-# package-manual.sh
 en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package {yn}{;}
 en|PKG_SECTION_BASIC=Basic System Functions
 en|PKG_SECTION_SYSADMIN=System Administration
