@@ -480,7 +480,7 @@ feed_package_apk() {
       hidden) hidden_msg="yes" ;;
       silent)
         silent_mode="yes"
-        hidden_msg="yes" # Silent implies hidden
+        hidden_msg="yes"
         ;;
       *)
         arg_counter=$((arg_counter + 1))
@@ -492,7 +492,11 @@ feed_package_apk() {
             5) ipk_filename_prefix="$1" ;;
             *)
               debug_log "WARNING" "feed_package_apk: Superfluous positional argument: $1"
-              unknown_args+=("$1")
+              if [ -z "$unknown_args" ]; then
+                unknown_args="$1"
+              else
+                unknown_args="$unknown_args $1"
+              fi
               ;;
         esac
         ;;
