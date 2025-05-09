@@ -776,7 +776,7 @@ feed_package_apk() {
   local pkg_admin_name=""
   local dir_path=""
   local ipk_filename_prefix=""
-  local pkg_description="" # MODIFIED: Added to store package description
+  local pkg_description=""
 
   # --- Option and Argument Parsing ---
   local confirm_install="no"
@@ -784,84 +784,108 @@ feed_package_apk() {
   local set_disabled="no"
   local hidden_msg="no"
   local silent_mode="no"
-  local opts_for_install_package=""
+  local opts_for_install_package="" # For options passed to install_package
+  local args="" # For collecting positional arguments
 
   debug_log "DEBUG" "feed_package_apk: Received arguments ($#): $*"
 
+  # MODIFIED: Argument parsing method
   while [ $# -gt 0 ]; do
     case "$1" in
       yn) confirm_install="yes" ;;
       force) force_deploy="yes" ;;
       disabled) set_disabled="yes" ;;
-      hidden) hidden_msg="yes"; opts_for_install_package="$opts_for_install_package hidden" ;;
-      silent)
-        silent_mode="yes"
-        hidden_msg="yes"
-        opts_for_install_package="$opts_for_install_package silent"
+      hidden) hidden_msg="yes" ;;
+      silent) silent_mode="yes" ;;
+      desc=*)
+        if [ -z "$pkg_description" ]; then # Capture first description only
+            pkg_description="${1#desc=}"
+            debug_log "DEBUG" "feed_package_apk: Package description captured: $pkg_description"
+        else
+            debug_log "WARNING" "feed_package_apk: Multiple 'desc=' arguments found. Using first: '$pkg_description'. Ignoring: '$1'"
+        fi
         ;;
       *)
-        if [ -z "$repo_owner" ]; then
-          repo_owner="$1"
-        elif [ -z "$repo_name" ]; then
-          repo_name="$1"
-        elif [ -z "$pkg_admin_name" ]; then
-          pkg_admin_name="$1"
-        elif [ -z "$dir_path" ]; then
-          if [ "$pkg_admin_name" = "current" ]; then
-            pkg_admin_name="$1"
-            dir_path=""
-            debug_log "DEBUG" "feed_package_apk: Adjusted: pkg_admin_name set to '$pkg_admin_name' (from 4th argument). dir_path reset."
-          else
-            dir_path="$1"
-          fi
-        elif [ -z "$ipk_filename_prefix" ]; then
-          # MODIFIED: Capture description if argument starts with "desc="
-          if echo "$1" | grep -q "^desc="; then
-            pkg_description="${1#desc=}" # Store the description without "desc="
-            ipk_filename_prefix=""       # As per original logic, reset if it's a desc
-            debug_log "DEBUG" "feed_package_apk: Description found: '$pkg_description'. ipk_filename_prefix reset."
-          else
-            ipk_filename_prefix="$1"
-          fi
-        else
-          # MODIFIED: Handle "desc=" even if ipk_filename_prefix is already set (e.g. if "desc=" is the very last argument)
-          if echo "$1" | grep -q "^desc="; then
-            if [ -z "$pkg_description" ]; then # Only capture the first "desc="
-                pkg_description="${1#desc=}"
-                debug_log "DEBUG" "feed_package_apk: Description found (late argument): '$pkg_description'."
-            else
-                debug_log "WARNING" "feed_package_apk: Multiple 'desc=' arguments. Using first: '$pkg_description'. Ignoring: '$1'"
-            fi
-          else
-            debug_log "WARNING" "feed_package_apk: Unknown or superfluous argument: $1"
-          fi
-        fi
+        args="$args \"$1\"" # Collect positional arguments, quoting to handle spaces
         ;;
     esac
     shift
   done
 
-  if [ -z "$repo_owner" ] || [ -z "$repo_name" ] || [ -z "$pkg_admin_name" ]; then
-    debug_log "ERROR" "feed_package_apk: Missing required arguments: REPO_OWNER, REPO_NAME, PKG_ADMIN_NAME"
-    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Usage: feed_package_apk [opts] REPO_OWNER REPO_NAME PKG_ADMIN_NAME [DIR_PATH] [IPK_PREFIX]")" >&2
+  # Restore positional arguments from collected args
+  if [ -n "$args" ]; then
+    eval "set -- $args"
+  else
+    set -- # Clear positional arguments if none were collected
+  fi
+
+  # Assign positional arguments
+  # Expected: REPO_OWNER REPO_NAME (PKG_ADMIN_NAME_OR_CURRENT) (ACTUAL_PKG_NAME_OR_DIR_PATH) [IPK_FILENAME_PREFIX]
+  if [ "$#" -lt 3 ]; then # Need at least owner, repo, and (current | pkg_name)
+    debug_log "ERROR" "feed_package_apk: Missing required positional arguments. Expected at least REPO_OWNER REPO_NAME PKG_ADMIN_NAME_OR_CURRENT."
+    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Usage: feed_package_apk [opts] REPO_OWNER REPO_NAME (PKG_ADMIN_NAME | 'current') [ACTUAL_PKG_NAME_IF_CURRENT | DIR_PATH] [IPK_PREFIX]")" >&2
     return 1
   fi
 
-  if [ -z "$ipk_filename_prefix" ]; then
-    ipk_filename_prefix="$pkg_admin_name"
+  repo_owner="$1"
+  repo_name="$2"
+  local third_arg="$3"
+  local fourth_arg="$4" # Optional, depends on third_arg and total arg count
+  local fifth_arg="$5"  # Optional, for ipk_filename_prefix
+
+  if [ "$third_arg" = "current" ]; then
+    if [ -z "$fourth_arg" ]; then
+        debug_log "ERROR" "feed_package_apk: Missing ACTUAL_PKG_NAME when 3rd argument is 'current'."
+        [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Usage: feed_package_apk [opts] REPO_OWNER REPO_NAME 'current' ACTUAL_PKG_NAME [IPK_PREFIX]")" >&2
+        return 1
+    fi
+    pkg_admin_name="$fourth_arg"
+    dir_path="" # dir_path is not used in this calling convention
+    debug_log "DEBUG" "feed_package_apk: Adjusted: pkg_admin_name set to '$pkg_admin_name' (from 4th arg as 3rd was 'current'). dir_path reset."
+  else
+    pkg_admin_name="$third_arg"
+    dir_path="$fourth_arg" # Can be empty if only 3 positional args were given
+    debug_log "DEBUG" "feed_package_apk: pkg_admin_name set to '$pkg_admin_name' (from 3rd arg). dir_path set to '$dir_path' (from 4th arg)."
   fi
 
-  # MODIFIED: Added pkg_description to debug log
+  # Set ipk_filename_prefix
+  if [ -n "$fifth_arg" ]; then
+    ipk_filename_prefix="$fifth_arg"
+  else
+    ipk_filename_prefix="$pkg_admin_name" # Default to pkg_admin_name
+  fi
+  debug_log "DEBUG" "feed_package_apk: ipk_filename_prefix set to '$ipk_filename_prefix'."
+
+
+  # Construct opts_for_install_package (for `install_package` function)
+  if [ "$hidden_msg" = "yes" ]; then
+    opts_for_install_package="$opts_for_install_package hidden"
+  fi
+  if [ "$silent_mode" = "yes" ]; then
+    opts_for_install_package="$opts_for_install_package silent"
+  fi
+  opts_for_install_package=$(echo "$opts_for_install_package" | sed 's/^ *//;s/ *$//') # Trim leading/trailing spaces
+
+  # Check for essential parsed arguments
+  if [ -z "$repo_owner" ] || [ -z "$repo_name" ] || [ -z "$pkg_admin_name" ]; then
+    debug_log "ERROR" "feed_package_apk: Essential arguments REPO_OWNER, REPO_NAME, or PKG_ADMIN_NAME are missing after parsing."
+    # Usage message already printed if arg count was too low, or print a generic one
+    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Missing one or more required arguments (owner, repo, package name).")" >&2
+    return 1
+  fi
+  # End of MODIFIED argument parsing section
+
   debug_log "DEBUG" "feed_package_apk: Parsed - Owner: $repo_owner, Repo: $repo_name, PkgAdmin: $pkg_admin_name, Path: $dir_path, Prefix: $ipk_filename_prefix, Desc: $pkg_description"
-  debug_log "DEBUG" "feed_package_apk: Options - Confirm: $confirm_install, Force: $force_deploy, Disabled: $set_disabled, Hidden: $hidden_msg, Silent: $silent_mode"
+  debug_log "DEBUG" "feed_package_apk: Options - Confirm: $confirm_install, Force: $force_deploy, Disabled: $set_disabled, Hidden: $hidden_msg, Silent: $silent_mode, OptsForInstall: $opts_for_install_package"
 
   # --- Prerequisite Installation (jq, ca-certificates) ---
-  if ! install_package jq $opts_for_install_package silent; then
+  # Pass $opts_for_install_package which should contain "silent" if silent_mode is "yes"
+  if ! install_package jq $opts_for_install_package; then # MODIFIED: Removed explicit "silent" here
       debug_log "ERROR" "feed_package_apk: Failed to install prerequisite: jq"
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Failed to install prerequisite jq.")"
       return 1
   fi
-  if ! install_package ca-certificates $opts_for_install_package silent; then
+  if ! install_package ca-certificates $opts_for_install_package; then # MODIFIED: Removed explicit "silent" here
       debug_log "ERROR" "feed_package_apk: Failed to install prerequisite: ca-certificates"
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Failed to install prerequisite ca-certificates.")"
       return 1
@@ -888,7 +912,6 @@ feed_package_apk() {
     caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$pkg_admin_name") 
     printf "\n%s\n" "$(color red "$caution_message")"
 
-    # MODIFIED: Use different message key and params based on description availability
     if [ -n "$pkg_description" ]; then
       if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$(color blue "$pkg_admin_name")" "desc=$(color none "$pkg_description")"; then
         debug_log "DEBUG" "feed_package_apk: User declined deployment of $pkg_admin_name."
@@ -919,7 +942,7 @@ feed_package_apk() {
 
   # --- Get .ipk Download URL from GitHub API (Contents API) ---
   local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents"
-  if [ -n "$dir_path" ] && [ "$dir_path" != "/" ]; then
+  if [ -n "$dir_path" ] && [ "$dir_path" != "/" ]; then # dir_path can be empty if "current" was used
       api_url="${api_url}/${dir_path}"
   fi
 
