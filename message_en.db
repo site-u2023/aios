@@ -3,6 +3,9 @@ SCRIPT_VERSION="2025-03-31-00-00"
 # debug_test
 en|MSG_UNDER_TEST=👽 test
 
+# common-feed-package.sh
+en|MSG_APK_DEPLOY_CAUTION=Caution: Deploying {pkg} directly bypasses the package
+
 # internet-map-e-nuro.sh
 en|MSG_NURO_APPLY_SUCCESS=NURO MAP-E configuration completed. Please reboot the system.
 en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix.
