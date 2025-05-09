@@ -482,11 +482,27 @@ feed_package_apk() {
         opts_for_install_package="$opts_for_install_package silent"
         ;;
       *)
-        if [ -z "$repo_owner" ]; then repo_owner="$1"
-        elif [ -z "$repo_name" ]; then repo_name="$1"
-        elif [ -z "$pkg_admin_name" ]; then pkg_admin_name="$1"
-        elif [ -z "$dir_path" ]; then dir_path="$1"
-        elif [ -z "$ipk_filename_prefix" ]; then ipk_filename_prefix="$1"
+        if [ -z "$repo_owner" ]; then
+          repo_owner="$1"
+        elif [ -z "$repo_name" ]; then
+          repo_name="$1"
+        elif [ -z "$pkg_admin_name" ]; then
+          pkg_admin_name="$1"
+        elif [ -z "$dir_path" ]; then
+          if [ "$pkg_admin_name" = "current" ]; then
+            pkg_admin_name="$1"
+            dir_path=""
+            debug_log "DEBUG" "feed_package_apk: Adjusted: pkg_admin_name set to '$pkg_admin_name' (from 4th argument). dir_path reset."
+          else
+            dir_path="$1"
+          fi
+        elif [ -z "$ipk_filename_prefix" ]; then
+          if echo "$1" | grep -q "^desc="; then
+            ipk_filename_prefix=""
+            debug_log "DEBUG" "feed_package_apk: Adjusted: ipk_filename_prefix (from argument '$1') was reset as it matched 'desc=' pattern. It will default to pkg_admin_name."
+          else
+            ipk_filename_prefix="$1"
+          fi
         else
           debug_log "WARNING" "feed_package_apk: Unknown or superfluous argument: $1"
         fi
@@ -538,7 +554,7 @@ feed_package_apk() {
   # --- Confirmation Prompt (if 'yn' is set) ---
   if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
     local caution_message
-    caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")")
+    caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$pkg_admin_name") 
     printf "\n%s\n" "$(color red "$caution_message")"
 
     if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$(color blue "$pkg_admin_name")"; then
