@@ -731,7 +731,7 @@ package_main() {
         # ここでは仮のメッセージキーを使用
         if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
             debug_log "DEBUG" "User cancelled automatic package installation."
-            printf "%s\n" "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")" # キャンセルメッセージ
+            printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")")"
             return 1 # 中断して終了
         fi
         debug_log "DEBUG" "User confirmed automatic package installation."
@@ -745,7 +745,7 @@ package_main() {
 
     # 自動インストール成功時のメッセージ (オプション)
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
-        printf "%s\n" "$(get_message "MSG_PACKAGE_INSTALL_COMPLETED")" # 完了メッセージ
+        printf "\n%s\n" "$(color green "$(get_message "MSG_PACKAGE_INSTALL_COMPLETED")")"
     fi
     return 0 # 正常終了
 }
