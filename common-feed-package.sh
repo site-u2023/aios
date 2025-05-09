@@ -468,7 +468,7 @@ feed_package_apk() {
   local silent_mode="no"
 
   local arg_counter=0
-  local unknown_args=()
+  local unknown_args=""
 
   debug_log "DEBUG" "feed_package_apk: Received arguments ($#): $*"
 
