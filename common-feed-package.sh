@@ -571,10 +571,8 @@ feed_package_apk() {
 
   # --- GitHub API Interaction & Download (Common structure with feed_package) ---
   local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents"
-  # dir_path might be empty if 'current' mode was used, or if user didn't provide it.
-  # If dir_path is empty, API URL targets repo root. If not, it's appended.
   if [ -n "$dir_path" ] && [ "$dir_path" != "/" ]; then
-      local cleaned_dir_path=$(echo "$dir_path" | sed 's#^/*##;s#/*$##') # Clean slashes
+      local cleaned_dir_path=$(echo "$dir_path" | sed 's#^/*##;s#/*$##') 
       if [ -n "$cleaned_dir_path" ]; then
         api_url="${api_url}/${cleaned_dir_path}"
       fi
@@ -589,7 +587,8 @@ feed_package_apk() {
   JSON_RESPONSE=$(wget --no-check-certificate -q -U "aios-feed-apk/1.0 $(uname -a)" -O- "$api_url")
   local wget_status=$?
 
-  if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+  # ★★★ Corrected spinner stop call ★★★
+  if [ "$silent_mode" != "yes" ]; then stop_spinner; fi 
 
   if [ $wget_status -ne 0 ] || [ -z "$JSON_RESPONSE" ]; then
     debug_log "ERROR" "feed_package_apk: Could not retrieve data from API: $api_url (wget status: $wget_status)"
@@ -624,7 +623,7 @@ feed_package_apk() {
       return 1
   fi
   
-  local ipk_filename # Actual filename of the .ipk to download
+  local ipk_filename 
   ipk_filename=$(echo "$JSON_RESPONSE" | jq -r --arg PFX "$ipk_filename_prefix" '.[] | select(.type == "file" and .name? and (.name | startswith($PFX)) and (.name | endswith(".ipk"))) | .name' | sort -V | tail -n 1)
 
   if [ -z "$ipk_filename" ]; then
@@ -632,6 +631,7 @@ feed_package_apk() {
     if [ "$hidden_msg" != "yes" ]; then
         printf "%s\n" "$(color yellow "Package $ipk_filename_prefix (.ipk) not found in feed repository.")"
     fi
+    # ★★★ Package not found is a valid exit, should return 1 as per original error handling for not found ★★★
     return 1 
   fi
   debug_log "DEBUG" "feed_package_apk: Latest .ipk file found: $ipk_filename"
@@ -646,16 +646,13 @@ feed_package_apk() {
   fi
   debug_log "DEBUG" "feed_package_apk: .ipk download URL: $ipk_download_url"
 
-  # --- Temporary Directory Setup for APK deployment ---
   local temp_deploy_dir
   temp_deploy_dir=$(mktemp -d -p "${AIOS_TMP_DIR:-/tmp}" "feed_apk_deploy_${pkg_admin_name}_XXXXXX")
   if [ $? -ne 0 ] || [ ! -d "$temp_deploy_dir" ]; then
     debug_log "ERROR" "feed_package_apk: Failed to create temporary directory."
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Could not create temporary directory.")"
-    # No trap needed here yet as it's set after successful creation
     return 1
   fi
-  # Set trap AFTER successful creation of temp_deploy_dir
   trap "rm -rf \"$temp_deploy_dir\" 2>/dev/null; debug_log DEBUG \"feed_package_apk: Cleaned up temp directory: $temp_deploy_dir\"" EXIT INT TERM
 
   local temp_download_dir="${temp_deploy_dir}/download"
@@ -663,23 +660,23 @@ feed_package_apk() {
   local temp_extract_data_dir="${temp_deploy_dir}/extract_data"
   mkdir -p "$temp_download_dir" "$temp_extract_ipk_dir" "$temp_extract_data_dir"
 
-  local downloaded_ipk_path="${temp_download_dir}/${ipk_filename}" # Download to temp dir
+  local downloaded_ipk_path="${temp_download_dir}/${ipk_filename}" 
   
   if [ "$silent_mode" != "yes" ]; then
     start_spinner "$(color blue "Downloading $ipk_filename...")"
   fi
 
-  if [ -z "$BASE_WGET" ]; then # Ensure BASE_WGET is defined
+  if [ -z "$BASE_WGET" ]; then 
       debug_log "CRITICAL" "feed_package_apk: BASE_WGET is not defined!"
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Critical error: Download command base not set.")"
-      if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+      if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
       return 1
   fi
   
   eval "$BASE_WGET" -O "\"$downloaded_ipk_path\"" "\"$ipk_download_url\"" 
   local download_status=$?
 
-  if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+  if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
 
   if [ $download_status -ne 0 ]; then
       debug_log "ERROR" "feed_package_apk: Failed to download .ipk from $ipk_download_url (wget status: $download_status)"
@@ -693,9 +690,6 @@ feed_package_apk() {
   fi
   debug_log "DEBUG" "feed_package_apk: .ipk downloaded successfully to: $downloaded_ipk_path"
 
-  # --- Start of APK-specific deployment logic (replaces install_package call) ---
-
-  # Confirmation Prompt (moved here, after download, before extraction/deployment)
   if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
     local caution_message
     caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$pkg_admin_name") 
@@ -704,17 +698,16 @@ feed_package_apk() {
     if [ -n "$pkg_description" ]; then
       if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$(color blue "$pkg_admin_name")" "desc=$(color none "$pkg_description")"; then
         debug_log "DEBUG" "feed_package_apk: User declined deployment of $pkg_admin_name."
-        return 2 # User cancelled
+        return 2 
       fi
     else
       if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$(color blue "$pkg_admin_name")"; then
         debug_log "DEBUG" "feed_package_apk: User declined deployment of $pkg_admin_name."
-        return 2 # User cancelled
+        return 2 
       fi
     fi
   fi
   
-  # Extraction and Deployment
   if [ "$silent_mode" != "yes" ]; then
     start_spinner "$(color blue "Extracting $ipk_filename...")"
   fi
@@ -734,7 +727,7 @@ feed_package_apk() {
         debug_log "DEBUG" "feed_package_apk: data.tar.gz not found at .ipk top level. Assuming .ipk IS the data.tar.gz equivalent (direct content)."
         cp "$downloaded_ipk_path" "$data_tar_gz_path"
         if [ $? -ne 0 ] || [ ! -s "$data_tar_gz_path" ]; then
-            if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+            if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
             debug_log "ERROR" "feed_package_apk: Failed to copy .ipk as data.tar.gz for extraction or copied file is empty."
             [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error preparing .ipk for content extraction.")"
             return 1
@@ -744,19 +737,19 @@ feed_package_apk() {
   fi
 
   if [ ! -s "$data_tar_gz_path" ]; then
-    if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+    if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
     debug_log "ERROR" "feed_package_apk: data.tar.gz could not be found or extracted, or is empty from $ipk_filename."
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Could not find or extract data.tar.gz in $ipk_filename, or it is empty.")"
     return 1
   fi
 
   if ! tar -xzf "$data_tar_gz_path" -C "$temp_extract_data_dir" 2>"${LOG_DIR}/feed_apk_deploy_tar_err.log"; then
-    if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+    if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
     debug_log "ERROR" "feed_package_apk: Failed to extract data.tar.gz from $ipk_filename. See ${LOG_DIR}/feed_apk_deploy_tar_err.log"
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to extract content from $ipk_filename")"
     return 1
   fi
-  if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+  if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
   debug_log "DEBUG" "feed_package_apk: Content extracted to $temp_extract_data_dir"
 
   if [ ! -d "$temp_extract_data_dir" ] || [ -z "$(ls -A "$temp_extract_data_dir")" ]; then
@@ -770,12 +763,12 @@ feed_package_apk() {
   fi
 
   if ! cp -a "${temp_extract_data_dir}/." / 2>"${LOG_DIR}/feed_apk_deploy_cp_err.log"; then
-    if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+    if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
     debug_log "ERROR" "feed_package_apk: Failed to copy files to root filesystem. See ${LOG_DIR}/feed_apk_deploy_cp_err.log"
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error deploying files for $pkg_admin_name")"
     return 1
   fi
-  if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
+  if [ "$silent_mode" != "yes" ]; then stop_spinner; fi # ★★★ Corrected ★★★
   debug_log "DEBUG" "feed_package_apk: Files deployed successfully to root filesystem."
 
   mkdir -p "$CACHE_DIR"
@@ -800,11 +793,10 @@ feed_package_apk() {
     printf "%s\n" "$(color green "$pkg_admin_name deployed successfully (apk source).")"
     if [ "$confirm_install" != "yes" ] && [ "$hidden_msg" != "yes" ]; then
         local note_message
-        note_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$pkg_admin_name") # pkg_admin_name should not be colored here
+        note_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$pkg_admin_name") 
         printf "\n%s\n" "$(color yellow "$note_message")"
     fi
   fi
   
-  # Trap will clean up temp_deploy_dir on exit
   return 0
 }
