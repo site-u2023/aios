@@ -466,9 +466,7 @@ feed_package_apk() {
   local set_disabled="no"
   local hidden_msg="no"
   local silent_mode="no"
-
-  local arg_counter=0
-  local unknown_args=""
+  local opts_for_install_package=""
 
   debug_log "DEBUG" "feed_package_apk: Received arguments ($#): $*"
 
@@ -477,36 +475,25 @@ feed_package_apk() {
       yn) confirm_install="yes" ;;
       force) force_deploy="yes" ;;
       disabled) set_disabled="yes" ;;
-      hidden) hidden_msg="yes" ;;
+      hidden) hidden_msg="yes"; opts_for_install_package="$opts_for_install_package hidden" ;;
       silent)
         silent_mode="yes"
         hidden_msg="yes"
+        opts_for_install_package="$opts_for_install_package silent"
         ;;
       *)
-        arg_counter=$((arg_counter + 1))
-        case $arg_counter in
-            1) repo_owner="$1" ;;
-            2) repo_name="$1" ;;
-            3) pkg_admin_name="$1" ;;
-            4) dir_path="$1" ;;
-            5) ipk_filename_prefix="$1" ;;
-            *)
-              debug_log "WARNING" "feed_package_apk: Superfluous positional argument: $1"
-              if [ -z "$unknown_args" ]; then
-                unknown_args="$1"
-              else
-                unknown_args="$unknown_args $1"
-              fi
-              ;;
-        esac
+        if [ -z "$repo_owner" ]; then repo_owner="$1"
+        elif [ -z "$repo_name" ]; then repo_name="$1"
+        elif [ -z "$pkg_admin_name" ]; then pkg_admin_name="$1"
+        elif [ -z "$dir_path" ]; then dir_path="$1"
+        elif [ -z "$ipk_filename_prefix" ]; then ipk_filename_prefix="$1"
+        else
+          debug_log "WARNING" "feed_package_apk: Unknown or superfluous argument: $1"
+        fi
         ;;
     esac
     shift
   done
-
-  if [ -n "${unknown_args[*]}" ]; then
-      debug_log "DEBUG" "feed_package_apk: Unhandled arguments: ${unknown_args[*]}"
-  fi
 
   if [ -z "$repo_owner" ] || [ -z "$repo_name" ] || [ -z "$pkg_admin_name" ]; then
     debug_log "ERROR" "feed_package_apk: Missing required arguments: REPO_OWNER, REPO_NAME, PKG_ADMIN_NAME"
@@ -514,29 +501,27 @@ feed_package_apk() {
     return 1
   fi
 
-  if [[ "$ipk_filename_prefix" == desc=* ]]; then
-      debug_log "WARNING" "feed_package_apk: ipk_filename_prefix received a 'desc=...' string ('$ipk_filename_prefix'). Applying default logic for prefix."
-      ipk_filename_prefix=""
-  fi
-
   if [ -z "$ipk_filename_prefix" ]; then
-      ipk_filename_prefix="$pkg_admin_name"
+    ipk_filename_prefix="$pkg_admin_name"
   fi
 
   debug_log "DEBUG" "feed_package_apk: Parsed - Owner: $repo_owner, Repo: $repo_name, PkgAdmin: $pkg_admin_name, Path: $dir_path, Prefix: $ipk_filename_prefix"
   debug_log "DEBUG" "feed_package_apk: Options - Confirm: $confirm_install, Force: $force_deploy, Disabled: $set_disabled, Hidden: $hidden_msg, Silent: $silent_mode"
 
   # --- Prerequisite Installation (jq, ca-certificates) ---
-  # As per user instruction, prerequisites are installed with "silent" option only.
-  # Error messages from this function will respect its own silent_mode.
-  if ! install_package jq silent; then
+  if ! install_package jq $opts_for_install_package silent; then
       debug_log "ERROR" "feed_package_apk: Failed to install prerequisite: jq"
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Failed to install prerequisite jq.")"
       return 1
   fi
-  if ! install_package ca-certificates silent; then
+  if ! install_package ca-certificates $opts_for_install_package silent; then
       debug_log "ERROR" "feed_package_apk: Failed to install prerequisite: ca-certificates"
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Failed to install prerequisite ca-certificates.")"
+      return 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+      debug_log "ERROR" "feed_package_apk: jq command not found after installation attempt."
+      [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: jq command is required but not available.")"
       return 1
   fi
 
@@ -544,7 +529,7 @@ feed_package_apk() {
   local deployed_cache_file="${CACHE_DIR}/${pkg_admin_name}_apk_deployed.ch"
   if [ -f "$deployed_cache_file" ] && [ "$force_deploy" != "yes" ]; then
     debug_log "DEBUG" "feed_package_apk: Package '$pkg_admin_name' already deployed (cache exists). Skipping."
-    if [ "$silent_mode" != "yes" ] && [ "$hidden_msg" != "yes" ]; then
+    if [ "$hidden_msg" != "yes" ]; then
         printf "%s\n" "$(color green "$pkg_admin_name is already deployed (apk source). Use 'force' to redeploy.")"
     fi
     return 0
@@ -579,7 +564,7 @@ feed_package_apk() {
 
   # --- Get .ipk Download URL from GitHub API (Contents API) ---
   local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents"
-  if [ -n "$dir_path" ] && [ "$dir_path" != "/" ] && [ "$dir_path" != "." ]; then
+  if [ -n "$dir_path" ] && [ "$dir_path" != "/" ]; then
       api_url="${api_url}/${dir_path}"
   fi
 
@@ -600,26 +585,17 @@ feed_package_apk() {
     return 1
   fi
 
-  local api_error_message
-  api_error_message=$(echo "$JSON_RESPONSE" | jq -r 'if type=="object" and .message then .message else empty end')
-
-  if [ -n "$api_error_message" ]; then
-      if echo "$api_error_message" | grep -q "API rate limit exceeded"; then
-          debug_log "ERROR" "feed_package_apk: GitHub API rate limit exceeded: $api_url"
-          [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to retrieve package list for $ipk_filename_prefix: GitHub API rate limit exceeded")"
-      elif echo "$api_error_message" | grep -q "Not Found"; then
-          debug_log "ERROR" "feed_package_apk: GitHub API resource not found: $api_url"
-          [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to retrieve package list for $ipk_filename_prefix: Resource not found (check repo/path)")"
-      else
-          debug_log "ERROR" "feed_package_apk: GitHub API error for $api_url: $api_error_message"
-          [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to retrieve package list for $ipk_filename_prefix: $api_error_message")"
-      fi
-      return 1
+  if echo "$JSON_RESPONSE" | jq -e 'if type=="object" and (.message | test("API rate limit exceeded")) then true else false end' > /dev/null 2>&1; then
+    debug_log "ERROR" "feed_package_apk: GitHub API rate limit exceeded: $api_url"
+    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to retrieve package list for $ipk_filename_prefix: GitHub API rate limit exceeded")"
+    return 1
   fi
 
-  if ! echo "$JSON_RESPONSE" | jq -e 'if type=="array" then true else false end' > /dev/null 2>&1; then
-      debug_log "ERROR" "feed_package_apk: API response is not a JSON array as expected: $api_url. Response: $JSON_RESPONSE"
-      [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to parse package list for $ipk_filename_prefix: Unexpected API response format")"
+  if ! echo "$JSON_RESPONSE" | jq -e 'if type=="array" then .[0]? else .message? end' > /dev/null 2>&1; then
+      local error_message
+      error_message=$(echo "$JSON_RESPONSE" | jq -r '.message? // "Unknown API error or not found"')
+      debug_log "ERROR" "feed_package_apk: API Error for $api_url: $error_message"
+      [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to retrieve package list for $ipk_filename_prefix: $error_message")"
       return 1
   fi
   
@@ -628,7 +604,7 @@ feed_package_apk() {
 
   if [ -z "$ipk_filename" ]; then
     debug_log "DEBUG" "feed_package_apk: .ipk file matching prefix '$ipk_filename_prefix' not found in $repo_owner/$repo_name/${dir_path:-root}"
-    if [ "$silent_mode" != "yes" ] && [ "$hidden_msg" != "yes" ]; then
+    if [ "$hidden_msg" != "yes" ]; then
         printf "%s\n" "$(color yellow "Package $ipk_filename_prefix (.ipk) not found in feed repository.")"
     fi
     return 1 
