@@ -467,7 +467,6 @@ feed_package_apk() {
   local hidden_msg="no"
   local silent_mode="no"
   local opts_for_install_package="" # For prerequisites
-  local positional_args=""
 
   debug_log "DEBUG" "feed_package_apk: Received arguments ($#): $*"
 
@@ -509,20 +508,6 @@ feed_package_apk() {
   debug_log "DEBUG" "feed_package_apk: Parsed - Owner: $repo_owner, Repo: $repo_name, PkgAdmin: $pkg_admin_name, Path: $dir_path, Prefix: $ipk_filename_prefix"
   debug_log "DEBUG" "feed_package_apk: Options - Confirm: $confirm_install, Force: $force_deploy, Disabled: $set_disabled, Hidden: $hidden_msg, Silent: $silent_mode"
 
-  # --- Environment Check ---
-  if [ ! -f "${CACHE_DIR}/package_manager.ch" ]; then
-    debug_log "ERROR" "feed_package_apk: Package manager cache not found. Cannot determine system type."
-    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Package manager cache not found. Cannot determine system type.")" # 元の直接的なメッセージに戻す
-    return 1
-  fi
-  local current_pkg_manager
-  current_pkg_manager=$(cat "${CACHE_DIR}/package_manager.ch")
-  if [ "$current_pkg_manager" != "apk" ]; then
-    debug_log "ERROR" "feed_package_apk: This function is intended for apk-based systems only. Current: $current_pkg_manager"
-    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "feed_package_apk is for apk systems only.")"
-    return 1
-  fi
-
   # --- Prerequisite Installation (jq, ca-certificates) ---
   if ! install_package jq $opts_for_install_package test; then
       debug_log "ERROR" "feed_package_apk: Failed to install prerequisite: jq"
@@ -558,7 +543,6 @@ feed_package_apk() {
 
     if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$(color blue "$pkg_admin_name")"; then
       debug_log "DEBUG" "feed_package_apk: User declined deployment of $pkg_admin_name."
-      # MSG_ACTION_CANCELLED の表示は行わない (install_package の動作に合わせる)
       return 2
     fi
   fi
