@@ -179,7 +179,11 @@ packages_snaphot() {
     # === システム監視 ===
     print_section_header "PKG_SECTION_MONITORING"
     install_package htop yn hidden
-    
+
+    feed_package_apk gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
+    feed_package_apk gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
+    feed_package_apk gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
+ 
     # === セキュリティツール ===
     print_section_header "PKG_SECTION_SECURITY"
     install_package znc-mod-fail2ban yn hidden
