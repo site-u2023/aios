@@ -449,7 +449,6 @@ feed_package_release() {
 #   disabled    - Skip LuCI cache clearing.
 #   hidden      - Suppress some non-critical messages.
 #   silent      - Suppress all progress and non-error messages.
-#   desc="text" - Custom description for the confirmation prompt.
 # @RETURNS:
 #   0: Success (or skipped if already deployed and not forced).
 #   1: Error (download failed, extraction failed, deployment failed, prerequisite missing, etc.).
@@ -467,7 +466,7 @@ feed_package_apk() {
   local set_disabled="no"
   local hidden_msg="no"
   local silent_mode="no"
-  local custom_description=""
+  # local custom_description="" # Removed: desc= option is no longer supported
   local opts_for_install_package="" # For prerequisites
   local positional_args=""
 
@@ -484,7 +483,7 @@ feed_package_apk() {
         hidden_msg="yes" # Silent implies hidden
         opts_for_install_package="$opts_for_install_package silent"
         ;;
-      desc=*) custom_description="${1#desc=}" ;;
+      # desc=*) custom_description="${1#desc=}" ;; # Removed: desc= option
       *)
         if [ -z "$repo_owner" ]; then repo_owner="$1"
         elif [ -z "$repo_name" ]; then repo_name="$1"
@@ -510,12 +509,12 @@ feed_package_apk() {
   fi
 
   debug_log "DEBUG" "feed_package_apk: Parsed - Owner: $repo_owner, Repo: $repo_name, PkgAdmin: $pkg_admin_name, Path: $dir_path, Prefix: $ipk_filename_prefix"
-  debug_log "DEBUG" "feed_package_apk: Options - Confirm: $confirm_install, Force: $force_deploy, Disabled: $set_disabled, Hidden: $hidden_msg, Silent: $silent_mode, Desc: '$custom_description'"
+  debug_log "DEBUG" "feed_package_apk: Options - Confirm: $confirm_install, Force: $force_deploy, Disabled: $set_disabled, Hidden: $hidden_msg, Silent: $silent_mode"
 
   # --- Environment Check ---
   if [ ! -f "${CACHE_DIR}/package_manager.ch" ]; then
     debug_log "ERROR" "feed_package_apk: Package manager cache not found. Cannot determine system type."
-    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "$(get_message "MSG_UNKNOWN_PACKAGE_MANAGER")")"
+    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "$(get_message "MSG_UNKNOWN_PACKAGE_MANAGER")")" # Assuming MSG_UNKNOWN_PACKAGE_MANAGER exists
     return 1
   fi
   local current_pkg_manager
@@ -556,17 +555,15 @@ feed_package_apk() {
 
   # --- Confirmation Prompt (if 'yn' is set) ---
   if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
-    local confirm_desc="$custom_description"
-    if [ -z "$confirm_desc" ]; then
-        confirm_desc="Deploy $pkg_admin_name from $repo_owner/$repo_name source (apk direct deployment)"
-    fi
-    
-    # Display deployment note
-    printf "\n%s\n" "$(color yellow "$(get_message "MSG_APK_DEPLOY_NOTE_TITLE" "default=Attention (apk source deployment)")")"
-    printf "%s\n\n" "$(color yellow "$(get_message "MSG_APK_DEPLOY_NOTE_BODY" "default=This method deploys files directly, bypassing the system package manager (apk/opkg lists will not show it). Uninstallation must be done manually.")")"
+    # Display caution message in red
+    local caution_message
+    caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")") # Pass pkg_admin_name to placeholder
+    printf "\n%s\n" "$(color red "$caution_message")"
 
-    if ! confirm "MSG_CONFIRM_DEPLOY_APK_SOURCE" "pkg=$(color blue "$pkg_admin_name")" "desc=$confirm_desc"; then
+    # Ask for confirmation using MSG_CONFIRM_INSTALL
+    if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$(color blue "$pkg_admin_name")"; then
       debug_log "DEBUG" "feed_package_apk: User declined deployment of $pkg_admin_name."
+      printf "%s\n" "$(get_message "MSG_ACTION_CANCELLED" "default=Operation cancelled.")" # Inform user of cancellation
       return 2
     fi
   fi
@@ -625,9 +622,6 @@ feed_package_apk() {
   fi
   
   local ipk_filename
-  # Filter for files starting with prefix and ending with .ipk, then sort (version sort if possible) and take latest.
-  # jq 'map(select(.type == "file" and (.name | startswith($prefix) and endswith(".ipk")))) | sort_by(.name) | .[-1].name'
-  # Simpler sort for ash:
   ipk_filename=$(echo "$JSON_RESPONSE" | jq -r --arg PFX "$ipk_filename_prefix" '.[] | select(.type == "file" and .name? and (.name | startswith($PFX)) and (.name | endswith(".ipk"))) | .name' | sort -V | tail -n 1)
 
   if [ -z "$ipk_filename" ]; then
@@ -635,7 +629,7 @@ feed_package_apk() {
     if [ "$hidden_msg" != "yes" ]; then
         printf "%s\n" "$(color yellow "Package $ipk_filename_prefix (.ipk) not found in feed repository.")"
     fi
-    return 1 # Treat as error for this function, as we expect to find an .ipk
+    return 1 
   fi
   debug_log "DEBUG" "feed_package_apk: Latest .ipk file found: $ipk_filename"
 
@@ -649,13 +643,12 @@ feed_package_apk() {
   fi
   debug_log "DEBUG" "feed_package_apk: .ipk download URL: $ipk_download_url"
 
-  # --- Download .ipk File ---
   local downloaded_ipk_path="${temp_download_dir}/${ipk_filename}"
   if [ "$silent_mode" != "yes" ]; then
     start_spinner "$(color blue "Downloading $ipk_filename...")"
   fi
 
-  eval "$BASE_WGET" -O "$downloaded_ipk_path" "\"$ipk_download_url\"" # Quotes around URL
+  eval "$BASE_WGET" -O "$downloaded_ipk_path" "\"$ipk_download_url\"" 
   local download_status=$?
 
   if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
@@ -665,41 +658,28 @@ feed_package_apk() {
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Failed to download $ipk_filename")"
       return 1
   fi
-  if [ ! -s "$downloaded_ipk_path" ]; then # Check if file is empty
+  if [ ! -s "$downloaded_ipk_path" ]; then 
       debug_log "ERROR" "feed_package_apk: Downloaded .ipk file is empty: $downloaded_ipk_path"
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Downloaded $ipk_filename is empty")"
       return 1
   fi
   debug_log "DEBUG" "feed_package_apk: .ipk downloaded successfully: $downloaded_ipk_path"
 
-  # --- Extract .ipk File (assuming it's a tar.gz archive containing data.tar.gz) ---
   if [ "$silent_mode" != "yes" ]; then
     start_spinner "$(color blue "Extracting $ipk_filename...")"
   fi
   
-  # First, extract the .ipk itself (which might contain control.tar.gz, data.tar.gz, etc.)
-  # We are interested in data.tar.gz
-  # Assuming .ipk is a tar.gz archive. If it's an 'ar' archive, this needs adjustment.
-  # For now, let's try to extract 'data.tar.gz' directly if the .ipk is a simple tarball.
-  # Or, if the .ipk is an ar archive, we'd use 'ar x $downloaded_ipk_path data.tar.gz'
-  # For simplicity, assuming .ipk is a tar.gz that *might* directly contain the file structure OR data.tar.gz
-
   local data_tar_gz_path="${temp_extract_ipk_dir}/data.tar.gz"
 
-  # Attempt 1: .ipk is an ar archive (standard Debian package format)
   debug_log "DEBUG" "feed_package_apk: Attempting to extract data.tar.gz using 'ar' from $downloaded_ipk_path"
   if ar x "$downloaded_ipk_path" data.tar.gz -o "$temp_extract_ipk_dir" 2>/dev/null && [ -f "$data_tar_gz_path" ]; then
     debug_log "DEBUG" "feed_package_apk: Successfully extracted data.tar.gz using 'ar'."
   else
     debug_log "DEBUG" "feed_package_apk: 'ar' extraction failed or data.tar.gz not found. Assuming .ipk is a direct tar.gz of content or contains data.tar.gz at top level."
-    # Attempt 2: .ipk is a tar.gz archive, try to extract data.tar.gz from it
     if tar -xzf "$downloaded_ipk_path" -C "$temp_extract_ipk_dir" ./data.tar.gz 2>/dev/null && [ -f "$data_tar_gz_path" ]; then
         debug_log "DEBUG" "feed_package_apk: Successfully extracted data.tar.gz using 'tar' from .ipk top level."
     else
         debug_log "DEBUG" "feed_package_apk: data.tar.gz not found at .ipk top level. Assuming .ipk IS the data.tar.gz equivalent (direct content)."
-        # If data.tar.gz is not found, assume the .ipk itself is the content tarball (less common for .ipk)
-        # Or, more likely, the .ipk *is* data.tar.gz but named .ipk.
-        # For robust handling, we should check file type. But for now, copy it and try to extract as data.tar.gz
         cp "$downloaded_ipk_path" "$data_tar_gz_path"
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
@@ -718,7 +698,6 @@ feed_package_apk() {
     return 1
   fi
 
-  # Now, extract data.tar.gz to the final data content directory
   if ! tar -xzf "$data_tar_gz_path" -C "$temp_extract_data_dir" 2>"${LOG_DIR}/feed_apk_deploy_tar_err.log"; then
     if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
     debug_log "ERROR" "feed_package_apk: Failed to extract data.tar.gz from $ipk_filename. See ${LOG_DIR}/feed_apk_deploy_tar_err.log"
@@ -728,7 +707,6 @@ feed_package_apk() {
   if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
   debug_log "DEBUG" "feed_package_apk: Content extracted to $temp_extract_data_dir"
 
-  # --- Deploy Files to Root Filesystem ---
   if [ ! -d "$temp_extract_data_dir" ] || [ -z "$(ls -A "$temp_extract_data_dir")" ]; then
     debug_log "ERROR" "feed_package_apk: Extracted data directory is empty or does not exist: $temp_extract_data_dir"
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "No content found after extraction for $pkg_admin_name")"
@@ -739,30 +717,24 @@ feed_package_apk() {
     start_spinner "$(color blue "Deploying files for $pkg_admin_name...")"
   fi
 
-  # Ensure '/' path for cp is handled safely; ash cp -a source/. /dest/ is good.
-  # Using '.' to copy contents of the directory.
   if ! cp -a "${temp_extract_data_dir}/." / 2>"${LOG_DIR}/feed_apk_deploy_cp_err.log"; then
     if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
     debug_log "ERROR" "feed_package_apk: Failed to copy files to root filesystem. See ${LOG_DIR}/feed_apk_deploy_cp_err.log"
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error deploying files for $pkg_admin_name")"
-    # Note: Partial deployment might have occurred. Manual cleanup might be needed.
     return 1
   fi
   if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
   debug_log "DEBUG" "feed_package_apk: Files deployed successfully to root filesystem."
 
-  # --- Create Cache File ---
   mkdir -p "$CACHE_DIR"
   if ! touch "$deployed_cache_file"; then
     debug_log "WARNING" "feed_package_apk: Failed to create or update deployment cache file: $deployed_cache_file"
-    # Not a fatal error, but log it.
   else
     debug_log "DEBUG" "feed_package_apk: Deployment cache file created/updated: $deployed_cache_file"
   fi
 
-  # --- Clear LuCI Cache (if not disabled) ---
   if [ "$set_disabled" != "yes" ]; then
-    if [ -d /tmp/luci-* ]; then # Check if cache exists before trying to remove
+    if [ -d /tmp/luci-* ]; then 
         debug_log "DEBUG" "feed_package_apk: Clearing LuCI cache."
         rm -rf /tmp/luci-* 2>/dev/null
     else
@@ -772,16 +744,14 @@ feed_package_apk() {
     debug_log "DEBUG" "feed_package_apk: LuCI cache clearing skipped due to 'disabled' option."
   fi
 
-  # --- Final Messages ---
   if [ "$silent_mode" != "yes" ]; then
     printf "%s\n" "$(color green "$pkg_admin_name deployed successfully (apk source).")"
-    # Display deployment note if not 'yn' (where it's shown earlier) and not hidden
     if [ "$confirm_install" != "yes" ] && [ "$hidden_msg" != "yes" ]; then
-        printf "\n%s\n" "$(color yellow "$(get_message "MSG_APK_DEPLOY_NOTE_TITLE" "default=Attention (apk source deployment)")")"
-        printf "%s\n" "$(color yellow "$(get_message "MSG_APK_DEPLOY_NOTE_BODY" "default=This method deploys files directly, bypassing the system package manager (apk/opkg lists will not show it). Uninstallation must be done manually.")")"
+        local note_message
+        note_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")") # Pass pkg_admin_name
+        printf "\n%s\n" "$(color yellow "$note_message")" # Display caution in yellow
     fi
   fi
   
-  # trap will clean up temp_deploy_dir
   return 0
 }
