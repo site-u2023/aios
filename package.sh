@@ -301,6 +301,8 @@ install_usb_packages() {
 
 # インストール後のパッケージリストを表示
 check_install_list() {
+    printf "\n%s\n" "$(color blue "Packages installed after flashing.")"
+    
     # パッケージマネージャの種類を確認
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
@@ -348,26 +350,23 @@ check_install_list() {
             fi
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        # apk用の処理
         debug_log "DEBUG" "Using apk package manager"
         local apk_world_initial_snapshot="/etc/apk/world.base"
         local current_apk_world_file="/etc/apk/world"
+        local temp_world_base_sorted="${AIOS_TMP_DIR}/.world.base.sorted"
+        local temp_world_current_sorted="${AIOS_TMP_DIR}/.world.current.sorted"
 
-        local temp_world_base_sorted="${BASE_DIR}/.world.base.sorted.tmp"
-        local temp_world_current_sorted="${BASE_DIR}/.world.current.sorted.tmp"
-
-        if [ -s "$current_apk_world_file" ] && [ -s "$apk_world_initial_snapshot" ]; then
-            debug_log "DEBUG" "Comparing current $current_apk_world_file with initial snapshot $apk_world_initial_snapshot"
+        if [ ! -s "$current_apk_world_file" ]; then
+            debug_log "DEBUG" "$current_apk_world_file not found or empty."
+        elif [ -s "$apk_world_initial_snapshot" ]; then
+            debug_log "DEBUG" "Comparing $current_apk_world_file with $apk_world_initial_snapshot."
             sort "$apk_world_initial_snapshot" > "$temp_world_base_sorted"
             sort "$current_apk_world_file" > "$temp_world_current_sorted"
             grep -vxFf "$temp_world_base_sorted" "$temp_world_current_sorted"
             rm -f "$temp_world_base_sorted" "$temp_world_current_sorted"
-        elif [ -s "$current_apk_world_file" ]; then
-            debug_log "DEBUG" "Initial snapshot ($apk_world_initial_snapshot) not found/empty. Displaying all packages from current $current_apk_world_file."
-            sort "$current_apk_world_file"
         else
-            debug_log "DEBUG" "$current_apk_world_file is not found or empty. No packages to list."
-            return 0 
+            debug_log "DEBUG" "$apk_world_initial_snapshot not found or empty. Listing all from $current_apk_world_file."
+            sort "$current_apk_world_file"
         fi
     else
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
