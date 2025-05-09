@@ -466,7 +466,6 @@ feed_package_apk() {
   local set_disabled="no"
   local hidden_msg="no"
   local silent_mode="no"
-  # local custom_description="" # Removed: desc= option is no longer supported
   local opts_for_install_package="" # For prerequisites
   local positional_args=""
 
@@ -483,7 +482,6 @@ feed_package_apk() {
         hidden_msg="yes" # Silent implies hidden
         opts_for_install_package="$opts_for_install_package silent"
         ;;
-      # desc=*) custom_description="${1#desc=}" ;; # Removed: desc= option
       *)
         if [ -z "$repo_owner" ]; then repo_owner="$1"
         elif [ -z "$repo_name" ]; then repo_name="$1"
@@ -514,7 +512,7 @@ feed_package_apk() {
   # --- Environment Check ---
   if [ ! -f "${CACHE_DIR}/package_manager.ch" ]; then
     debug_log "ERROR" "feed_package_apk: Package manager cache not found. Cannot determine system type."
-    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "$(get_message "MSG_UNKNOWN_PACKAGE_MANAGER")")" # Assuming MSG_UNKNOWN_PACKAGE_MANAGER exists
+    [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Package manager cache not found. Cannot determine system type.")" # 元の直接的なメッセージに戻す
     return 1
   fi
   local current_pkg_manager
@@ -541,13 +539,12 @@ feed_package_apk() {
       [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: jq command is required but not available.")"
       return 1
   fi
-  # tar is assumed to be present as it's a fundamental utility.
 
   # --- Check if Already Deployed (via cache file) ---
   local deployed_cache_file="${CACHE_DIR}/${pkg_admin_name}_apk_deployed.ch"
   if [ -f "$deployed_cache_file" ] && [ "$force_deploy" != "yes" ]; then
     debug_log "DEBUG" "feed_package_apk: Package '$pkg_admin_name' already deployed (cache exists). Skipping."
-    if [ "$hidden_msg" != "yes" ]; then # Show message even if not silent, unless hidden is explicitly set
+    if [ "$hidden_msg" != "yes" ]; then
         printf "%s\n" "$(color green "$pkg_admin_name is already deployed (apk source). Use 'force' to redeploy.")"
     fi
     return 0
@@ -555,15 +552,13 @@ feed_package_apk() {
 
   # --- Confirmation Prompt (if 'yn' is set) ---
   if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
-    # Display caution message in red
     local caution_message
-    caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")") # Pass pkg_admin_name to placeholder
+    caution_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")")
     printf "\n%s\n" "$(color red "$caution_message")"
 
-    # Ask for confirmation using MSG_CONFIRM_INSTALL
     if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$(color blue "$pkg_admin_name")"; then
       debug_log "DEBUG" "feed_package_apk: User declined deployment of $pkg_admin_name."
-      printf "%s\n" "$(get_message "MSG_ACTION_CANCELLED" "default=Operation cancelled.")" # Inform user of cancellation
+      # MSG_ACTION_CANCELLED の表示は行わない (install_package の動作に合わせる)
       return 2
     fi
   fi
@@ -576,17 +571,16 @@ feed_package_apk() {
     [ "$silent_mode" != "yes" ] && printf "%s\n" "$(color red "Error: Could not create temporary directory.")"
     return 1
   fi
-  # shellcheck disable=SC2064 # temp_deploy_dir is expanded when trap is defined
   trap "rm -rf \"$temp_deploy_dir\" 2>/dev/null; debug_log DEBUG \"feed_package_apk: Cleaned up temp directory: $temp_deploy_dir\"" EXIT INT TERM
 
   local temp_download_dir="${temp_deploy_dir}/download"
-  local temp_extract_ipk_dir="${temp_deploy_dir}/extract_ipk" # For initial .ipk extraction
-  local temp_extract_data_dir="${temp_deploy_dir}/extract_data" # For data.tar.gz extraction
+  local temp_extract_ipk_dir="${temp_deploy_dir}/extract_ipk"
+  local temp_extract_data_dir="${temp_deploy_dir}/extract_data"
   mkdir -p "$temp_download_dir" "$temp_extract_ipk_dir" "$temp_extract_data_dir"
 
   # --- Get .ipk Download URL from GitHub API (Contents API) ---
   local api_url="https://api.github.com/repos/${repo_owner}/${repo_name}/contents"
-  if [ -n "$dir_path" ] && [ "$dir_path" != "/" ]; then # Append dir_path only if it's not empty or root
+  if [ -n "$dir_path" ] && [ "$dir_path" != "/" ]; then
       api_url="${api_url}/${dir_path}"
   fi
 
@@ -599,7 +593,7 @@ feed_package_apk() {
   JSON_RESPONSE=$(wget --no-check-certificate -q -U "aios-feed-apk/1.0" -O- "$api_url")
   local wget_status=$?
 
-  if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi # Stop spinner before potential error messages
+  if [ "$silent_mode" != "yes" ]; then stop_spinner_no_msg; fi
 
   if [ $wget_status -ne 0 ] || [ -z "$JSON_RESPONSE" ]; then
     debug_log "ERROR" "feed_package_apk: Could not retrieve data from API: $api_url (wget status: $wget_status)"
@@ -748,8 +742,8 @@ feed_package_apk() {
     printf "%s\n" "$(color green "$pkg_admin_name deployed successfully (apk source).")"
     if [ "$confirm_install" != "yes" ] && [ "$hidden_msg" != "yes" ]; then
         local note_message
-        note_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")") # Pass pkg_admin_name
-        printf "\n%s\n" "$(color yellow "$note_message")" # Display caution in yellow
+        note_message=$(get_message "MSG_APK_DEPLOY_CAUTION" "pkg=$(color blue "$pkg_admin_name")")
+        printf "\n%s\n" "$(color yellow "$note_message")"
     fi
   fi
   
