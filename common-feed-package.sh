@@ -453,7 +453,7 @@ feed_package_release() {
 #   0: Success (or skipped if already deployed and not forced).
 #   1: Error (download failed, extraction failed, deployment failed, prerequisite missing, etc.).
 #   2: User cancelled deployment at 'yn' prompt.
-OK_feed_package_apk() {
+feed_package_apk() {
   local repo_owner=""
   local repo_name=""
   local pkg_admin_name=""
