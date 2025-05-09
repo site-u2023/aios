@@ -838,7 +838,19 @@ init_device_cache() {
             debug_log "DEBUG" "Created OS version cache: $version"
         else
             echo "unknown" > "${CACHE_DIR}/osversion.ch"
-            echo "WARN: Could not determine OS version"
+            debug_log "DEBUG" "Could not determine OS version"
+        fi
+    fi
+
+    # /etc/apk/world.base の初期スナップショット作成
+    if [ -f "/etc/apk/world" ]; then
+        if [ ! -f "/etc/apk/world.base" ]; then
+            # /etc/apk/world.base が存在しない場合のみ作成を試みる
+            if cp "/etc/apk/world" "/etc/apk/world.base"; then
+                debug_log "DEBUG" "init_device_cache: Created /etc/apk/world.base"
+            fi
+        else
+            debug_log "DEBUG" "init_device_cache: /etc/apk/world.base already exists."
         fi
     fi
  
@@ -2421,16 +2433,12 @@ resolve_path() {
 main() {
     resolve_path "$0"
 
-    # 必要なディレクトリを作成
-    if ! make_directory; then
-        debug_log "DEBUG" "Failed to create required directories"
-        return 1
-    fi
+    make_directory
 
     init_device_cache
     
     check_network_connectivity
-
+    
     check_option "$@"
 }
 
