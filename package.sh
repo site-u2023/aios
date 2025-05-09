@@ -23,7 +23,7 @@ packages() {
     print_section_header() {
         local section_key="$1"
         local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color black_white "$header_text")"
+        printf "\n%s\n" "$(color gray_white "$header_text")"
     }
 
     # === 基本システム機能 ===
@@ -89,7 +89,7 @@ packages_19() {
     print_section_header() {
         local section_key="$1"
         local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color black_white "$header_text")"
+        printf "\n%s\n" "$(color gray_white "$header_text")"
     }
 
     # === 基本システム機能 ===
@@ -152,7 +152,7 @@ packages_snaphot() {
     print_section_header() {
         local section_key="$1"
         local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color black_white "$header_text")"
+        printf "\n%s\n" "$(color gray_white "$header_text")"
     }
 
     # === 基本システム機能 ===
@@ -208,7 +208,7 @@ packages_usb() {
     print_section_header() {
         local section_key="$1"
         local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color black_white "$header_text")"
+        printf "\n%s\n" "$(color gray_white "$header_text")"
     }
 
     # === USBストレージ ===
@@ -231,7 +231,7 @@ package_samba() {
     print_section_header() {
         local section_key="$1"
         local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color black_white "$header_text")"
+        printf "\n%s\n" "$(color gray_white "$header_text")"
     }
 
     # === ファイル共有 ===
