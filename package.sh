@@ -312,60 +312,63 @@ check_install_list() {
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         # opkg用の処理
         debug_log "DEBUG" "Using opkg package manager"
-        FLASH_TIME="$(awk '
-        $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
-          OLDEST=$2
-        }
-        END {
-          print OLDEST
-        }
-        ' /usr/lib/opkg/status)"
+        local opkg_status_file="/usr/lib/opkg/status"
+        local FLASH_TIME=""
 
-        if [ -z "$FLASH_TIME" ]; then
-            debug_log "DEBUG" "Could not determine flash time from opkg status. Listing all user-installed packages."
-            awk '
-            $1 == "Package:" { PKG=$2; USR="" }
-            $1 == "Status:" && $3 ~ "user" { USR=1 }
-            $1 == "Installed-Time:" && USR { print PKG }
-            END { if (NR==0) { debug_log "DEBUG" "No packages found in opkg status." } }
-            ' /usr/lib/opkg/status | sort
+        if [ ! -s "$opkg_status_file" ]; then
+            debug_log "DEBUG" "$opkg_status_file not found or empty. No packages to list for opkg."
         else
-            awk -v FT="$FLASH_TIME" '
-            $1 == "Package:" { PKG=$2; USR="" }
-            $1 == "Status:" && $3 ~ "user" { USR=1 }
-            $1 == "Installed-Time:" && USR && $2 != FT { print PKG }
-            ' /usr/lib/opkg/status | sort
+            FLASH_TIME="$(awk '
+            $1 == "Installed-Time:" && ($2 < OLDEST || OLDEST=="") {
+              OLDEST=$2
+            }
+            END {
+              if (OLDEST != "") {
+                print OLDEST
+              }
+            }
+            ' "$opkg_status_file")"
+
+            if [ -z "$FLASH_TIME" ]; then
+                debug_log "DEBUG" "Could not determine flash time from opkg status. Listing all user-installed packages for opkg."
+                awk '
+                $1 == "Package:" { PKG=$2; USR="" }
+                $1 == "Status:" && $3 ~ "user" { USR=1 }
+                $1 == "Installed-Time:" && USR { print PKG }
+                END { if (NR==0) { debug_log "DEBUG" "No user-installed packages found in opkg status." } }
+                ' "$opkg_status_file" | sort
+            else
+                debug_log "DEBUG" "Flash time determined for opkg ($FLASH_TIME). Listing packages installed not at this specific time."
+                awk -v FT="$FLASH_TIME" '
+                $1 == "Package:" { PKG=$2; USR="" }
+                $1 == "Status:" && $3 ~ "user" { USR=1 }
+                $1 == "Installed-Time:" && USR && $2 != FT { print PKG }
+                END { if (NR==0) { debug_log "DEBUG" "No user-installed packages found not matching flash time for opkg." } }
+                ' "$opkg_status_file" | sort
+            fi
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         # apk用の処理
         debug_log "DEBUG" "Using apk package manager"
-        local apk_world_initial_snapshot="${BASE_DIR}/apk_world.initial"
-        local current_apk_world_tmp="${BASE_DIR}/.apk_world.current.tmp"
-        local initial_apk_world_sorted_tmp="${BASE_DIR}/.apk_world.initial.sorted.tmp"
+        local apk_world_initial_snapshot="/etc/apk/world.base"
+        local current_apk_world_file="/etc/apk/world"
 
-        if [ -f "/etc/apk/world" ] && [ -s "/etc/apk/world" ]; then
-            sort "/etc/apk/world" > "$current_apk_world_tmp"
-        else
-            debug_log "DEBUG" "/etc/apk/world not found or is empty."
-            true > "$current_apk_world_tmp"
-        fi
+        local temp_world_base_sorted="${BASE_DIR}/.world.base.sorted.tmp"
+        local temp_world_current_sorted="${BASE_DIR}/.world.current.sorted.tmp"
 
-        if [ -f "$apk_world_initial_snapshot" ]; then
-            debug_log "DEBUG" "Comparing current /etc/apk/world with initial snapshot $apk_world_initial_snapshot"
-            sort "$apk_world_initial_snapshot" > "$initial_apk_world_sorted_tmp"
-            
-            # 現在のworldにのみ存在するパッケージ (初期スナップショットから追加されたもの)
-            grep -vxFf "$initial_apk_world_sorted_tmp" "$current_apk_world_tmp"
-            
+        if [ -s "$current_apk_world_file" ] && [ -s "$apk_world_initial_snapshot" ]; then
+            debug_log "DEBUG" "Comparing current $current_apk_world_file with initial snapshot $apk_world_initial_snapshot"
+            sort "$apk_world_initial_snapshot" > "$temp_world_base_sorted"
+            sort "$current_apk_world_file" > "$temp_world_current_sorted"
+            grep -vxFf "$temp_world_base_sorted" "$temp_world_current_sorted"
+            rm -f "$temp_world_base_sorted" "$temp_world_current_sorted"
+        elif [ -s "$current_apk_world_file" ]; then
+            debug_log "DEBUG" "Initial snapshot ($apk_world_initial_snapshot) not found/empty. Displaying all packages from current $current_apk_world_file."
+            sort "$current_apk_world_file"
         else
-            debug_log "DEBUG" "Initial apk world snapshot ($apk_world_initial_snapshot) not found. Displaying current /etc/apk/world."
-            if [ -s "$current_apk_world_tmp" ]; then
-                cat "$current_apk_world_tmp"
-            else
-                debug_log "DEBUG" "/etc/apk/world is currently empty or not found."
-            fi
+            debug_log "DEBUG" "$current_apk_world_file is not found or empty. No packages to list."
+            return 0 
         fi
-        rm -f "$current_apk_world_tmp" "$initial_apk_world_sorted_tmp"
     else
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
     fi
