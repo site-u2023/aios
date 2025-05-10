@@ -2,39 +2,6 @@
 
 SCRIPT_VERSION="2025.05.08-00-10"
 
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-03-14
-#
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-#
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
-
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
 # export DEV_NULL="on"
@@ -121,8 +88,139 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #   1: エラー発生
 #########################################################################
 
-# パッケージリストの更新
 update_package_list() {
+    local silent_mode="$1"
+    local update_cache="${CACHE_DIR}/update.ch"
+    local package_cache="${CACHE_DIR}/package_list.ch"
+    local current_time cache_time max_age
+    current_time=$(date '+%s')
+    cache_time=0
+    max_age=$((24 * 60 * 60))
+    local need_update="yes"
+
+    mkdir -p "$CACHE_DIR"
+
+    if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
+        cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
+        if [ $((current_time - cache_time)) -lt $max_age ]; then
+            debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
+            need_update="no"
+        else
+            debug_log "DEBUG" "Package list cache is outdated. Will update now."
+        fi
+    else
+        debug_log "DEBUG" "Package list cache not found or incomplete. Will create it now."
+    fi
+
+    if [ "$need_update" = "no" ]; then
+        return 0
+    fi
+
+    if [ "$silent_mode" != "yes" ]; then
+        printf "  %s\n"
+        start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
+    fi
+
+    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
+    fi
+
+    debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
+
+    local update_status=0
+    local retry=0
+
+    while [ $retry -lt "${WGET_MAX_RETRIES:-5}" ]; do
+        update_status=0
+        local pids=""
+        local parallel_count=0
+
+        if [ "$PACKAGE_MANAGER" = "opkg" ]; then
+            # --- opkg: /etc/opkg/*.conf feedごとに並列実行 ---
+            local opkg_conf_list opkg_conf
+            opkg_conf_list=$(find /etc/opkg -maxdepth 1 -type f -name "*.conf" 2>/dev/null)
+            [ -z "$opkg_conf_list" ] && opkg_conf_list="/etc/opkg/customfeeds.conf"
+            for opkg_conf in $opkg_conf_list; do
+                (
+                    debug_log "DEBUG" "Running opkg update --conf $opkg_conf"
+                    opkg update --conf "$opkg_conf" >> "${LOG_DIR}/opkg_update_$(basename "$opkg_conf").log" 2>&1
+                ) &
+                pids="$pids $!"
+                parallel_count=$((parallel_count + 1))
+                # 並列数制御
+                if [ "$parallel_count" -ge "${MAX_PARALLEL_TASKS:-2}" ]; then
+                    wait $(echo "$pids" | awk '{print $1}')
+                    pids=$(echo "$pids" | awk '{$1=""; print $0}')
+                    parallel_count=$((parallel_count - 1))
+                fi
+            done
+            # 残りを待つ
+            for pid in $pids; do
+                wait "$pid" || update_status=1
+            done
+            # パッケージリストキャッシュ生成
+            opkg list > "$package_cache" 2>/dev/null
+            [ $? -ne 0 ] || [ ! -s "$package_cache" ] && update_status=1
+
+        elif [ "$PACKAGE_MANAGER" = "apk" ]; then
+            # --- apk: /etc/apk/repositories各repoごとに並列実行 ---
+            local apk_repos repo
+            apk_repos=$(grep -v '^[[:space:]]*#' /etc/apk/repositories 2>/dev/null | grep -v '^[[:space:]]*$')
+            for repo in $apk_repos; do
+                (
+                    debug_log "DEBUG" "Running apk update --repository $repo"
+                    apk update --repository "$repo" >> "${LOG_DIR}/apk_update_$(echo "$repo" | md5sum | awk '{print $1}').log" 2>&1
+                ) &
+                pids="$pids $!"
+                parallel_count=$((parallel_count + 1))
+                # 並列数制御
+                if [ "$parallel_count" -ge "${MAX_PARALLEL_TASKS:-2}" ]; then
+                    wait $(echo "$pids" | awk '{print $1}')
+                    pids=$(echo "$pids" | awk '{$1=""; print $0}')
+                    parallel_count=$((parallel_count - 1))
+                fi
+            done
+            for pid in $pids; do
+                wait "$pid" || update_status=1
+            done
+            # パッケージリストキャッシュ生成
+            apk search > "$package_cache" 2>/dev/null
+            [ $? -ne 0 ] || [ ! -s "$package_cache" ] && update_status=1
+        else
+            update_status=1
+        fi
+
+        # 成功判定
+        if [ $update_status -eq 0 ]; then
+            break
+        else
+            retry=$((retry + 1))
+            debug_log "DEBUG" "Update failed, retrying ($retry/${WGET_MAX_RETRIES:-5})"
+            sleep 1
+        fi
+    done
+
+    # 終了処理
+    if [ $update_status -eq 0 ]; then
+        [ "$silent_mode" != "yes" ] && stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+        touch "$update_cache" 2>/dev/null
+        debug_log "DEBUG" "Cache timestamp updated: $update_cache"
+        [ -f "$package_cache" ] && [ -s "$package_cache" ] && debug_log "DEBUG" "Package list cache successfully created: $package_cache"
+    else
+        if [ "$silent_mode" != "yes" ]; then
+            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        else
+            printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+        fi
+        debug_log "DEBUG" "Failed to update package lists after retries"
+        rm -f "$update_cache" 2>/dev/null
+    fi
+
+    return $update_status
+}
+
+# パッケージリストの更新
+OK_update_package_list() {
     local silent_mode="$1"  # silentモードパラメータを追加
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
@@ -1016,229 +1114,6 @@ install_package() {
            else
                debug_log "DEBUG" "Skipping service handling for $BASE_NAME due to disabled option."
            fi
-           ;;
-        *) # Unexpected status from process_package
-           debug_log "ERROR" "Unexpected status $process_status received from process_package for $BASE_NAME."
-           return 1 # Treat unexpected as error
-           ;;
-    esac
-
-    return $process_status
-}
-
-# パッケージ処理メイン部分
-# Returns:
-#   0: Success (Already installed / Not found / User declined non-critical step)
-#   1: Error (Installation failed, local_package_db failed, etc.)
-#   2: User cancelled (Declined 'yn' prompt)
-#   3: New install success (Package installed and local_package_db applied successfully)
-OK_process_package() {
-    local package_name="$1"
-    local base_name="$2"
-    local confirm_install="$3"
-    local force_install="$4"
-    local skip_package_db="$5"
-    local test_mode="$7"
-    local lang_code="$8"
-    local description="$9"
-    local silent_mode="${10}"
-
-    # 言語パッケージか通常パッケージかを判別
-    case "$base_name" in
-        luci-i18n-*)
-            # 言語パッケージの場合、package_name に言語コードを追加
-            package_name="${base_name}-${lang_code}"
-            debug_log "DEBUG" "Language package detected, using: $package_name"
-            ;;
-    esac
-
-    # パッケージの事前チェック (test_mode でなければ実行)
-    local pre_install_status=0 # Default to 0 (Ready to install) if test_mode=yes
-    if [ "$test_mode" != "yes" ]; then
-        package_pre_install "$package_name"
-        pre_install_status=$? # 戻り値を取得
-
-        case $pre_install_status in
-            0) # Ready to install
-                debug_log "DEBUG" "Package $package_name is ready for installation."
-                # Proceed
-                ;;
-            1) # Already installed
-                debug_log "DEBUG" "Package $package_name is already installed. Skipping."
-                return 0 # Skip as success
-                ;;
-            2) # Not found
-                debug_log "DEBUG" "Package $package_name not found, skipping installation."
-                return 0 # Skip as success (as per requirement)
-                ;;
-            *) # Unexpected status
-                debug_log "WARNING" "Unexpected status $pre_install_status from package_pre_install for $package_name."
-                return 1 # Treat unexpected status as error
-                ;;
-        esac
-    else
-        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks for $package_name"
-    fi
-
-    # YN確認 (オプションで有効時のみ、かつ silent モードでない場合)
-    if [ "$confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
-        local display_name
-        display_name=$(basename "$package_name")
-        display_name=${display_name%.*}
-
-        debug_log "DEBUG" "Confirming installation for display name: $display_name"
-
-        # 説明文取得 (引数優先、なければリポジトリから)
-        if [ -z "$description" ]; then
-            description=$(get_package_description "$package_name")
-            debug_log "DEBUG" "Using repository description: $description"
-        else
-            debug_log "DEBUG" "Using provided description: $description"
-        fi
-
-        local colored_name
-        colored_name=$(color blue "$display_name")
-
-        local confirm_result=0
-        if [ -n "$description" ]; then
-            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$description"; then
-                confirm_result=1
-            fi
-        else
-            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then
-                confirm_result=1
-            fi
-        fi
-
-        # ★★★ ユーザーがキャンセルした場合 ★★★
-        if [ $confirm_result -ne 0 ]; then
-            debug_log "DEBUG" "User declined installation of $display_name"
-            return 2 # Return 2 for user cancellation
-        fi
-    elif [ "$confirm_install" = "yes" ] && [ "$silent_mode" = "yes" ]; then
-        debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name"
-    fi
-
-    # パッケージのインストール
-    if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then
-        debug_log "ERROR" "Failed to install package: $package_name" # Changed DEBUG to ERROR
-        return 1 # Return 1 on installation failure
-    fi
-
-    # ★★★ ローカルパッケージDBの適用 (インストール成功後、かつ skip_package_db でない場合) ★★★
-    if [ "$skip_package_db" != "yes" ]; then
-        # local_package_db を base_name で呼び出す
-        if ! local_package_db "$base_name"; then
-            # local_package_db が 1 (コマンド無し含む) または他のエラーを返した場合
-            debug_log "WARNING" "local_package_db application failed or skipped for $base_name. Continuing..."
-            # local_package_db の失敗はパッケージインストール自体の失敗とはしないため、ここでは return 1 しない
-            # ただし、新規インストール成功とは言えないので、戻り値は 0 とする
-            return 0
-        else
-             debug_log "DEBUG" "local_package_db applied successfully for $base_name"
-        fi
-    else
-        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
-    fi
-
-    # ★★★ 新規インストール成功 ★★★
-    # ここまで到達した場合、インストールと (必要なら) local_package_db 適用が成功した
-    debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
-    return 3 # Return 3 for new install success
-}
-
-# **パッケージインストールのメイン関数**
-# Returns:
-#   0: Success (Already installed / Not found / User declined / DB apply skipped/failed)
-#   1: Error (Prerequisite failed, Installation failed)
-#   2: User cancelled ('yn' prompt declined)
-#   3: New install success (Package installed, DB applied, Service configured/skipped)
-OK_install_package() {
-    # オプション解析
-    if ! parse_package_options "$@"; then
-        debug_log "ERROR" "Failed to parse package options." # Added error log
-        return 1 # Return 1 on option parsing failure
-    fi
-
-    # インストール一覧表示モード
-    if [ "$PKG_OPTIONS_LIST" = "yes" ]; then
-        if [ "$PKG_OPTIONS_SILENT" != "yes" ]; then
-            check_install_list
-        fi
-        return 0 # list is considered a success
-    fi
-
-    # ベースネームを取得
-    local BASE_NAME="" # Initialize BASE_NAME
-    if [ -n "$PKG_OPTIONS_PACKAGE_NAME" ]; then
-        BASE_NAME=$(basename "$PKG_OPTIONS_PACKAGE_NAME" .ipk)
-        BASE_NAME=$(basename "$BASE_NAME" .apk)
-    fi
-
-    # update オプション処理
-    if [ "$PKG_OPTIONS_UPDATE" = "yes" ]; then
-        debug_log "DEBUG" "Executing package list update"
-        # update_package_list の戻り値をそのまま返す
-        update_package_list "$PKG_OPTIONS_SILENT"
-        return $?
-    fi
-
-    # パッケージマネージャー確認
-    if ! verify_package_manager; then
-        debug_log "ERROR" "Failed to verify package manager." # Changed DEBUG to ERROR
-        return 1 # Return 1 if verification fails
-    fi
-
-    # パッケージリスト更新 (エラー時は 1 を返す)
-    if ! update_package_list "$PKG_OPTIONS_SILENT"; then
-         debug_log "ERROR" "Failed to update package list." # Changed DEBUG to ERROR
-         return 1 # Return 1 if update fails
-    fi
-
-    # 言語コード取得
-    local lang_code
-    lang_code=$(get_language_code)
-
-    # ★★★ パッケージ処理と戻り値の取得 ★★★
-    local process_status=0
-    process_package \
-            "$PKG_OPTIONS_PACKAGE_NAME" \
-            "$BASE_NAME" \
-            "$PKG_OPTIONS_CONFIRM" \
-            "$PKG_OPTIONS_FORCE" \
-            "$PKG_OPTIONS_SKIP_PACKAGE_DB" \
-            "$PKG_OPTIONS_DISABLED" \
-            "$PKG_OPTIONS_TEST" \
-            "$lang_code" \
-            "$PKG_OPTIONS_DESCRIPTION" \
-            "$PKG_OPTIONS_SILENT"
-    process_status=$? # process_package の戻り値を取得
-
-    debug_log "DEBUG" "process_package finished for $BASE_NAME with status: $process_status"
-
-    # ★★★ process_package の戻り値に基づく後処理 ★★★
-    case $process_status in
-        0) # Success (Skipped, DB failed/skipped) or handled internally
-           # No special action needed here, will return 0
-           ;;
-        1) # Error during processing
-           debug_log "ERROR" "Error occurred during package processing for $BASE_NAME."
-           return 1 # Propagate error
-           ;;
-        2) # User cancelled
-           debug_log "DEBUG" "User cancelled installation for $BASE_NAME."
-           return 2 # Propagate user cancellation
-           ;;
-        3) # New install success
-           debug_log "DEBUG" "New installation successful for $BASE_NAME. Proceeding to service configuration."
-           # サービス関連の処理 (新規インストール成功時 かつ disabled でない場合)
-           if [ "$PKG_OPTIONS_DISABLED" != "yes" ]; then
-               configure_service "$PKG_OPTIONS_PACKAGE_NAME" "$BASE_NAME"
-               # configure_service の失敗は install_package 全体の失敗とはしない (ログは内部で出力)
-           else
-               debug_log "DEBUG" "Skipping service handling for $BASE_NAME due to disabled option."
-           fi
-           # Fall through to return 3
            ;;
         *) # Unexpected status from process_package
            debug_log "ERROR" "Unexpected status $process_status received from process_package for $BASE_NAME."
