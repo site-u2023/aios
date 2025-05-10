@@ -18,197 +18,6 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-packages() {
-    # セクションヘッダーを表示する関数
-    print_section_header() {
-        local section_key="$1"
-        local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color gray_white "$header_text")"
-    }
-
-    # === 基本システム機能 ===
-    print_section_header "PKG_SECTION_BASIC"
-    install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden disabled
-    install_package openssh-sftp-server yn hidden
-    install_package coreutils yn hidden
-    #install_package bash yn hidden
-    
-    # === システム管理 ===
-    print_section_header "PKG_SECTION_SYSADMIN"
-    install_package irqbalance yn hidden
-    install_package luci-mod-dashboard yn hidden
-    
-    # === ネットワーク管理 ===
-    print_section_header "PKG_SECTION_NETWORK"
-    install_package luci-app-sqm yn hidden
-    install_package luci-app-qos yn hidden
-    install_package luci-i18n-statistics yn hidden
-    install_package luci-i18n-nlbwmon yn hidden
-    install_package wifischedule yn hidden
-
-    # === セキュリティツール ===
-    print_section_header "PKG_SECTION_SECURITY"
-    install_package znc-mod-fail2ban yn hidden
-    install_package banip yn hidden
-
-    # === システム監視 ===
-    print_section_header "PKG_SECTION_MONITORING"
-    install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden "desc=CPU utilization info for the LuCI status page"
-    feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden "desc=Temperature sensors data for the LuCI status page"
-    feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled "desc=Internet-detector is an application for checking the availability of the Internet. Performs periodic connections to a known public host and determines the actual Internet"
-    feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
-
-    # === ネットワーク診断ツール ===
-    print_section_header "PKG_SECTION_NETWORK_DIAG"
-    install_package mtr yn hidden
-    install_package nmap yn hidden
-    install_package tcpdump yn hidden
-    
-    # === テーマおよび見た目 ===
-    print_section_header "PKG_SECTION_THEME"
-    install_package luci-theme-openwrt yn hidden
-    feed_package_release jerrykuku luci-theme-argon yn hidden disabled "desc=Argon is a clean and tidy OpenWrt LuCI theme that allows users to customize their login interface with images or videos. It also supports automatic and manual switching between light and dark modes."
-
-    # === ユーティリティ ===
-    print_section_header "PKG_SECTION_UTILITY"
-    install_package attendedsysupgrade-common yn hidden
-    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
-
-    # === 追加機能（デフォルトで無効） ===
-    #print_section_header "PKG_SECTION_ADDITION"
-    
-    debug_log "DEBUG" "Standard packages installation process completed"
-    return 0
-}
-
-packages_19() {
-    # セクションヘッダーを表示する関数
-    print_section_header() {
-        local section_key="$1"
-        local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color gray_white "$header_text")"
-    }
-
-    # === 基本システム機能 ===
-    print_section_header "PKG_SECTION_BASIC"
-    install_package wget yn hidden
-    install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden disabled
-    install_package openssh-sftp-server yn hidden
-    install_package coreutils yn hidden
-    
-    # === システム管理 ===
-    print_section_header "PKG_SECTION_SYSADMIN"
-    install_package irqbalance yn hidden
-    install_package luci-i18n-dashboard yn hidden
-    
-    # === ネットワーク管理 ===
-    print_section_header "PKG_SECTION_NETWORK"
-    #install_package luci-app-sqm yn hidden
-    install_package luci-app-qos yn hidden
-    install_package luci-i18n-statistics yn hidden
-    install_package luci-i18n-nlbwmon yn hidden
-    install_package wifischedule yn hidden
-
-    # === セキュリティツール ===
-    print_section_header "PKG_SECTION_SECURITY"
-    install_package znc-mod-fail2ban yn hidden
-    install_package banip yn hidden
-    
-    # === システム監視 (19.07特有版) ===
-    print_section_header "PKG_SECTION_MONITORING"
-    install_package htop yn hidden
-    feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
-    feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
-    feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
-    
-    # === ネットワーク診断ツール ===
-    print_section_header "PKG_SECTION_NETWORK_DIAG"
-    install_package mtr yn hidden
-    install_package nmap yn hidden
-    install_package tcpdump yn hidden
-
-    # === テーマおよび見た目 ===
-    print_section_header "PKG_SECTION_THEME"
-    install_package luci-theme-openwrt yn hidden
-    
-    # === ユーティリティ ===
-    print_section_header "PKG_SECTION_UTILITY"
-    install_package attendedsysupgrade-common yn hidden
-    feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
-    
-    # === 追加機能（デフォルトで無効） ===
-    #print_section_header "PKG_SECTION_ADDITION"
-    
-    debug_log "DEBUG" "19.07 specific packages installation process completed"
-    return 0
-}
-
-packages_snaphot() {
-    # セクションヘッダーを表示する関数
-    print_section_header() {
-        local section_key="$1"
-        local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color gray_white "$header_text")"
-    }
-
-    # === 基本システム機能 ===
-    print_section_header "PKG_SECTION_BASIC"
-    install_package luci yn hidden
-    install_package luci-i18n-base yn hidden
-    install_package ttyd yn hidden disabled
-    install_package openssh-sftp-server yn hidden
-    install_package coreutils yn hidden
-    
-    # === システム管理 ===
-    print_section_header "PKG_SECTION_SYSADMIN"
-    install_package irqbalance yn hidden
-    install_package luci-mod-dashboard yn hidden
-    
-    # === ネットワーク管理 ===
-    print_section_header "PKG_SECTION_NETWORK"
-    install_package luci-app-sqm yn hidden
-    install_package luci-app-qos yn hidden
-    install_package luci-i18n-statistics yn hidden
-    install_package luci-i18n-nlbwmon yn hidden
-    install_package wifischedule yn hidden
-
-    # === システム監視 ===
-    print_section_header "PKG_SECTION_MONITORING"
-    install_package htop yn hidden
-
-    # feed_package_apk gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
-    # feed_package_apk gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden "desc=CPU utilization info for the LuCI status page"
-    # feed_package_apk gSpotx2f packages-openwrt current luci-app-temp-status yn hidden "desc=Temperature sensors data for the LuCI status page"
-    # feed_package_apk gSpotx2f packages-openwrt current internet-detector yn hidden disabled "desc=Internet-detector is an application for checking the availability of the Internet. Performs periodic connections to a known public host and determines the actual Internet"
-    # feed_package_apk gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
-
-    # === セキュリティツール ===
-    print_section_header "PKG_SECTION_SECURITY"
-    install_package znc-mod-fail2ban yn hidden
-    install_package banip yn hidden
-
-    # === ネットワーク診断ツール ===
-    print_section_header "PKG_SECTION_NETWORK_DIAG"
-    install_package mtr yn hidden
-    install_package nmap yn hidden
-    install_package tcpdump yn hidden
-    
-    # === テーマおよび見た目 ===
-    print_section_header "PKG_SECTION_THEME"
-    install_package luci-theme-openwrt yn hidden
-    
-    # === ユーティリティ ===
-    print_section_header "PKG_SECTION_UTILITY"
-    install_package attendedsysupgrade-common yn hidden
-    
-    debug_log "DEBUG" "SNAPSHOT specific packages installation process completed"
-    return 0
-}
-
 packages_usb() {
     # セクションヘッダーを表示する関数
     print_section_header() {
@@ -245,44 +54,6 @@ package_samba() {
     install_package luci-app-samba4 yn hidden
     
     debug_log "DEBUG" "Samba file sharing packages installation process completed"
-    return 0
-}
-
-# OSバージョンに基づいて適切なパッケージ関数を実行する
-install_packages_version() {
-    # OSバージョンファイルの確認
-    if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
-        debug_log "DEBUG" "OS version file not found, using default package function"
-        packages
-        
-        return 0
-    fi
-
-    # OSバージョンの読み込み
-    local os_version
-    os_version=$(cat "${CACHE_DIR}/osversion.ch")
-    
-    debug_log "DEBUG" "Detected OS version: $os_version"
-
-    # バージョンに基づいて関数を呼び出し
-    case "$os_version" in
-        19.*)
-            # バージョン19系の場合
-            debug_log "DEBUG" "Installing packages for OpenWrt 19.x series"
-            packages_19
-            ;;
-        *[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt]*)
-            # スナップショットバージョンの場合（大文字小文字を区別しない）
-            debug_log "DEBUG" "Installing packages for OpenWrt SNAPSHOT"
-            packages_snaphot
-            ;;
-        *)
-            # その他の通常バージョン
-            debug_log "DEBUG" "Installing standard packages"
-            packages
-            ;;
-    esac
-
     return 0
 }
 
@@ -398,10 +169,131 @@ check_install_list() {
     return 0    
 }
 
+# parse_package_db_switch <group> <version>
+# - 優先度・重複判定はローカル変数スイッチで制御
+# - カスタマイズ性を担保
+# - OpenWrt busybox ash互換
+# - デバッグ等メッセージは英語
+
+parse_package_db_switch() {
+    local group="$1"
+    local version="$2"
+    local dbfile="package.db"
+
+    # 優先度スイッチ: COMMON_FIRST or VERSION_FIRST
+    local PARSE_DB_PRIORITY="COMMON_FIRST"
+    # 重複判定スイッチ: FULL or PACKAGE
+    local PARSE_DB_SKIP_MODE="FULL"
+
+    # --- カスタマイズ例 ---
+    # PARSE_DB_PRIORITY="VERSION_FIRST"
+    # PARSE_DB_SKIP_MODE="PACKAGE"
+
+    local section_common="[$group.COMMON]"
+    local section_version="[$group.$version]"
+
+    local sections=""
+    case "$PARSE_DB_PRIORITY" in
+        COMMON_FIRST)
+            sections="$section_common $section_version"
+            ;;
+        VERSION_FIRST)
+            sections="$section_version $section_common"
+            ;;
+        *)
+            echo "Unknown priority mode: $PARSE_DB_PRIORITY" >&2
+            return 1
+            ;;
+    esac
+
+    local in_section=0
+    local line
+    local seen_cmds=""
+    local seen_pkgs=""
+    local i pkg
+
+    [ ! -f "$dbfile" ] && { echo "package.db not found" >&2; return 1; }
+
+    for section in $sections; do
+        in_section=0
+        while IFS= read -r line; do
+            line="${line%"${line##*[!$'\r']}" }"
+            [ -z "$line" ] && continue
+            case "$line" in
+                \#*) continue ;;
+                \[*)
+                    [ "$line" = "$section" ] && in_section=1 || in_section=0
+                    continue
+                    ;;
+                *)
+                    [ $in_section -eq 1 ] || continue
+
+                    if [ "$PARSE_DB_SKIP_MODE" = "FULL" ]; then
+                        case " $seen_cmds " in
+                            *" $line "*) continue ;;
+                            *) seen_cmds="$seen_cmds $line"
+                               eval "$line"
+                               ;;
+                        esac
+                    elif [ "$PARSE_DB_SKIP_MODE" = "PACKAGE" ]; then
+                        set -- $line
+                        pkg="$2"
+                        [ -z "$pkg" ] && continue
+                        case " $seen_pkgs " in
+                            *" $pkg "*) continue ;;
+                            *) seen_pkgs="$seen_pkgs $pkg"
+                               eval "$line"
+                               ;;
+                        esac
+                    else
+                        echo "Unknown skip mode: $PARSE_DB_SKIP_MODE" >&2
+                        return 1
+                    fi
+                    ;;
+            esac
+        done < "$dbfile"
+    done
+}
+
+# OSバージョンに基づいて適切なパッケージ関数を実行する
+install_packages_version() {
+    # OSバージョンファイルの確認
+    if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
+        debug_log "DEBUG" "OS version file not found, using DEFAULT section from package.db"
+        parse_package_db_switch "BASE_SYSTEM" "DEFAULT"
+        return 0
+    fi
+
+    # OSバージョンの読み込み
+    local os_version
+    os_version=$(cat "${CACHE_DIR}/osversion.ch")
+
+    debug_log "DEBUG" "Detected OS version: $os_version"
+
+    case "$os_version" in
+        19.*)
+            debug_log "DEBUG" "Installing packages for OpenWrt 19.x series (RELEASE19)"
+            parse_package_db_switch "BASE_SYSTEM" "RELEASE19"
+            ;;
+        *[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt]*)
+            debug_log "DEBUG" "Installing packages for OpenWrt SNAPSHOT"
+            parse_package_db_switch "BASE_SYSTEM" "SNAPSHOT"
+            ;;
+        *)
+            debug_log "DEBUG" "Installing standard packages (DEFAULT)"
+            parse_package_db_switch "BASE_SYSTEM" "DEFAULT"
+            ;;
+    esac
+
+    return 0
+}
+
 # メイン処理
 package_main() {
     debug_log "DEBUG" "package_main called. PACKAGE_INSTALL_MODE is currently: '$PACKAGE_INSTALL_MODE'"
-
+    
+    download "package.db" "hidden"
+    
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         # common-country.sh の confirm 関数を使用する
         # メッセージキーは適切なものを get_message で取得するか、直接指定
