@@ -2161,7 +2161,7 @@ setup_password_hostname() {
             fi
         fi
     fi
-
+    
     # SSH LAN設定（UCI値でInterfaceが未設定の場合のみ）
     local dropbear_interface
     dropbear_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
