@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.10-00-02"
+SCRIPT_VERSION="2025.05.10-00-03"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -177,11 +177,9 @@ check_install_list() {
 parse_package_db_switch() {
     local group="$1"
     local version="$2"
-    local dbfile="${BASE_DIR}/package.db" 
+    local dbfile="${BASE_DIR}/package.db"
 
-    # 優先度スイッチ: COMMON_FIRST or VERSION_FIRST
     local PARSE_DB_PRIORITY="COMMON_FIRST"
-    # 重複判定スイッチ: FULL or PACKAGE
     local PARSE_DB_SKIP_MODE="FULL"
 
     local section_common="[$group.COMMON]"
@@ -189,16 +187,9 @@ parse_package_db_switch() {
 
     local sections=""
     case "$PARSE_DB_PRIORITY" in
-        COMMON_FIRST)
-            sections="$section_common $section_version"
-            ;;
-        VERSION_FIRST)
-            sections="$section_version $section_common"
-            ;;
-        *)
-            echo "Unknown priority mode: $PARSE_DB_PRIORITY" >&2
-            return 1
-            ;;
+        COMMON_FIRST)   sections="$section_common $section_version" ;;
+        VERSION_FIRST)  sections="$section_version $section_common" ;;
+        *) echo "Unknown priority mode: $PARSE_DB_PRIORITY" >&2; return 1 ;;
     esac
 
     local in_section=0
@@ -206,6 +197,8 @@ parse_package_db_switch() {
     local seen_cmds=""
     local seen_pkgs=""
     local i pkg
+    local tmpcmd="/tmp/.aios_db_exec_$$.sh"
+    : > "$tmpcmd"
 
     [ ! -f "$dbfile" ] && { echo "package.db not found" >&2; return 1; }
 
@@ -227,7 +220,7 @@ parse_package_db_switch() {
                         case " $seen_cmds " in
                             *" $line "*) continue ;;
                             *) seen_cmds="$seen_cmds $line"
-                               ( eval "$line" )
+                               echo "$line" >> "$tmpcmd"
                                ;;
                         esac
                     elif [ "$PARSE_DB_SKIP_MODE" = "PACKAGE" ]; then
@@ -237,17 +230,25 @@ parse_package_db_switch() {
                         case " $seen_pkgs " in
                             *" $pkg "*) continue ;;
                             *) seen_pkgs="$seen_pkgs $pkg"
-                               ( eval "$line" )
+                               echo "$line" >> "$tmpcmd"
                                ;;
                         esac
                     else
                         echo "Unknown skip mode: $PARSE_DB_SKIP_MODE" >&2
+                        rm -f "$tmpcmd"
                         return 1
                     fi
                     ;;
             esac
         done < "$dbfile"
     done
+
+    # 1行ずつ独立サブシェルで実行
+    while IFS= read -r exec_line; do
+        sh -c "$exec_line"
+    done < "$tmpcmd"
+
+    rm -f "$tmpcmd"
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
