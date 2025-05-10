@@ -1,0 +1,96 @@
+SCRIPT_VERSION="2025.05.10-00-00"
+
+[BASE_SYSTEM.DEFAULT]
+install_package luci-i18n-base yn hidden
+install_package ttyd yn hidden disabled
+install_package openssh-sftp-server yn hidden
+install_package coreutils yn hidden
+#install_package bash yn hidden
+install_package irqbalance yn hidden
+install_package luci-mod-dashboard yn hidden
+install_package luci-app-sqm yn hidden
+install_package luci-app-qos yn hidden
+install_package luci-i18n-statistics yn hidden
+install_package luci-i18n-nlbwmon yn hidden
+install_package wifischedule yn hidden
+install_package znc-mod-fail2ban yn hidden
+install_package banip yn hidden
+install_package htop yn hidden
+feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
+feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden "desc=CPU utilization info for the LuCI status page"
+feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden "desc=Temperature sensors data for the LuCI status page"
+feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled "desc=Internet-detector is an application for checking the availability of the Internet. Performs periodic connections to a known public host and determines the actual Internet"
+feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
+install_package mtr yn hidden
+install_package nmap yn hidden
+install_package tcpdump yn hidden
+install_package luci-theme-openwrt yn hidden
+feed_package_release jerrykuku luci-theme-argon yn hidden disabled "desc=Argon is a clean and tidy OpenWrt LuCI theme that allows users to customize their login interface with images or videos. It also supports automatic and manual switching between light and dark modes."
+install_package attendedsysupgrade-common yn hidden
+feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+
+[BASE_SYSTEM.RELEASE19]
+install_package wget yn hidden
+install_package luci-i18n-base yn hidden
+install_package ttyd yn hidden disabled
+install_package openssh-sftp-server yn hidden
+install_package coreutils yn hidden
+install_package irqbalance yn hidden
+install_package luci-i18n-dashboard yn hidden
+#install_package luci-app-sqm yn hidden
+install_package luci-app-qos yn hidden
+install_package luci-i18n-statistics yn hidden
+install_package luci-i18n-nlbwmon yn hidden
+install_package wifischedule yn hidden
+install_package znc-mod-fail2ban yn hidden
+install_package banip yn hidden
+install_package htop yn hidden
+feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
+feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
+feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
+install_package mtr yn hidden
+install_package nmap yn hidden
+install_package tcpdump yn hidden
+install_package luci-theme-openwrt yn hidden
+install_package attendedsysupgrade-common yn hidden
+feed_package_release lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+
+[BASE_SYSTEM.SNAPSHOT]
+install_package luci yn hidden
+install_package luci-i18n-base yn hidden
+install_package ttyd yn hidden disabled
+install_package openssh-sftp-server yn hidden
+install_package coreutils yn hidden
+install_package irqbalance yn hidden
+install_package luci-mod-dashboard yn hidden
+install_package luci-app-sqm yn hidden
+install_package luci-app-qos yn hidden
+install_package luci-i18n-statistics yn hidden
+install_package luci-i18n-nlbwmon yn hidden
+install_package wifischedule yn hidden
+install_package htop yn hidden
+# feed_package_apk gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
+# feed_package_apk gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden "desc=CPU utilization info for the LuCI status page"
+# feed_package_apk gSpotx2f packages-openwrt current luci-app-temp-status yn hidden "desc=Temperature sensors data for the LuCI status page"
+# feed_package_apk gSpotx2f packages-openwrt current internet-detector yn hidden disabled "desc=Internet-detector is an application for checking the availability of the Internet. Performs periodic connections to a known public host and determines the actual Internet"
+# feed_package_apk gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
+install_package znc-mod-fail2ban yn hidden
+install_package banip yn hidden
+install_package mtr yn hidden
+install_package nmap yn hidden
+install_package tcpdump yn hidden
+install_package luci-theme-openwrt yn hidden
+install_package attendedsysupgrade-common yn hidden
+
+[USB.DEFAULT]
+install_package kmod-usb-storage yn hidden
+install_package dosfstools yn hidden
+install_package e2fsprogs yn hidden
+install_package f2fs-tools yn hidden
+install_package exfat-fsck yn hidden
+install_package ntfs-3g yn hidden
+install_package hfsfsck yn hidden
+install_package hdparm yn hidden
+
+[SAMBA.DEFAULT]
+install_package luci-app-samba4 yn hidden
