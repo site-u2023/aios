@@ -174,6 +174,8 @@ confirm() {
         # ★★★ 変更点: 末尾の不要なスペースを削除 ★★★
         printf "%b" "$(color white "$msg")"
 
+        clear_input_buffer
+        
         # --- /dev/ttyから入力を受ける ---
         IFS= read -r yn < /dev/tty
 
@@ -261,12 +263,7 @@ select_list() {
         return 0
     fi
 
-    # 選択肢を表示
-    # local display_count=1
-    # echo "$select_list" | while IFS= read -r line; do
-    #     printf "[%d] %s\n" "$display_count" "$line"
-    #     display_count=$((display_count + 1))
-    # done
+    clear_input_buffer
 
     # 選択肢を表示
     local display_count=1
