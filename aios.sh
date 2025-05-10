@@ -77,7 +77,6 @@ SPINNER_COLOR="white" # デフォルトのスピナー色
 ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 
 # --- Set MAX_PARALLEL_TASKS ---
-# MAX_PARALLEL_TASKS="$(c=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1); calculated_tasks=$((c + 1)); if [ "$calculated_tasks" -gt 5 ]; then echo 5; else echo "$calculated_tasks"; fi)"
 PARALLEL_LIMIT="5"
 PARALLEL_PLUS="1"
 CORE_COUNT=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
