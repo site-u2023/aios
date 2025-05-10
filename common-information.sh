@@ -797,7 +797,6 @@ display_detected_location() {
     debug_log "DEBUG" "Location information displayed successfully"
 }
 
-# キャッシュされたロケーション情報を表示する関数
 information_main() {
     debug_log "DEBUG" "Entering information_main() to display cached location"
 
@@ -840,13 +839,17 @@ information_main() {
                  debug_log "WARNING" "init_translation function not found. Cannot ensure messages are translated."
             fi
 
+            # --- ここでNTP自動設定 ---
+            if command -v setup_ntp >/dev/null 2>&1; then
+                setup_ntp
+            else
+                debug_log "DEBUG" "setup_ntp function not found, skipping NTP configuration"
+            fi
+
             # 元の display_detected_location を呼び出す (引数も元の形式に戻す)
             if command -v display_detected_location >/dev/null 2>&1; then
-                # ★★★ 変更点: 表示には display_detected_location を使う ★★★
-                # ★★★ 変更点: ソースは "Cache" 固定 ★★★
-                # ★★★ 変更点: ISP情報がない場合も考慮 (空文字列を渡す) ★★★
                 display_detected_location "Cache" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
-                printf "\n" # 表示後に改行を追加
+                printf "\n"
             else
                 debug_log "ERROR" "display_detected_location function not found. Cannot display location."
             fi
@@ -860,4 +863,3 @@ information_main() {
     debug_log "DEBUG" "Exiting information_main()"
     return 0
 }
-
