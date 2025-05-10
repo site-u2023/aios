@@ -33,7 +33,6 @@ API_PROVIDERS="get_country_cloudflare get_country_ipapi get_country_ipinfo"
 SELECT_REGION_NAME=""
 
 setup_location() {
-    # language.chが無ければ何もせずreturn
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found, skipping location setup"
         return
@@ -68,8 +67,6 @@ setup_location() {
     # NTPサーバの現設定を取得
     local current_ntp
     current_ntp="$(uci get system.ntp.server 2>/dev/null)"
-
-    # NTPサーバがデフォルト（0.openwrt.pool.ntp.org のみ、または空）の場合のみlanguage.chの価で上書き
     if [ -z "$current_ntp" ] || [ "$current_ntp" = "0.openwrt.pool.ntp.org" ]; then
         if [ -n "$language" ]; then
             debug_log "DEBUG" "NTP server is default or unset. Setting NTP server from language.ch: $language"
@@ -78,8 +75,15 @@ setup_location() {
     fi
 
     # システムの説明と備考を設定
-    uci set system.@system[0].description="Configured automatically by aios"
-    uci set system.@system[0].notes="Configured at $(date '+%Y-%m-%d %H:%M:%S')"
+    local current_description current_notes
+    current_description="$(uci get system.@system[0].description 2>/dev/null)"
+    if [ -z "$current_description" ]; then
+        uci set system.@system[0].description="Configured automatically by aios"
+    fi
+    current_notes="$(uci get system.@system[0].notes 2>/dev/null)"
+    if [ -z "$current_notes" ]; then
+        uci set system.@system[0].notes="Configured at $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
     
     uci commit system
     /etc/init.d/system reload
