@@ -178,7 +178,7 @@ check_install_list() {
 parse_package_db_switch() {
     local group="$1"
     local version="$2"
-    local dbfile="package.db"
+    local dbfile="${BASE_DIR}/package.db" 
 
     # 優先度スイッチ: COMMON_FIRST or VERSION_FIRST
     local PARSE_DB_PRIORITY="COMMON_FIRST"
