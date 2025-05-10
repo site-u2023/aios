@@ -64,14 +64,21 @@ setup_location() {
         fi
     fi
 
-    # NTPサーバの現設定を取得
-    local current_ntp
-    current_ntp="$(uci get system.ntp.server 2>/dev/null)"
-    if [ -z "$current_ntp" ] || [ "$current_ntp" = "0.openwrt.pool.ntp.org" ]; then
-        if [ -n "$language" ]; then
-            debug_log "DEBUG" "NTP server is default or unset. Setting NTP server from language.ch: $language"
-            uci set system.ntp.server="$language"
+    # NTPサーバ自動設定: language.ch値を使い、バリデートしてからセット
+    local ntp_pool ntp_valid=0
+    if [ -n "$language" ]; then
+        ntp_pool="$language"
+        # 0.$language.pool.ntp.org が名前解決できるかチェック（busybox nslookup使用）
+        if nslookup "0.$ntp_pool.pool.ntp.org" >/dev/null 2>&1; then
+            ntp_valid=1
         fi
+    fi
+
+    if [ "$ntp_valid" -eq 1 ]; then
+        debug_log "DEBUG" "Setting NTP server to 0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+        uci set system.ntp.server="0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+    else
+        debug_log "DEBUG" "NTP pool for language '$language' not found or language.ch missing. Skipping NTP server change."
     fi
 
     # システムの説明と備考を設定
