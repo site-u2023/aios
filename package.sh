@@ -199,14 +199,13 @@ parse_package_db_switch() {
 
     [ ! -f "$dbfile" ] && { echo "package.db not found" >&2; return 1; }
 
-    # 一時ファイルにバッファリング
+    # 一時ファイルでバッファ
     local tmpfile="${CACHE_DIR}/parse_package_db_switch_$$.tmp"
     > "$tmpfile"
 
     for section in $sections; do
         in_section=0
         while IFS= read -r line; do
-            # 改行末の削除（元ロジック維持）
             line="${line%"${line##*[!$'\r']}" }"
             [ -z "$line" ] && continue
             case "$line" in
@@ -247,20 +246,19 @@ parse_package_db_switch() {
         done < "$dbfile"
     done
 
-    # 1行ずつ空白区切りでコマンド＋引数で呼び出し
+    # 行ごとにコマンド＋引数で実行（stdinを/dev/nullにして副作用防止）
     while IFS= read -r exec_line; do
         [ -z "$exec_line" ] && continue
         set -- $exec_line
         cmd="$1"; shift
         if type "$cmd" >/dev/null 2>&1; then
-            "$cmd" "$@"
+            "$cmd" "$@" < /dev/null
         else
             echo "Unknown command: $cmd (line: $exec_line)" >&2
         fi
     done < "$tmpfile"
     rm -f "$tmpfile"
 }
-
 # OSバージョンに基づいて適切なパッケージ関数を実行する
 install_packages_version() {
     # OSバージョンファイルの確認
