@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.09-00-02"
+SCRIPT_VERSION="2025.05.10-00-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -307,6 +307,9 @@ install_usb_packages() {
 
 # インストール後のパッケージリストを表示
 check_install_list() {
+    # 表示モード切り替え: 0=パッケージ名のみ, 1=worldファイルの内容そのまま
+    local SHOW_APK_ENTRY_DETAIL="${SHOW_APK_ENTRY_DETAIL:-0}"
+
     printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
     
     # パッケージマネージャの種類を確認
@@ -368,11 +371,25 @@ check_install_list() {
             debug_log "DEBUG" "Comparing $current_apk_world_file with $apk_world_initial_snapshot."
             sort "$apk_world_initial_snapshot" > "$temp_world_base_sorted"
             sort "$current_apk_world_file" > "$temp_world_current_sorted"
-            grep -vxFf "$temp_world_base_sorted" "$temp_world_current_sorted"
+            if [ "$SHOW_APK_ENTRY_DETAIL" = "1" ]; then
+                grep -vxFf "$temp_world_base_sorted" "$temp_world_current_sorted"
+            else
+                grep -vxFf "$temp_world_base_sorted" "$temp_world_current_sorted" | \
+                    sed -e 's|^.*/\([^/]*\)\.apk$|\1|' \
+                        -e 's|\.apk$||' \
+                        -e 's|>.*$||'
+            fi
             rm -f "$temp_world_base_sorted" "$temp_world_current_sorted"
         else
             debug_log "DEBUG" "$apk_world_initial_snapshot not found or empty. Listing all from $current_apk_world_file."
-            sort "$current_apk_world_file"
+            if [ "$SHOW_APK_ENTRY_DETAIL" = "1" ]; then
+                sort "$current_apk_world_file"
+            else
+                sort "$current_apk_world_file" | \
+                    sed -e 's|^.*/\([^/]*\)\.apk$|\1|' \
+                        -e 's|\.apk$||' \
+                        -e 's|>.*$||'
+            fi
         fi
     else
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
