@@ -174,11 +174,11 @@ confirm() {
         # ★★★ 変更点: 末尾の不要なスペースを削除 ★★★
         printf "%b" "$(color white "$msg")"
 
-        # 入力を読み取り
-        if ! read -r yn; then
-            debug_log "ERROR" "Failed to read user input"
-            return 1
-        fi
+        # --- /dev/ttyから入力を受ける ---
+        IFS= read -r yn < /dev/tty
+
+        yn=$(normalize_input "$yn")
+        debug_log "DEBUG" "Processing user input: $yn"
 
         # 入力の正規化
         yn=$(normalize_input "$yn")
@@ -262,11 +262,20 @@ select_list() {
     fi
 
     # 選択肢を表示
+    # local display_count=1
+    # echo "$select_list" | while IFS= read -r line; do
+    #     printf "[%d] %s\n" "$display_count" "$line"
+    #     display_count=$((display_count + 1))
+    # done
+
+    # 選択肢を表示
     local display_count=1
-    echo "$select_list" | while IFS= read -r line; do
+    while IFS= read -r line; do
         printf "[%d] %s\n" "$display_count" "$line"
         display_count=$((display_count + 1))
-    done
+    done <<EOF
+$select_list
+EOF
 
     # 選択ループ
     local prompt_msg=$(get_message "$prompt_msg_key")
