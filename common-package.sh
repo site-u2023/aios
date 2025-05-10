@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.10-00-00"
+SCRIPT_VERSION="2025.05.10-00-01"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -89,17 +89,19 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #########################################################################
 
 update_package_list() {
-    local silent_mode="$1"
+    local silent_mode="$1"  # silentモードパラメータ
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
-    local current_time cache_time max_age
+    local current_time
     current_time=$(date '+%s')
-    cache_time=0
-    max_age=$((24 * 60 * 60))
-    local need_update="yes"
+    local cache_time=0
+    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
 
+    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
+    # キャッシュの状態確認
+    local need_update="yes"
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
         if [ $((current_time - cache_time)) -lt $max_age ]; then
@@ -112,15 +114,18 @@ update_package_list() {
         debug_log "DEBUG" "Package list cache not found or incomplete. Will create it now."
     fi
 
+    # 更新が必要ない場合は終了
     if [ "$need_update" = "no" ]; then
         return 0
     fi
 
+    # silent モードでない場合のみ表示
     if [ "$silent_mode" != "yes" ]; then
         printf "  %s\n"
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
+    # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
@@ -132,39 +137,25 @@ update_package_list() {
 
     while [ $retry -lt "${WGET_MAX_RETRIES:-5}" ]; do
         update_status=0
-        local pids=""
-        local parallel_count=0
 
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-            # --- opkg: /etc/opkg/*.conf feedごとに並列実行 ---
-            local opkg_conf_list opkg_conf
-            opkg_conf_list=$(find /etc/opkg -maxdepth 1 -type f -name "*.conf" 2>/dev/null)
-            [ -z "$opkg_conf_list" ] && opkg_conf_list="/etc/opkg/customfeeds.conf"
-            for opkg_conf in $opkg_conf_list; do
-                (
-                    debug_log "DEBUG" "Running opkg update --conf $opkg_conf"
-                    opkg update --conf "$opkg_conf" >> "${LOG_DIR}/opkg_update_$(basename "$opkg_conf").log" 2>&1
-                ) &
-                pids="$pids $!"
-                parallel_count=$((parallel_count + 1))
-                # 並列数制御
-                if [ "$parallel_count" -ge "${MAX_PARALLEL_TASKS:-2}" ]; then
-                    wait $(echo "$pids" | awk '{print $1}')
-                    pids=$(echo "$pids" | awk '{$1=""; print $0}')
-                    parallel_count=$((parallel_count - 1))
+            # --- opkgは従来通り直列処理 ---
+            debug_log "DEBUG" "Running opkg update (serial)"
+            opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+            if [ $? -ne 0 ]; then
+                update_status=1
+            else
+                opkg list > "$package_cache" 2>/dev/null
+                if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
+                    update_status=1
                 fi
-            done
-            # 残りを待つ
-            for pid in $pids; do
-                wait "$pid" || update_status=1
-            done
-            # パッケージリストキャッシュ生成
-            opkg list > "$package_cache" 2>/dev/null
-            [ $? -ne 0 ] || [ ! -s "$package_cache" ] && update_status=1
+            fi
 
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            # --- apk: /etc/apk/repositories各repoごとに並列実行 ---
+            # --- apk: リポジトリごとに並列処理 ---
             local apk_repos repo
+            local pids=""
+            local parallel_count=0
             apk_repos=$(grep -v '^[[:space:]]*#' /etc/apk/repositories 2>/dev/null | grep -v '^[[:space:]]*$')
             for repo in $apk_repos; do
                 (
@@ -180,12 +171,16 @@ update_package_list() {
                     parallel_count=$((parallel_count - 1))
                 fi
             done
+            # 残りを待つ
             for pid in $pids; do
                 wait "$pid" || update_status=1
             done
             # パッケージリストキャッシュ生成
             apk search > "$package_cache" 2>/dev/null
-            [ $? -ne 0 ] || [ ! -s "$package_cache" ] && update_status=1
+            if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
+                update_status=1
+            fi
+
         else
             update_status=1
         fi
