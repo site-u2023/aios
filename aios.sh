@@ -1037,6 +1037,10 @@ stop_spinner() {
         fi
     fi
 
+    # 入力バッファクリア
+    dd if=/dev/tty of=/dev/null bs=1 count=100 2>/dev/null
+    # while IFS= read -t 1 -r dummy < /dev/tty; do :; done
+    
     # カーソル表示
     printf "\033[?25h"
 }
