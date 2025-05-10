@@ -32,28 +32,54 @@ API_PROVIDERS="get_country_cloudflare get_country_ipapi get_country_ipinfo"
 
 SELECT_REGION_NAME=""
 
-# NTP pool自動設定＆同期関数
-setup_ntp() {
+setup_location() {
     # language.chが無ければ何もせずreturn
-    if [ ! -f /tmp/aios/cache/language.ch ]; then
-        debug_log "DEBUG" "language.ch not found, skipping NTP setup"
+    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
+        debug_log "DEBUG" "language.ch not found, skipping location setup"
         return
+    fi
+
+    # キャッシュファイルから値を取得
+    local zonename timezone language
+    zonename="$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null)"
+    timezone="$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null)"
+    language="$(cat "${CACHE_DIR}/language.ch" 2>/dev/null)"
+
+    # zonenameのデフォルト判定と設定
+    local current_zonename
+    current_zonename="$(uci get system.@system[0].zonename 2>/dev/null)"
+    if [ -z "$current_zonename" ] || [ "$current_zonename" = "00" ] || [ "$current_zonename" = "UTC" ]; then
+        if [ -n "$zonename" ] && [ "$zonename" != "00" ] && [ "$zonename" != "UTC" ]; then
+            debug_log "DEBUG" "zonename is default or unset. Setting zonename from cache: $zonename"
+            uci set system.@system[0].zonename="$zonename"
+        fi
+    fi
+
+    # timezoneのデフォルト判定と設定
+    local current_timezone
+    current_timezone="$(uci get system.@system[0].timezone 2>/dev/null)"
+    if [ -z "$current_timezone" ] || [ "$current_timezone" = "UTC" ]; then
+        if [ -n "$timezone" ] && [ "$timezone" != "UTC" ]; then
+            debug_log "DEBUG" "timezone is default or unset. Setting timezone from cache: $timezone"
+            uci set system.@system[0].timezone="$timezone"
+        fi
     fi
 
     # NTPサーバの現設定を取得
     local current_ntp
     current_ntp="$(uci get system.ntp.server 2>/dev/null)"
 
-    # NTPサーバが0.openwrt.pool.ntp.orgのみの場合のみ処理実行
-    if [ "$current_ntp" = "0.openwrt.pool.ntp.org" ]; then
-        debug_log "DEBUG" "NTP server is default. Executing NTP setup..."
-        # ここにNTPセットアップ内容を追加
-        # 例: uci set system.ntp.server="0.openwrt.pool.ntp.org"
-        # 追加処理が必要ならご指示ください
-    else
-        debug_log "DEBUG" "NTP server is not default, skipping NTP setup"
-        return
+    # NTPサーバがデフォルト（0.openwrt.pool.ntp.org のみ、または空）の場合のみlanguage.chの価で上書き
+    if [ -z "$current_ntp" ] || [ "$current_ntp" = "0.openwrt.pool.ntp.org" ]; then
+        if [ -n "$language" ]; then
+            debug_log "DEBUG" "NTP server is default or unset. Setting NTP server from language.ch: $language"
+            uci set system.ntp.server="$language"
+        fi
     fi
+
+    uci commit system
+    /etc/init.d/system reload
+    /etc/init.d/sysntpd restart
 }
 
 # APIリクエストを実行する関数（リダイレクト、タイムアウト、リトライ対応）
@@ -816,10 +842,10 @@ information_main() {
             fi
 
             # --- ここでNTP自動設定 ---
-            if command -v setup_ntp >/dev/null 2>&1; then
-                setup_ntp
+            if command -v setup_location >/dev/null 2>&1; then
+                setup_location
             else
-                debug_log "DEBUG" "setup_ntp function not found, skipping NTP configuration"
+                debug_log "DEBUG" "setup_location function not found, skipping NTP configuration"
             fi
 
             # 元の display_detected_location を呼び出す (引数も元の形式に戻す)
