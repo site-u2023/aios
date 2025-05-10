@@ -2119,14 +2119,14 @@ setup_password_hostname() {
     passwd_field=$(awk -F: '/^root:/ {print $2}' /etc/shadow 2>/dev/null)
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
-            printf "%s " "$(get_message "MSG_ENTER_PASSWORD")"
+            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
             stty -echo
             read new_password
             stty echo
             printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
-            printf "%s " "$(get_message "MSG_ENTER_PASSWORD")"
+            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
             stty -echo
             read confirm_password
             stty echo
@@ -2146,7 +2146,7 @@ setup_password_hostname() {
     local current_hostname new_hostname
     current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "%s " "$(get_message "MSG_ENTER_HOSTNAME")"
+        printf "%s" "$(get_message "MSG_ENTER_HOSTNAME")"
         read new_hostname
         if [ -z "$new_hostname" ]; then
             :
