@@ -399,8 +399,6 @@ process_menu_items() {
     local menu_count=0
     local total_normal_items=0
     local in_section=0
-
-    clear_input_buffer
     
     # まず、セクション内の通常項目数をカウント（変更なし）
     while IFS= read -r line || [ -n "$line" ]; do
