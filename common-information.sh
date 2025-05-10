@@ -77,6 +77,10 @@ setup_location() {
         fi
     fi
 
+    # システムの説明と備考を設定
+    uci set system.@system[0].description="Configured automatically by aios"
+    uci set system.@system[0].notes="Configured at $(date '+%Y-%m-%d %H:%M:%S')"
+    
     uci commit system
     /etc/init.d/system reload
     /etc/init.d/sysntpd restart
