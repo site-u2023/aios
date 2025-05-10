@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.10-00-01"
+SCRIPT_VERSION="2025.05.10-00-02"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -286,6 +286,8 @@ install_packages_version() {
 # メイン処理
 package_main() {
     debug_log "DEBUG" "package_main called. PACKAGE_INSTALL_MODE is currently: '$PACKAGE_INSTALL_MODE'"
+
+    download "package.db"
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         # common-country.sh の confirm 関数を使用する
