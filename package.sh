@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.10-00-03"
+SCRIPT_VERSION="2025.05.10-00-04"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -187,18 +187,17 @@ parse_package_db_switch() {
 
     local sections=""
     case "$PARSE_DB_PRIORITY" in
-        COMMON_FIRST)   sections="$section_common $section_version" ;;
-        VERSION_FIRST)  sections="$section_version $section_common" ;;
+        COMMON_FIRST) sections="$section_common $section_version" ;;
+        VERSION_FIRST) sections="$section_version $section_common" ;;
         *) echo "Unknown priority mode: $PARSE_DB_PRIORITY" >&2; return 1 ;;
     esac
 
-    local in_section=0
-    local line
     local seen_cmds=""
     local seen_pkgs=""
-    local i pkg
-    local tmpcmd="/tmp/.aios_db_exec_$$.sh"
-    : > "$tmpcmd"
+    local cmds=""
+    local line
+    local in_section=0
+    local pkg
 
     [ ! -f "$dbfile" ] && { echo "package.db not found" >&2; return 1; }
 
@@ -220,7 +219,8 @@ parse_package_db_switch() {
                         case " $seen_cmds " in
                             *" $line "*) continue ;;
                             *) seen_cmds="$seen_cmds $line"
-                               echo "$line" >> "$tmpcmd"
+                               cmds="$cmds
+$line"
                                ;;
                         esac
                     elif [ "$PARSE_DB_SKIP_MODE" = "PACKAGE" ]; then
@@ -230,12 +230,12 @@ parse_package_db_switch() {
                         case " $seen_pkgs " in
                             *" $pkg "*) continue ;;
                             *) seen_pkgs="$seen_pkgs $pkg"
-                               echo "$line" >> "$tmpcmd"
+                               cmds="$cmds
+$line"
                                ;;
                         esac
                     else
                         echo "Unknown skip mode: $PARSE_DB_SKIP_MODE" >&2
-                        rm -f "$tmpcmd"
                         return 1
                     fi
                     ;;
@@ -243,12 +243,12 @@ parse_package_db_switch() {
         done < "$dbfile"
     done
 
-    # 1行ずつ独立サブシェルで実行
-    while IFS= read -r exec_line; do
-        sh -c "$exec_line"
-    done < "$tmpcmd"
-
-    rm -f "$tmpcmd"
+    # 1行ずつeval、関数スコープ維持
+    IFS='
+'
+    for exec_line in $cmds; do
+        eval "$exec_line"
+    done
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
