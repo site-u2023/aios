@@ -2104,10 +2104,10 @@ main() {
     resolve_path "$0"
 
     make_directory
-
-    init_device_cache
     
     check_network_connectivity
+
+    init_device_cache
     
     check_option "$@"
 }
