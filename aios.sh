@@ -2099,14 +2099,70 @@ resolve_path() {
     # printf "%s/%s\n" "$dir" "$file"
 }
 
+setup_password_hostname() {
+    #--- rootパスワードの初期値判定（未設定時のみ処理） ---
+    local shadow_line passwd_field
+    shadow_line=$(grep '^root:' /etc/shadow 2>/dev/null)
+    passwd_field=$(echo "$shadow_line" | cut -d: -f2)
+    if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
+        printf "%s\n" "$(get_message "MSG_PASSWORD_NOTICE")"
+        while :; do
+            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
+            stty -echo
+            read password1
+            stty echo
+            printf "\n"
+            [ -z "$password1" ] && break
+
+            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
+            stty -echo
+            read password2
+            stty echo
+            printf "\n"
+            [ -z "$password2" ] && break
+
+            if [ "$password1" != "$password2" ] || [ "${#password1}" -lt 8 ]; then
+                printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")"
+                continue
+            fi
+
+            printf "%s\n" "$password1" | passwd root 2>/dev/null
+            if [ $? -eq 0 ]; then
+                printf "%s\n" "$(get_message "MSG_PASSWORD_SET_OK")"
+            else
+                printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")"
+            fi
+            break
+        done
+    fi
+
+    #--- ホストネームが空またはOpenWrt時のみ処理 ---
+    local current_hostname new_hostname
+    current_hostname=$(cat /etc/hostname 2>/dev/null | tr -d '\r\n')
+    if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
+        printf "%s" "$(get_message "MSG_ENTER_HOSTNAME")"
+        read new_hostname
+        [ -z "$new_hostname" ] && return
+        echo "$new_hostname" > /etc/hostname 2>/dev/null
+        if [ $? -eq 0 ]; then
+            printf "%s\n" "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")"
+        else
+            printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
+        fi
+    fi
+}
+
 # 初期化処理のメイン
 main() {
+
+    setup_password_hostname
+    
     resolve_path "$0"
 
     make_directory
     
     check_network_connectivity
-
+    
     init_device_cache
     
     check_option "$@"
