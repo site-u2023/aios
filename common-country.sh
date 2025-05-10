@@ -173,8 +173,6 @@ confirm() {
         # プロンプト表示（改行対応 - printf %bを使用）
         # ★★★ 変更点: 末尾の不要なスペースを削除 ★★★
         printf "%b" "$(color white "$msg")"
-
-        clear_input_buffer
         
         # --- /dev/ttyから入力を受ける ---
         IFS= read -r yn < /dev/tty
@@ -262,8 +260,6 @@ select_list() {
         echo "1" > "$tmp_file"
         return 0
     fi
-
-    clear_input_buffer
 
     # 選択肢を表示
     local display_count=1
