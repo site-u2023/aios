@@ -174,7 +174,6 @@ check_install_list() {
 # - カスタマイズ性を担保
 # - OpenWrt busybox ash互換
 # - デバッグ等メッセージは英語
-
 parse_package_db_switch() {
     local group="$1"
     local version="$2"
@@ -184,10 +183,6 @@ parse_package_db_switch() {
     local PARSE_DB_PRIORITY="COMMON_FIRST"
     # 重複判定スイッチ: FULL or PACKAGE
     local PARSE_DB_SKIP_MODE="FULL"
-
-    # --- カスタマイズ例 ---
-    # PARSE_DB_PRIORITY="VERSION_FIRST"
-    # PARSE_DB_SKIP_MODE="PACKAGE"
 
     local section_common="[$group.COMMON]"
     local section_version="[$group.$version]"
@@ -232,7 +227,7 @@ parse_package_db_switch() {
                         case " $seen_cmds " in
                             *" $line "*) continue ;;
                             *) seen_cmds="$seen_cmds $line"
-                               eval "$line"
+                               ( eval "$line" )
                                ;;
                         esac
                     elif [ "$PARSE_DB_SKIP_MODE" = "PACKAGE" ]; then
@@ -242,7 +237,7 @@ parse_package_db_switch() {
                         case " $seen_pkgs " in
                             *" $pkg "*) continue ;;
                             *) seen_pkgs="$seen_pkgs $pkg"
-                               eval "$line"
+                               ( eval "$line" )
                                ;;
                         esac
                     else
