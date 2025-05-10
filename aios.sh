@@ -2100,7 +2100,7 @@ resolve_path() {
 }
 
 setup_password_hostname() {
-    #--- rootパスワードの初期値判定（未設定時のみ処理） ---
+    # root password setup (only if not set)
     local shadow_line passwd_field
     shadow_line=$(grep '^root:' /etc/shadow 2>/dev/null)
     passwd_field=$(echo "$shadow_line" | cut -d: -f2)
@@ -2136,35 +2136,41 @@ setup_password_hostname() {
         done
     fi
 
-    #--- ホストネームが空またはOpenWrt時のみ処理 ---
-    local current_hostname new_hostname
+    # hostname setup (if empty or OpenWrt)
+    local current_hostname new_hostname yn
     current_hostname=$(cat /etc/hostname 2>/dev/null | tr -d '\r\n')
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "%s" "$(get_message "MSG_ENTER_HOSTNAME")"
-        read new_hostname
-        [ -z "$new_hostname" ] && return
-        echo "$new_hostname" > /etc/hostname 2>/dev/null
-        if [ $? -eq 0 ]; then
-            printf "%s\n" "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")"
-        else
-            printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
-        fi
+        printf "%s" "$(get_message "MSG_HOSTNAME_SET")"
+        read yn
+        case "$yn" in
+            [yY])
+                printf "%s" "$(get_message "MSG_ENTER_HOSTNAME")"
+                read new_hostname
+                [ -z "$new_hostname" ] && return
+                echo "$new_hostname" > /etc/hostname 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    printf "%s\n" "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")"
+                else
+                    printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
+                fi
+                ;;
+            *)
+                # silent skip
+                ;;
+        esac
     fi
 
-    #--- SSHのLAN設定（初期値判定＋案内） ---
-    # dropbearの最初のエントリでoption Interface 'lan'が既にあるか判定
-    local dropbear_lan current_interface
+    # SSH LAN setting (if not already set)
+    local dropbear_lan current_interface sshyn
     dropbear_lan=0
-    # uci showでInterface値を取得（最初のdropbearセクションのみ対応）
     current_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
     if [ "$current_interface" = "lan" ]; then
         dropbear_lan=1
     fi
     if [ $dropbear_lan -eq 0 ]; then
-        printf "%s" "$(get_message "MSG_SSH_LAN_CONFIRM")"
-        read ans
-        [ -z "$ans" ] && return
-        case "$ans" in
+        printf "%s" "$(get_message "MSG_SSH_LAN_SET")"
+        read sshyn
+        case "$sshyn" in
             [yY])
                 uci set dropbear.@dropbear[0].Interface='lan'
                 uci commit dropbear
@@ -2176,7 +2182,7 @@ setup_password_hostname() {
                 fi
                 ;;
             *)
-                # n/Nその他は何もせずスキップ
+                # silent skip
                 ;;
         esac
     fi
