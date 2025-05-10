@@ -194,16 +194,19 @@ parse_package_db_switch() {
 
     local seen_cmds=""
     local seen_pkgs=""
-    local cmds=""
-    local line
     local in_section=0
-    local pkg
+    local line pkg
 
     [ ! -f "$dbfile" ] && { echo "package.db not found" >&2; return 1; }
+
+    # 一時ファイルにバッファリング
+    local tmpfile="${CACHE_DIR}/parse_package_db_switch_$$.tmp"
+    > "$tmpfile"
 
     for section in $sections; do
         in_section=0
         while IFS= read -r line; do
+            # 改行末の削除（元ロジック維持）
             line="${line%"${line##*[!$'\r']}" }"
             [ -z "$line" ] && continue
             case "$line" in
@@ -218,10 +221,10 @@ parse_package_db_switch() {
                     if [ "$PARSE_DB_SKIP_MODE" = "FULL" ]; then
                         case " $seen_cmds " in
                             *" $line "*) continue ;;
-                            *) seen_cmds="$seen_cmds $line"
-                               cmds="$cmds
-$line"
-                               ;;
+                            *)
+                                seen_cmds="$seen_cmds $line"
+                                printf "%s\n" "$line" >> "$tmpfile"
+                                ;;
                         esac
                     elif [ "$PARSE_DB_SKIP_MODE" = "PACKAGE" ]; then
                         set -- $line
@@ -229,13 +232,14 @@ $line"
                         [ -z "$pkg" ] && continue
                         case " $seen_pkgs " in
                             *" $pkg "*) continue ;;
-                            *) seen_pkgs="$seen_pkgs $pkg"
-                               cmds="$cmds
-$line"
-                               ;;
+                            *)
+                                seen_pkgs="$seen_pkgs $pkg"
+                                printf "%s\n" "$line" >> "$tmpfile"
+                                ;;
                         esac
                     else
                         echo "Unknown skip mode: $PARSE_DB_SKIP_MODE" >&2
+                        rm -f "$tmpfile"
                         return 1
                     fi
                     ;;
@@ -243,12 +247,18 @@ $line"
         done < "$dbfile"
     done
 
-    # 1行ずつeval、関数スコープ維持
-    IFS='
-'
-    for exec_line in $cmds; do
-        eval "$exec_line"
-    done
+    # 1行ずつ空白区切りでコマンド＋引数で呼び出し
+    while IFS= read -r exec_line; do
+        [ -z "$exec_line" ] && continue
+        set -- $exec_line
+        cmd="$1"; shift
+        if type "$cmd" >/dev/null 2>&1; then
+            "$cmd" "$@"
+        else
+            echo "Unknown command: $cmd (line: $exec_line)" >&2
+        fi
+    done < "$tmpfile"
+    rm -f "$tmpfile"
 }
 
 # OSバージョンに基づいて適切なパッケージ関数を実行する
