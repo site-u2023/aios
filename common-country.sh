@@ -1001,15 +1001,8 @@ country_main() {
         fi
     fi
 
-    # --- NTP設定呼び出し追加 ---
     if [ "$setup_result" -eq 0 ]; then
         debug_log "DEBUG" "country_main() completed successfully"
-        # 国・言語キャッシュ生成直後にNTP自動設定
-        if command -v setup_ntp >/dev/null 2>&1; then
-            setup_ntp
-        else
-            debug_log "DEBUG" "setup_ntp function not found, skipping NTP configuration"
-        fi
         return 0
     else
         debug_log "DEBUG" "country_main() completed with failure"
