@@ -286,13 +286,13 @@ into_memory_message() {
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters {yn}{:}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters {yn}{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET=Set hostname {yn}{:}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_HOSTNAME=Enter new hostname{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET=Set hostname {yn}{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_HOSTNAME=Enter new hostname{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET_OK=Hostname set to {h}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_ERROR=Failed to set hostname"$'\n'
 
