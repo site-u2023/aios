@@ -286,17 +286,17 @@ into_memory_message() {
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters {yn}{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET=Set hostname {yn}{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET=Set hostname{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_HOSTNAME=Enter new hostname{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET_OK=Hostname set to {h}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_ERROR=Failed to set hostname"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET=Set SSH to LAN interface {yn}{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET=Set SSH to LAN interface{:}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET_OK=SSH is now set to LAN interface"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET_FAIL=Failed to set SSH to LAN interface"$'\n'
 
@@ -2114,91 +2114,62 @@ resolve_path() {
 }
 
 setup_password_hostname() {
-    # root password setup (only if not set)
-    local shadow_line passwd_field
-    shadow_line=$(grep '^root:' /etc/shadow 2>/dev/null)
-    passwd_field=$(echo "$shadow_line" | cut -d: -f2)
+    # パスワード設定（/etc/shadowのrootパスワードが未設定の場合のみ）
+    local passwd_field new_password confirm_password
+    passwd_field=$(awk -F: '/^root:/ {print $2}' /etc/shadow 2>/dev/null)
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
-        printf "%s\n" "$(get_message "MSG_PASSWORD_NOTICE")"
         while :; do
-            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
+            printf "%s " "$(get_message "MSG_ENTER_PASSWORD")"
             stty -echo
-            read password1
+            read new_password
             stty echo
             printf "\n"
-            [ -z "$password1" ] && break
-
-            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
+            [ ${#new_password} -lt 8 ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
+            printf "%s " "$(get_message "MSG_ENTER_PASSWORD")"
             stty -echo
-            read password2
+            read confirm_password
             stty echo
             printf "\n"
-            [ -z "$password2" ] && break
-
-            if [ "$password1" != "$password2" ] || [ "${#password1}" -lt 8 ]; then
-                printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")"
-                continue
-            fi
-
-            printf "%s\n" "$password1" | passwd root 2>/dev/null
+            [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
+            (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
                 printf "%s\n" "$(get_message "MSG_PASSWORD_SET_OK")"
+                break
             else
                 printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")"
             fi
-            break
         done
     fi
 
-    # hostname setup (if empty or OpenWrt)
-    local current_hostname new_hostname yn
-    current_hostname=$(cat /etc/hostname 2>/dev/null | tr -d '\r\n')
+    # ホストネーム設定（UCI値のみ初期値時のみ）
+    local current_hostname new_hostname
+    current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "%s" "$(get_message "MSG_HOSTNAME_SET")"
-        read yn
-        case "$yn" in
-            [yY])
-                printf "%s" "$(get_message "MSG_ENTER_HOSTNAME")"
-                read new_hostname
-                [ -z "$new_hostname" ] && return
-                echo "$new_hostname" > /etc/hostname 2>/dev/null
-                if [ $? -eq 0 ]; then
-                    printf "%s\n" "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")"
-                else
-                    printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
-                fi
-                ;;
-            *)
-                # silent skip
-                ;;
-        esac
+        printf "%s " "$(get_message "MSG_ENTER_HOSTNAME")"
+        read new_hostname
+        [ -z "$new_hostname" ] && return
+        uci set system.@system[0].hostname="$new_hostname"
+        uci commit system
+        echo "$new_hostname" > /etc/hostname 2>/dev/null
+        if [ $? -eq 0 ]; then
+            printf "%s\n" "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")"
+        else
+            printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
+        fi
     fi
 
-    # SSH LAN setting (if not already set)
-    local dropbear_lan current_interface sshyn
-    dropbear_lan=0
-    current_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
-    if [ "$current_interface" = "lan" ]; then
-        dropbear_lan=1
-    fi
-    if [ $dropbear_lan -eq 0 ]; then
-        printf "%s" "$(get_message "MSG_SSH_LAN_SET")"
-        read sshyn
-        case "$sshyn" in
-            [yY])
-                uci set dropbear.@dropbear[0].Interface='lan'
-                uci commit dropbear
-                /etc/init.d/dropbear reload
-                if [ $? -eq 0 ]; then
-                    printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_OK")"
-                else
-                    printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_FAIL")"
-                fi
-                ;;
-            *)
-                # silent skip
-                ;;
-        esac
+    # SSH LAN設定（UCI値でInterfaceが未設定の場合のみ）
+    local dropbear_interface
+    dropbear_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
+    if [ -z "$dropbear_interface" ]; then
+        uci set dropbear.@dropbear[0].Interface='lan'
+        uci commit dropbear
+        /etc/init.d/dropbear restart 1>/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_OK")"
+        else
+            printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_FAIL")"
+        fi
     fi
 }
 
