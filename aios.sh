@@ -271,7 +271,14 @@ color() {
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 clear_input_buffer() {
-    while IFS= read -t 1 -r dummy < /dev/tty; do :; done
+    local first=1
+    while IFS= read -t 1 -r dummy < /dev/tty; do
+        # 1行目が空なら何もしないで抜ける
+        if [ $first -eq 1 ] && [ -z "$dummy" ]; then
+            break
+        fi
+        first=0
+    done 2>/dev/null
 }
 
 into_memory_message() {
