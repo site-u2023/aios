@@ -206,7 +206,8 @@ handle_user_selection() {
 
     # --- Read User Input with Failure Check ---
     local choice=""
-    if ! read -r choice; then
+    # --- /dev/tty から番号入力を取得 ---
+    if ! IFS= read -r choice < /dev/tty; then
         debug_log "ERROR" "Failed to read user input in section [$section_name]. Returning 1 to stop loop."
         return 1
     fi
