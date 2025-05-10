@@ -271,11 +271,15 @@ color() {
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
 clear_input_buffer() {
+    # 1行だけ（最新の入力値）を優先的に読む。改行のみなら何もしない。
     local first=1
     while IFS= read -t 1 -r dummy < /dev/tty; do
-        # 1行目が空なら何もしないで抜ける
-        if [ $first -eq 1 ] && [ -z "$dummy" ]; then
-            break
+        # 1行目が空なら何もしない（本入力なし）
+        if [ $first -eq 1 ]; then
+            # もし空行でなければ"flush"しない
+            if [ -n "$dummy" ]; then
+                break
+            fi
         fi
         first=0
     done 2>/dev/null
