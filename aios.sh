@@ -275,16 +275,30 @@ into_memory_message() {
     # メモリメッセージの初期化 - 基本的な補助メッセージのみを保持
     MSG_MEMORY=""
 
-    # 基本メッセージの設定 (API関連情報を削除)
+    # 基本メッセージの設定
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_START=Downloading essential files"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully in {s} seconds"$'\n' # 時間引数追加
-    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in task {f}{:} {e}"$'\n' # API情報削除
+    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully in {s} seconds"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in task {f}{:} {e}"$'\n'
 
-    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}"$'\n' # API情報削除
-    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"$'\n' # API情報削除
+    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared"$'\n'
+
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters {yn}{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
+
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET=Set hostname {yn}{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_HOSTNAME=Enter new hostname{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET_OK=Hostname set to {h}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_ERROR=Failed to set hostname"$'\n'
+
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET=Set SSH to LAN interface {yn}{:}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET_OK=SSH is now set to LAN interface"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_SSH_LAN_SET_FAIL=Failed to set SSH to LAN interface"$'\n'
 
     # DBファイルが主要ソース
 
