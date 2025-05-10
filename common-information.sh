@@ -1,39 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.04.16-00-00"
-
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
-# 🚀 Last Update: 2025-03-14
-#
-# 🏷️ ライセンス: CC0 (パブリックドメイン)
-# 🎯 Compatibility: OpenWrt >= 19.07 (24.10.0でテスト済み)
-#
-# ⚠️ 重要なお知らせ:
-# OpenWrtは**Almquist Shell (ash)**のみを使用し、
-# **Bourne-Again Shell (bash)**とは互換性がありません。
-#
-# 📢 POSIX準拠ガイドライン:
-# ✅ 条件には `[[` の代わりに `[` を使用
-# ✅ コマンド置換には `command` の代わりに $(command) を使用
-# ✅ let の代わりに $(( )) を使用して算術演算
-# ✅ 関数は func_name() {} として定義（functionキーワードなし）
-# ✅ 連想配列は使用不可（declare -A はサポートされていません）
-# ✅ ヒアストリング（<<<）は使用不可
-# ✅ test や [[ で -v フラグは使用不可
-# ✅ ${var:0:3} のようなbash固有の文字列操作を避ける
-# ✅ 可能であれば配列を完全に避ける（インデックス付き配列でも問題になることがある）
-# ✅ read -p の代わりに printf に続けて read を使用
-# ✅ echo -e の代わりに printf を使用してポータブルなフォーマット
-# ✅ プロセス置換 <() や >() を避ける
-# ✅ 複雑なif/elifチェーンよりもcaseステートメントを優先
-# ✅ コマンドの存在確認には which や type の代わりに command -v を使用
-# ✅ 小さく焦点を絞った関数でスクリプトをモジュール化
-# ✅ 複雑なtrapの代わりに単純なエラーハンドリングを使用
-# ✅ bashだけでなく、ash/dashで明示的にスクリプトをテスト
-#
-# 🛠️ OpenWrtのために、シンプルでPOSIX準拠、軽量に保つ！
-# =========================================================
+SCRIPT_VERSION="2025.05.10-00-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -64,6 +31,54 @@ USER_AGENT="aios-script/${SCRIPT_VERSION:-unknown}"
 API_PROVIDERS="get_country_cloudflare get_country_ipapi get_country_ipinfo"
 
 SELECT_REGION_NAME=""
+
+# NTP pool自動設定＆同期関数
+setup_ntp() {
+    # キャッシュから国コード取得
+    local country_code=""
+    if [ -f "${CACHE_DIR}/language.ch" ]; then
+        country_code=$(cat "${CACHE_DIR}/language.ch" | tr '[:upper:]' '[:lower:]')
+    elif [ -f "${CACHE_DIR}/country.ch" ]; then
+        # country.chの5列目が国コード（JP,US等）
+        country_code=$(awk '{ print tolower($5) }' "${CACHE_DIR}/country.ch" | head -n 1)
+    fi
+
+    # キャッシュが無い場合・空の場合は何もしない
+    if [ -z "$country_code" ]; then
+        debug_log "DEBUG" "setup_ntp: No country code found in cache. Skipping NTP setup."
+        return 0
+    fi
+
+    # 既存のNTPサーバ設定を取得
+    local ntp_servers_current=""
+    ntp_servers_current=$(uci get system.@system[0].ntpserver 2>/dev/null)
+
+    # デフォルト値が「0.openwrt.pool.ntp.org」のみなら上書き可
+    if [ "$ntp_servers_current" != "0.openwrt.pool.ntp.org" ]; then
+        debug_log "DEBUG" "setup_ntp: NTP servers already customized. Skipping overwrite."
+        return 0
+    fi
+
+    # 国コードからNTP pool名を生成
+    local ntp_test_host="0.${country_code}.pool.ntp.org"
+    local ntp_servers="0.${country_code}.pool.ntp.org 1.${country_code}.pool.ntp.org 2.${country_code}.pool.ntp.org 3.${country_code}.pool.ntp.org"
+
+    # 生成したNTP poolが疎通可能か確認（pingで2秒以内に応答必須）
+    if ping -c 1 -w 2 "$ntp_test_host" >/dev/null 2>&1; then
+        debug_log "DEBUG" "setup_ntp: $ntp_test_host is reachable. Setting NTP servers."
+        # NTPサーバを4つ全てセット
+        uci set system.@system[0].ntpserver="$ntp_servers"
+        uci commit system
+        # 即時時刻同期（失敗時もエラー出さず終了）
+        ntpd -n -q -p "$ntp_test_host" >/dev/null 2>&1
+    else
+        debug_log "DEBUG" "setup_ntp: $ntp_test_host is NOT reachable. Keeping default NTP config."
+        # 何も変更しない
+        return 0
+    fi
+
+    return 0
+}
 
 # APIリクエストを実行する関数（リダイレクト、タイムアウト、リトライ対応）
 make_api_request() {
