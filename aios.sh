@@ -2293,7 +2293,6 @@ download_files() {
     download "message_${DEFAULT_LANGUAGE}.db"
     download "local-package.db"
     download "custom-package.db"
-    download "package.db"
 }
 
 check_common() {
@@ -2353,7 +2352,6 @@ check_common() {
             download "message_${DEFAULT_LANGUAGE}.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-            download "package.db" "hidden"
             print_banner
             print_information
             information_main
