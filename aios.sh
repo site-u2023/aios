@@ -2150,6 +2150,36 @@ setup_password_hostname() {
             printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
         fi
     fi
+
+    #--- SSHのLAN設定（初期値判定＋案内） ---
+    # dropbearの最初のエントリでoption Interface 'lan'が既にあるか判定
+    local dropbear_lan current_interface
+    dropbear_lan=0
+    # uci showでInterface値を取得（最初のdropbearセクションのみ対応）
+    current_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
+    if [ "$current_interface" = "lan" ]; then
+        dropbear_lan=1
+    fi
+    if [ $dropbear_lan -eq 0 ]; then
+        printf "%s" "$(get_message "MSG_SSH_LAN_CONFIRM")"
+        read ans
+        [ -z "$ans" ] && return
+        case "$ans" in
+            [yY])
+                uci set dropbear.@dropbear[0].Interface='lan'
+                uci commit dropbear
+                /etc/init.d/dropbear reload
+                if [ $? -eq 0 ]; then
+                    printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_OK")"
+                else
+                    printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_FAIL")"
+                fi
+                ;;
+            *)
+                # n/Nその他は何もせずスキップ
+                ;;
+        esac
+    fi
 }
 
 # 初期化処理のメイン
