@@ -270,6 +270,11 @@ color() {
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
+clear_input_buffer() {
+    dd if=/dev/tty of=/dev/null bs=1 count=100 2>/dev/null
+    # while IFS= read -t 1 -r dummy < /dev/tty; do :; done
+}
+
 into_memory_message() {
     local lang="$DEFAULT_LANGUAGE"
     if [ -f "${CACHE_DIR}/message.ch" ]; then
@@ -1038,8 +1043,7 @@ stop_spinner() {
     fi
 
     # 入力バッファクリア
-    dd if=/dev/tty of=/dev/null bs=1 count=100 2>/dev/null
-    # while IFS= read -t 1 -r dummy < /dev/tty; do :; done
+    clear_input_buffer
     
     # カーソル表示
     printf "\033[?25h"
