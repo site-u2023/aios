@@ -965,11 +965,11 @@ setup_location() {
     # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
     # この場合、system.ntp.enable_server が '1' に、system.ntp.interface が 'lan' に設定され、
     # system.ntp.use_dhcp が '0' (DHCPからのNTPサーバーを使用しない) に設定されます。
-    # false の場合、aios は system.ntp.enable_server, system.ntp.interface, system.ntp.use_dhcp を変更しません。 (★★★ コメント修正 ★★★)
+    # false の場合、aios は system.ntp.enable_server, system.ntp.interface, system.ntp.use_dhcp を変更しません。
     # デフォルトは true (デバイス自身の時刻同期を行い、NTPサーバーとしても機能する)。
-    # local ENABLE_LOCAL_NTP_SERVER='true' 
+    local ENABLE_LOCAL_NTP_SERVER='true' 
     # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
-    local ENABLE_LOCAL_NTP_SERVER='false'
+    # local ENABLE_LOCAL_NTP_SERVER='false'
 
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found, skipping location setup"
@@ -1047,7 +1047,7 @@ setup_location() {
                     debug_log "DEBUG" "Setting system.ntp.use_dhcp=0 to disable NTP from DHCP"
                     uci set system.ntp.use_dhcp='0'
                 fi
-            else # ENABLE_LOCAL_NTP_SERVER is false (★★★ このブロックを修正 ★★★)
+            else # ENABLE_LOCAL_NTP_SERVER is false
                 debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. NTP settings (enable_server, use_dhcp, interface) will not be changed by this script."
                 # この場合、system.ntp.enable_server, system.ntp.use_dhcp, system.ntp.interface は
                 # スクリプトによって変更されません。既存の設定が維持されます。
