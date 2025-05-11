@@ -1450,7 +1450,7 @@ EOF
 }
 
 # MAP-E設定を適用する関数
-OK_mape_config() {
+mape_config() {
     local WANMAP='wanmap' # 設定セクション名
     local ZOON_NO='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
@@ -1546,7 +1546,7 @@ OK_mape_config() {
 }
 
 # MAP-E設定を適用する関数
-mape_config() {
+OK_mape_config() {
     local WANMAP='wanmap' # 設定セクション名
     local wan_firewall_zone_name='wan' # WANが属するファイアウォールゾーンの名前 (検索用)
 
