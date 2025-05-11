@@ -967,9 +967,9 @@ setup_location() {
     # system.ntp.use_dhcp が '0' (DHCPからのNTPサーバーを使用しない) に設定されます。
     # false の場合、aios は system.ntp.enable_server, system.ntp.interface, system.ntp.use_dhcp を変更しません。 (★★★ コメント修正 ★★★)
     # デフォルトは true (デバイス自身の時刻同期を行い、NTPサーバーとしても機能する)。
-    local ENABLE_LOCAL_NTP_SERVER='true' 
+    # local ENABLE_LOCAL_NTP_SERVER='true' 
     # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
-    # local ENABLE_LOCAL_NTP_SERVER='false'
+    local ENABLE_LOCAL_NTP_SERVER='false'
 
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found, skipping location setup"
