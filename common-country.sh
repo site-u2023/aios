@@ -1090,8 +1090,9 @@ setup_location() {
     fi
     current_notes="$(uci get system.@system[0].notes 2>/dev/null)"
     if [ -z "$current_notes" ]; then
-        # 修正点: date コマンドのフォーマット指定を削除し、デフォルト出力を使用
-        uci set system.@system[0].notes="Configured at $(date)"
+        # 修正点: date コマンドを含む行をコメントアウト
+        # uci set system.@system[0].notes="Configured at $(date '+%Y-%m-%d %H:%M:%S')"
+        debug_log "DEBUG" "Skipping setting system notes due to temporary date command isolation." # 追記: コメントアウトした理由をデバッグログに残す
     fi
     
     uci commit system
