@@ -1757,9 +1757,9 @@ mape_display() {
     local max_port_blocks=$(( (1 << OFFSET) ))
     local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
     local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) # A=1..AMax の合計ポート数
-    local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
+    # local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
 
-    # debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start=$port_start" 
+    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start=$port_start" 
 
     echo ""
     echo "Port Information:" # "ポート情報:"
