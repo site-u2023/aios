@@ -963,18 +963,13 @@ try_setup_from_argument() {
 setup_location() {
     # --- ローカルNTPサーバー機能の有効化オプション ---
     # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
-    # この場合、system.ntp.enable_server が '1' に、system.ntp.interface が 'lan' に設定されます。
-    # false の場合、aios は system.ntp.enable_server と system.ntp.interface を変更しません。
+    # この場合、system.ntp.enable_server が '1' に、system.ntp.interface が 'lan' に設定され、
+    # system.ntp.use_dhcp が '0' (DHCPからのNTPサーバーを使用しない) に設定されます。
+    # false の場合、aios は system.ntp.enable_server, system.ntp.interface, system.ntp.use_dhcp を変更しません。 (★★★ コメント修正 ★★★)
     # デフォルトは true (デバイス自身の時刻同期を行い、NTPサーバーとしても機能する)。
     local ENABLE_LOCAL_NTP_SERVER='true' 
     # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
     # local ENABLE_LOCAL_NTP_SERVER='false'
-
-    # 「DHCPから通知されたサーバを使用」を制御するUCIオプションのパス
-    # ユーザー様の uci show network 出力に基づき、'network.wan.peerntp' を対象とします。
-    local PEERNTP_UCI_PATH="network.wan.peerntp"
-    local PEERNTP_SECTION_PATH="network.wan" # PEERNTP_UCI_PATH のセクション部分
-    # --- ローカルNTPサーバー機能の有効化オプションここまで ---
 
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found, skipping location setup"
@@ -1021,8 +1016,8 @@ setup_location() {
         uci set system.ntp.server="0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
         
         # system.ntp セクションの存在確認
-        if uci get system.ntp >/dev/null 2>&1; then
-            # 1. NTPクライアント機能の有効化 (常に '1' を目指す)
+        if uci get system.ntp >/dev/null 2>/dev/null; then
+            # 1. NTPクライアント機能の有効化 (これは ENABLE_LOCAL_NTP_SERVER の値に関わらず行う)
             local current_ntp_enable
             current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
             if [ "$current_ntp_enable" != "1" ]; then
@@ -1032,7 +1027,7 @@ setup_location() {
 
             # 2. ローカルNTPサーバー機能のオプションに応じた設定
             if [ "$ENABLE_LOCAL_NTP_SERVER" = "true" ]; then
-                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Enabling device as a local NTP server for LAN."
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Configuring manual NTP settings."
                 # NTPサーバー機能を有効化 (クライアントにNTPサービスを提供)
                 local current_ntp_enable_server
                 current_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
@@ -1047,33 +1042,15 @@ setup_location() {
                     debug_log "DEBUG" "Binding NTP server to LAN interface (system.ntp.interface=lan)"
                     uci set system.ntp.interface='lan'
                 fi
-                # LuCI「DHCPから通知されたサーバを使用」: OFF (network.wan.peerntp='0')
-                if uci get "$PEERNTP_SECTION_PATH" >/dev/null 2>&1; then # セクションの存在確認
-                    if [ "$(uci get ${PEERNTP_UCI_PATH} 2>/dev/null)" != "0" ]; then
-                        debug_log "DEBUG" "Setting ${PEERNTP_UCI_PATH}=0 to disable NTP from DHCP"
-                        uci set "${PEERNTP_UCI_PATH}=0"
-                        uci commit network
-                    fi
-                else
-                    debug_log "WARN" "UCI section for peerntp not found: ${PEERNTP_SECTION_PATH}. Skipping peerntp configuration for 'true' state."
+                # LuCI「DHCPから通知されたサーバを使用」: OFF (system.ntp.use_dhcp='0')
+                if [ "$(uci get system.ntp.use_dhcp 2>/dev/null)" != "0" ]; then
+                    debug_log "DEBUG" "Setting system.ntp.use_dhcp=0 to disable NTP from DHCP"
+                    uci set system.ntp.use_dhcp='0'
                 fi
-            else # ENABLE_LOCAL_NTP_SERVER is false
-                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false."
-                # LuCI「NTPサーバーを有効化」: OFF (system.ntp.enable_server='0')
-                if [ "$(uci get system.ntp.enable_server 2>/dev/null)" != "0" ]; then
-                    debug_log "DEBUG" "Setting system.ntp.enable_server=0"
-                    uci set system.ntp.enable_server='0'
-                fi
-                # LuCI「DHCPから通知されたサーバを使用」: ON (network.wan.peerntp='1')
-                if uci get "$PEERNTP_SECTION_PATH" >/dev/null 2>&1; then # セクションの存在確認
-                    if [ "$(uci get ${PEERNTP_UCI_PATH} 2>/dev/null)" != "1" ]; then
-                        debug_log "DEBUG" "Setting ${PEERNTP_UCI_PATH}=1 to enable NTP from DHCP"
-                        uci set "${PEERNTP_UCI_PATH}=1"
-                        uci commit network
-                    fi
-                else
-                    debug_log "WARN" "UCI section for peerntp not found: ${PEERNTP_SECTION_PATH}. Skipping peerntp configuration for 'false' state."
-                fi
+            else # ENABLE_LOCAL_NTP_SERVER is false (★★★ このブロックを修正 ★★★)
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. NTP settings (enable_server, use_dhcp, interface) will not be changed by this script."
+                # この場合、system.ntp.enable_server, system.ntp.use_dhcp, system.ntp.interface は
+                # スクリプトによって変更されません。既存の設定が維持されます。
             fi
         else
             debug_log "WARN" "system.ntp UCI section not found. Cannot configure NTP settings."
@@ -1095,7 +1072,6 @@ setup_location() {
     fi
     
     uci commit system
-    # system と network の設定変更を反映させるため、関連サービスを再起動
     /etc/init.d/system reload
     /etc/init.d/sysntpd restart 
 }
