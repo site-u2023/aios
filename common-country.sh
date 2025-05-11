@@ -961,6 +961,15 @@ try_setup_from_argument() {
 }
 
 setup_location() {
+    # --- ローカルNTPサーバー機能の有効化オプション ---
+    # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
+    # system.ntp.interface が 'lan' に設定されます。
+    # デフォルトは false (デバイス自身の時刻同期のみ行い、NTPサーバーとしては機能しない)。
+    local ENABLE_LOCAL_NTP_SERVER='false' 
+    # 例: LAN向けNTPサーバー機能を有効にする場合は以下のように変更
+    # local ENABLE_LOCAL_NTP_SERVER='true'
+    # --- ローカルNTPサーバー機能の有効化オプションここまで ---
+
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found, skipping location setup"
         return
@@ -977,7 +986,7 @@ setup_location() {
     current_zonename="$(uci get system.@system[0].zonename 2>/dev/null)"
     if [ -z "$current_zonename" ] || [ "$current_zonename" = "00" ] || [ "$current_zonename" = "UTC" ]; then
         if [ -n "$zonename" ] && [ "$zonename" != "00" ] && [ "$zonename" != "UTC" ]; then
-            debug_log "DEBUG" "zonename is default or unset. Setting zonename from cache: $zonename"
+            debug_log "DEBUG" "Setting zonename from cache: $zonename"
             uci set system.@system[0].zonename="$zonename"
         fi
     fi
@@ -987,7 +996,7 @@ setup_location() {
     current_timezone="$(uci get system.@system[0].timezone 2>/dev/null)"
     if [ -z "$current_timezone" ] || [ "$current_timezone" = "UTC" ]; then
         if [ -n "$timezone" ] && [ "$timezone" != "UTC" ]; then
-            debug_log "DEBUG" "timezone is default or unset. Setting timezone from cache: $timezone"
+            debug_log "DEBUG" "Setting timezone from cache: $timezone"
             uci set system.@system[0].timezone="$timezone"
         fi
     fi
@@ -996,7 +1005,6 @@ setup_location() {
     local ntp_pool ntp_valid=0
     if [ -n "$language" ]; then
         ntp_pool="$language"
-        # 0.$language.pool.ntp.org が名前解決できるかチェック（busybox nslookup使用）
         if nslookup "0.$ntp_pool.pool.ntp.org" >/dev/null 2>&1; then
             ntp_valid=1
         fi
@@ -1006,31 +1014,49 @@ setup_location() {
         debug_log "DEBUG" "Setting NTP server to 0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
         uci set system.ntp.server="0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
         
-        # --- NTPクライアント機能の有効化を追加 ---
-        local current_ntp_enable
-        current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
-        # system.ntp セクションが存在し、かつ enable が 0 または未設定の場合に 1 に設定
-        if uci get system.ntp >/dev/null 2>&1; then # セクション存在確認
+        # system.ntp セクションの存在確認
+        if uci get system.ntp >/dev/null 2>&1; then
+            # 1. NTPクライアント機能の有効化 (常に有効にする)
+            local current_ntp_enable
+            current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
             if [ "$current_ntp_enable" = "0" ] || [ -z "$current_ntp_enable" ]; then
                  debug_log "DEBUG" "Enabling NTP client (system.ntp.enable=1)"
                  uci set system.ntp.enable='1'
             fi
+
+            # 2. DHCP経由のNTPサーバー使用を無効化 (常に無効にする)
+            local current_dhcp_ntp_enable_server
+            current_dhcp_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
+            if [ "$current_dhcp_ntp_enable_server" = "1" ]; then
+                debug_log "DEBUG" "Disabling 'Use NTP servers advertised by DHCP' (system.ntp.enable_server=0)"
+                uci set system.ntp.enable_server='0'
+            elif [ -z "$current_dhcp_ntp_enable_server" ] && uci show system | grep -q "system.ntp=\|system.ntp.enable_server=" ; then
+                debug_log "DEBUG" "Explicitly disabling 'Use NTP servers advertised by DHCP' as it's unset or default (system.ntp.enable_server=0)"
+                uci set system.ntp.enable_server='0'
+            fi
+
+            # 3. ローカルNTPサーバー機能のオプションに応じた設定
+            if [ "$ENABLE_LOCAL_NTP_SERVER" = "true" ]; then
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Configuring device as a local NTP server for LAN."
+                # NTPサーバーとしてLANにバインド
+                local current_ntp_interface
+                current_ntp_interface=$(uci get system.ntp.interface 2>/dev/null)
+                if [ "$current_ntp_interface" != "lan" ]; then # 既にlanなら何もしない
+                    debug_log "DEBUG" "Binding NTP server to LAN interface (system.ntp.interface=lan)"
+                    uci set system.ntp.interface='lan'
+                fi
+            else
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. Device will not be configured as a local NTP server."
+                # system.ntp.interface は変更しない (ユーザー設定を尊重)
+                # もしデフォルトでNTPサーバー機能を明確に無効化したい場合は、
+                # uci delete system.ntp.interface や uci set system.ntp.interface='' などを検討できるが、
+                # 今回は「変更しない」方針。
+            fi
         else
-            # system.ntp セクション自体が存在しない場合 (通常は timeserver タイプで存在するはず)
-            # 必要であればセクション作成も考慮できるが、通常はデフォルトで存在すると期待
-            debug_log "WARN" "system.ntp UCI section not found. Cannot enable NTP client."
+            debug_log "WARN" "system.ntp UCI section not found. Cannot configure NTP settings."
         fi
-        # --- NTPクライアント機能の有効化ここまで ---
     else
         debug_log "DEBUG" "NTP pool for language '$language' not found or language.ch missing. Skipping NTP server change."
-        # NTPサーバーが設定されない場合、NTPクライアントを無効化することも検討できるが、
-        # ここでは既存の有効/無効状態を維持する。
-        # local current_ntp_enable
-        # current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
-        # if [ "$current_ntp_enable" = "1" ]; then
-        #     debug_log "DEBUG" "Disabling NTP client as no valid servers were set (system.ntp.enable=0)"
-        #     uci set system.ntp.enable='0'
-        # fi
     fi
 
     # システムの説明と備考を設定
@@ -1046,7 +1072,7 @@ setup_location() {
     
     uci commit system
     /etc/init.d/system reload
-    /etc/init.d/sysntpd restart  # NTPサーバー設定変更後および有効化後に再起動
+    /etc/init.d/sysntpd restart
 }
 
 # =========================================================
