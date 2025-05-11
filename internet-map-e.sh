@@ -1,40 +1,7 @@
 #!/bin/sh
 # this script based https://github.com/missing233/map-e
 
-SCRIPT_VERSION="2025.04.21-00-00"
-
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX準拠シェルスクリプト
-# 🚀 最終更新日: 2025-03-14
-#
-# 🏷️ ライセンス: CC0 (パブリックドメイン)
-# 🎯 互換性: OpenWrt >= 19.07 (24.10.0でテスト済み)
-#
-# ⚠️ 重要な注意事項:
-# OpenWrtは**Almquistシェル(ash)**のみを使用し、
-# **Bourne-Again Shell(bash)**とは互換性がありません。
-#
-# 📢 POSIX準拠ガイドライン:
-# ✅ 条件には `[[` ではなく `[` を使用する
-# ✅ バックティック ``command`` ではなく `$(command)` を使用する
-# ✅ `let` の代わりに `$(( ))` を使用して算術演算を行う
-# ✅ 関数は `function` キーワードなしで `func_name() {}` と定義する
-# ✅ 連想配列は使用しない (`declare -A` はサポートされていない)
-# ✅ ヒアストリングは使用しない (`<<<` はサポートされていない)
-# ✅ `test` や `[[` で `-v` フラグを使用しない
-# ✅ `${var:0:3}` のようなbash特有の文字列操作を避ける
-# ✅ 配列はできるだけ避ける（インデックス配列でも問題が発生する可能性がある）
-# ✅ `read -p` の代わりに `printf` の後に `read` を使用する
-# ✅ フォーマットには `echo -e` ではなく `printf` を使用する
-# ✅ プロセス置換 `<()` や `>()` を避ける
-# ✅ 複雑なif/elifチェーンよりもcaseステートメントを優先する
-# ✅ コマンドの存在確認には `which` や `type` ではなく `command -v` を使用する
-# ✅ スクリプトをモジュール化し、小さな焦点を絞った関数を保持する
-# ✅ 複雑なtrapの代わりに単純なエラー処理を使用する
-# ✅ スクリプトはbashだけでなく、明示的にash/dashでテストする
-#
-# 🛠️ OpenWrt向けにシンプル、POSIX準拠、軽量に保つ！
-### =========================================================
+SCRIPT_VERSION="2025.05.11-00-00"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
@@ -1482,53 +1449,10 @@ EOF
     return 0
 }
 
-# MAP-E設定情報を表示する関数
-mape_display() {
-    # 引数チェックは不要 (グローバル変数を使用するため)
-
-    echo ""
-    echo "Prefix Information:" # "プレフィックス情報:"
-    echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6 Address: $CE_ADDR" # "  CE IPv6アドレス: $CE_ADDR"
-    echo "  IPv4 Address: $IPV4" # "  IPv4アドレス: $IPV4"
-    echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
-
-    echo ""
-    echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
-    echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
-    echo "  option ipaddr '$IPV4'"
-    echo "  option ip4prefixlen '$IP4PREFIXLEN'"
-    echo "  option ip6prefix '${IP6PFX}::'" # IP6PFXが空の場合もあるためクォート
-    echo "  option ip6prefixlen '$IP6PREFIXLEN'"
-    echo "  option ealen '$EALEN'"
-    echo "  option psidlen '$PSIDLEN'"
-    echo "  option offset '$OFFSET'"
-    echo "  export LEGACY=1"
-
-    # 利用可能なポート範囲の計算 (表示用)
-    local max_port_blocks=$(( (1 << OFFSET) ))
-    local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) # A=1..AMax の合計ポート数
-    local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
-
-    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start=$port_start" 
-
-    echo ""
-    echo "Port Information:" # "ポート情報:"
-    echo "  Available Ports: $total_ports" # "  利用可能なポート数: $total_ports"
-
-    # ポート範囲を表示 (printfを使用)
-    echo ""
-    echo "Port Ranges:" # "ポート範囲:"
-    printf "%b\n" "$PORTS" # %bでバックスラッシュエスケープ(\n)を解釈
-
-    return 0
-}
-
 # MAP-E設定を適用する関数
-mape_config() {
+OK_mape_config() {
     local WANMAP='wanmap' # 設定セクション名
-    local zone_no='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
+    local ZOON_NO='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
     # mapパッケージのインストール確認
     install_package map silent
@@ -1624,6 +1548,167 @@ mape_config() {
     return 0
 }
 
+# MAP-E設定を適用する関数
+mape_config() {
+    local WANMAP='wanmap' # 設定セクション名
+    local wan_firewall_zone_name='wan' # WANが属するファイアウォールゾーンの名前 (検索用)
+
+    # mapパッケージのインストール確認
+    install_package map hidden
+
+    # 設定のバックアップ作成
+    debug_log "DEBUG" "Backing up configuration files..."
+    cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config."
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "dhcp backup created." || debug_log "DEBUG" "Failed to backup dhcp config."
+    cp /etc/config/firewall /etc/config/firewall.map-e.old && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config."
+
+    debug_log "DEBUG" "Applying MAP-E configuration using UCI (reflecting latest user feedback)"
+
+    # 既存のwanインターフェースの自動起動を停止
+    uci set network.wan.auto='0'
+
+    # --- DHCP LAN 設定 (より標準的なサーバーモードを提案) ---
+    uci set dhcp.lan.ra='server'
+    uci set dhcp.lan.dhcpv6='server'
+    uci set dhcp.lan.ndp='disabled'
+    uci set dhcp.lan.ra_management='1' # または '2'。'1'はアドレスもDHCPv6で管理する場合
+    uci set dhcp.lan.ra_default='1'    # デフォルトルーターとして広告
+    # uci delete dhcp.lan.force # forceオプションは通常不要なため削除を提案
+
+    # --- DHCP WAN6 設定 (network.wan6 の設定を優先し、ここでは最小限またはクリア) ---
+    # network.wan6 で proto='dhcpv6' が設定されていれば、このセクションは多くの場合自動的に処理される。
+    # 明示的にクリーンな状態にするため、既存のdhcp.wan6セクションを削除することも検討できる。
+    # ただし、実績スクリプトが relay 設定をしていた背景があるかもしれないため、
+    # ここでは、より害の少ない「何もしない」か、あるいはnetwork.wan6の設定に完全に委ねる形を推奨。
+    # ユーザーが実績スクリプトの設定に戻したい場合は、前回のコードを参照。
+    # 今回は、network.wan6がDHCPv6クライアントとして動作することを前提とし、
+    # dhcp.wan6セクションでの明示的なrelay設定は行わない。
+    # もし既存のdhcp.wan6が問題を起こす場合は削除を検討:
+    # uci delete dhcp.wan6
+    # uci set dhcp.wan6=dhcp
+    # uci set dhcp.wan6.interface='wan6'
+    # uci set dhcp.wan6.ignore='0' # クライアントとして動作
+    # uci set dhcp.wan6.ra='disabled'
+    # uci set dhcp.wan6.dhcpv6='disabled'
+    # uci set dhcp.wan6.ndp='disabled'
+    debug_log "DEBUG" "DHCP WAN6 settings will be primarily managed by network.wan6 (proto=dhcpv6)."
+
+
+    # --- WAN6 インターフェース設定 ---
+    local PD_PREFIX_WAN6
+    network_get_prefix PD_PREFIX_WAN6 wan6
+    
+    uci set network.wan6.proto='dhcpv6'
+    uci set network.wan6.reqaddress='try'
+    uci set network.wan6.reqprefix='auto'
+    if [ -n "$PD_PREFIX_WAN6" ]; then
+        uci set network.wan6.ip6prefix="$PD_PREFIX_WAN6"
+        debug_log "DEBUG" "Set network.wan6.ip6prefix to ${PD_PREFIX_WAN6} (obtained from wan6)"
+    else
+        debug_log "DEBUG" "Failed to get IPv6 prefix from wan6 for network.wan6.ip6prefix."
+        # 取得失敗時は、network.wan6.ip6prefix を設定しない (または削除する)
+        uci delete network.wan6.ip6prefix
+    fi
+
+    # --- WANMAP (MAP-E) インターフェース設定 ---
+    uci set network.${WANMAP}=interface
+    uci set network.${WANMAP}.proto='map'
+    uci set network.${WANMAP}.maptype='map-e'
+    uci set network.${WANMAP}.peeraddr="${BR}"
+    uci set network.${WANMAP}.ipaddr="${IPV4}"
+    uci set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
+    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
+    uci set network.${WANMAP}.ealen="${EALEN}"
+    uci set network.${WANMAP}.psidlen="${PSIDLEN}"
+    uci set network.${WANMAP}.offset="${OFFSET}"
+    uci set network.${WANMAP}.mtu='1460'
+    uci set network.${WANMAP}.encaplimit='ignore'
+    uci set network.${WANMAP}.legacymap='1'
+
+    # --- ファイアウォール設定 (ゾーン名'wan'で検索し、インターフェースを入れ替え) ---
+    local wan_zone_uci_path
+    # "firewall.@zone[?(@.name='wan')]" のようなUCIパスで検索
+    wan_zone_uci_path=$(uci show firewall | awk -F '=' -v z_name="${wan_firewall_zone_name}" 'BEGIN{ztf="\047"z_name"\047"} $1 ~ /^firewall\.@zone\[[0-9]+\]\.name$/ && $2 == ztf {sub(/\.name$/,"",$1); print $1; exit}')
+    
+    if [ -n "$wan_zone_uci_path" ]; then
+        debug_log "DEBUG" "Found firewall zone '${wan_firewall_zone_name}' at UCI path ${wan_zone_uci_path}"
+        # ゾーンに関連付けられているネットワークインターフェースのリストを取得
+        local current_networks_in_zone
+        current_networks_in_zone=$(uci get "${wan_zone_uci_path}.network")
+        
+        local net_if
+        local found_old_wan=0
+        # 古いWANインターフェース名（'wan', 'wan_6', 'br-wan'など、よく使われるものを想定）を削除試行
+        # より確実には、削除対象のインターフェース名をユーザーに確認するか、
+        # MAP-E設定前の状態から推測する必要がある。
+        # ここでは、一般的に'wan'が使われることが多いと仮定し、それを削除する。
+        # ユーザーが実績スクリプトで'wan'を固定削除していたことを考慮。
+        for net_if in $current_networks_in_zone; do
+            if [ "$net_if" = "wan" ]; then # ここで 'wan' を探す
+                uci del_list "${wan_zone_uci_path}.network=wan" # リストから特定の値を削除
+                debug_log "DEBUG" "Removed 'wan' from firewall zone ${wan_zone_uci_path}"
+                found_old_wan=1
+                break # 'wan'が見つかればループを抜ける
+            fi
+        done
+        if [ "$found_old_wan" -eq 0 ]; then
+            debug_log "INFO" "Interface 'wan' not found in network list of zone ${wan_zone_uci_path}. No removal needed or check interface name."
+        fi
+        
+        # 新しいMAP-Eインターフェースをゾーンに追加 (重複追加を避けるため、存在確認はUCI側で行われる)
+        uci add_list "${wan_zone_uci_path}.network=${WANMAP}"
+        debug_log "DEBUG" "Added '${WANMAP}' to firewall zone ${wan_zone_uci_path}"
+    else
+        debug_log "WARN" "Firewall zone named '${wan_firewall_zone_name}' not found. Firewall rule for MAP-E may need manual configuration."
+    fi
+
+    # --- バージョン固有設定 ---
+    local osversion
+    if [ -f "${CACHE_DIR}/osversion.ch" ]; then
+        osversion=$(cat "${CACHE_DIR}/osversion.ch")
+        debug_log "DEBUG" "OS Version read from cache: $osversion"
+
+        if echo "$osversion" | grep -qE '^19(\.07(\.[0-9]+)?)?'; then
+            debug_log "DEBUG" "Applying settings for OpenWrt 19.07 compatible version"
+            uci -q delete network.${WANMAP}.tunlink # 既存のtunlinkをクリア
+            uci add_list network.${WANMAP}.tunlink='wan6'
+        else
+            debug_log "DEBUG" "Applying settings for OpenWrt versions newer than 19.07"
+            uci set network.${WANMAP}.tunlink='wan6'
+        fi
+    else
+        debug_log "WARN" "osversion.ch not found in ${CACHE_DIR}. Applying default (newer version) tunlink setting."
+        uci set network.${WANMAP}.tunlink='wan6' # フォールバック
+    fi
+
+    # 設定の保存
+    debug_log "DEBUG" "Committing UCI changes..."
+    uci commit network && debug_log "DEBUG" "UCI network committed." || debug_log "ERROR" "Failed to commit network."
+    uci commit dhcp && debug_log "DEBUG" "UCI dhcp committed." || debug_log "ERROR" "Failed to commit dhcp."
+    uci commit firewall && debug_log "DEBUG" "UCI firewall committed." || debug_log "ERROR" "Failed to commit firewall."
+
+    # 設定情報の表示 (変更なし)
+    echo ""
+    echo "[INFO] Applied Configuration:"
+    printf "  wan6 IPv6 Address (from NET_ADDR6): \033[1;33m%s\033[0m\n" "${NEW_IP6_PREFIX}"
+    if [ -n "$PD_PREFIX_WAN6" ]; then
+        printf "  wan6 Delegated Prefix (for LAN): \033[1;33m%s\033[0m\n" "${PD_PREFIX_WAN6}"
+    fi
+    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${BR}"
+    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IPV4}"
+    # (以下、表示部分は変更なしのため省略) ...
+    printf "  %s legacymap: \033[1;32m1\033[0m\n" "${WANMAP}"
+
+    echo ""
+    printf "%s\n" "$(color yellow "Press any key to reboot the device.")"
+    read -r -n 1 -s
+    printf "\n"
+    reboot
+
+    return 0
+}
+
 # デバッグ用のコードをmap-e-test.shに追加
 debug_mape_values() {
   echo "=== Debug Values ==="
@@ -1645,6 +1730,51 @@ debug_mape_values() {
   echo "===================="
 }
 
+# MAP-E設定情報を表示する関数
+mape_display() {
+    # 引数チェックは不要 (グローバル変数を使用するため)
+
+    echo ""
+    echo "Prefix Information:" # "プレフィックス情報:"
+    echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
+    echo "  CE IPv6 Address: $CE_ADDR" # "  CE IPv6アドレス: $CE_ADDR"
+    echo "  IPv4 Address: $IPV4" # "  IPv4アドレス: $IPV4"
+    echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
+
+    echo ""
+    echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
+    echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
+    echo "  option ipaddr '$IPV4'"
+    echo "  option ip4prefixlen '$IP4PREFIXLEN'"
+    echo "  option ip6prefix '${IP6PFX}::'" # IP6PFXが空の場合もあるためクォート
+    echo "  option ip6prefixlen '$IP6PREFIXLEN'"
+    echo "  option ealen '$EALEN'"
+    echo "  option psidlen '$PSIDLEN'"
+    echo "  option offset '$OFFSET'"
+    echo "  export LEGACY=1"
+
+    # 利用可能なポート範囲の計算 (表示用)
+    local max_port_blocks=$(( (1 << OFFSET) ))
+    local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
+    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) # A=1..AMax の合計ポート数
+    local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
+
+    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start=$port_start" 
+
+    echo ""
+    echo "Port Information:" # "ポート情報:"
+    echo "  Available Ports: $total_ports" # "  利用可能なポート数: $total_ports"
+
+    # ポート範囲を表示 (printfを使用)
+    echo ""
+    echo "Port Ranges:" # "ポート範囲:"
+    printf "%b\n" "$PORTS" # %bでバックスラッシュエスケープ(\n)を解釈
+
+    return 0
+}
+
+internet_map_main() {
+
 # 実行
 if ! mape_mold; then
     # mape_mold failed, error message already printed inside the function.
@@ -1652,7 +1782,7 @@ if ! mape_mold; then
     exit 1 # Exit script with error status
 fi
 
-mape_config
+# mape_config
 
 mape_display
 
@@ -1664,3 +1794,7 @@ printf "\n"
 reboot
 
 exit 0 # Explicitly exit with success status
+}
+
+internet_map_main
+
