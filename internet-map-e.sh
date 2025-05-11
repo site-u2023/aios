@@ -1797,7 +1797,7 @@ internet_map_main() {
     if ! mape_mold; then
         # mape_mold failed, error message already printed inside the function.
         debug_log "DEBUG" "mape_mold function failed. Exiting script."
-        exit 1 # Exit script with error status
+        return 1
     fi
 
     mape_config
@@ -1813,7 +1813,7 @@ internet_map_main() {
     
     reboot
 
-    exit 0 # Explicitly exit with success status
+    return 0 # Explicitly exit with success status
 }
 
 internet_map_main
