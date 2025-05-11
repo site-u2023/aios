@@ -1005,8 +1005,32 @@ setup_location() {
     if [ "$ntp_valid" -eq 1 ]; then
         debug_log "DEBUG" "Setting NTP server to 0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
         uci set system.ntp.server="0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+        
+        # --- NTPクライアント機能の有効化を追加 ---
+        local current_ntp_enable
+        current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
+        # system.ntp セクションが存在し、かつ enable が 0 または未設定の場合に 1 に設定
+        if uci get system.ntp >/dev/null 2>&1; then # セクション存在確認
+            if [ "$current_ntp_enable" = "0" ] || [ -z "$current_ntp_enable" ]; then
+                 debug_log "DEBUG" "Enabling NTP client (system.ntp.enable=1)"
+                 uci set system.ntp.enable='1'
+            fi
+        else
+            # system.ntp セクション自体が存在しない場合 (通常は timeserver タイプで存在するはず)
+            # 必要であればセクション作成も考慮できるが、通常はデフォルトで存在すると期待
+            debug_log "WARN" "system.ntp UCI section not found. Cannot enable NTP client."
+        fi
+        # --- NTPクライアント機能の有効化ここまで ---
     else
         debug_log "DEBUG" "NTP pool for language '$language' not found or language.ch missing. Skipping NTP server change."
+        # NTPサーバーが設定されない場合、NTPクライアントを無効化することも検討できるが、
+        # ここでは既存の有効/無効状態を維持する。
+        # local current_ntp_enable
+        # current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
+        # if [ "$current_ntp_enable" = "1" ]; then
+        #     debug_log "DEBUG" "Disabling NTP client as no valid servers were set (system.ntp.enable=0)"
+        #     uci set system.ntp.enable='0'
+        # fi
     fi
 
     # システムの説明と備考を設定
@@ -1022,7 +1046,7 @@ setup_location() {
     
     uci commit system
     /etc/init.d/system reload
-    /etc/init.d/sysntpd restart
+    /etc/init.d/sysntpd restart  # NTPサーバー設定変更後および有効化後に再起動
 }
 
 # =========================================================
