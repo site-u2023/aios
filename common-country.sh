@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.10-00-02"
+SCRIPT_VERSION="2025.05.10-00-03"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
