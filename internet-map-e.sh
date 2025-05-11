@@ -1553,9 +1553,6 @@ mape_config() {
     local WANMAP='wanmap' # 設定セクション名
     local wan_firewall_zone_name='wan' # WANが属するファイアウォールゾーンの名前 (検索用)
 
-    # mapパッケージのインストール確認
-    install_package map hidden
-
     # 設定のバックアップ作成
     debug_log "DEBUG" "Backing up configuration files..."
     cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config."
@@ -1709,25 +1706,43 @@ mape_config() {
     return 0
 }
 
-# デバッグ用のコードをmap-e-test.shに追加
-debug_mape_values() {
-  echo "=== Debug Values ==="
-  echo "HEXTETs: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3"
-  echo "PREFIX31=$(printf 0x%x $PREFIX31), PREFIX38=$(printf 0x%x $PREFIX38)"
-  
-  if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
-    echo "Matched: ruleprefix38 - $(get_ruleprefix38_value "$prefix38_hex")"
-  elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
-    echo "Matched: ruleprefix31 - $(get_ruleprefix31_value "$prefix31_hex")"
-  elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-    echo "Matched: ruleprefix38_20 - $(get_ruleprefix38_20_value "$prefix38_hex")"
-  else
-    echo "No match found"
-  fi
-  
-  echo "IPADDR=$IPADDR, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
-  echo "PSID=$PSID, PORTS=$PORTS"
-  echo "===================="
+replace_map_sh() {
+    local proto_script_path="/lib/netifd/proto/map.sh"
+    local backup_script_path="${proto_script_path}.old"
+    local os_version_file="${CACHE_DIR}/osversion.ch"
+    local os_version=""
+    local source_url=""
+
+    # 1. OSバージョン取得
+    if [ -f "$os_version_file" ]; then
+        os_version=$(cat "$os_version_file")
+    fi
+
+    # 2. ソースURL決定
+    # os_version の内容が "19" で始まるか確認 (例: "19.07.7")
+    if echo "$os_version" | grep -q "^19"; then
+        source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.19"
+    else
+        # os_versionが空(ファイル無し)の場合や、"19"で始まらない場合はこちら
+        source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.new"
+    fi
+
+    # 3. バックアップ作成 (失敗しても処理は続行、メッセージなし)
+    if [ -f "$proto_script_path" ]; then
+        cp "$proto_script_path" "$backup_script_path" 2>/dev/null # エラー出力抑制
+    fi
+
+    # 4. 新しいスクリプトをダウンロードして配置
+    if wget --no-check-certificate -q -O "$proto_script_path" "$source_url"; then
+        # 5. 実行権限を付与
+        if chmod +x "$proto_script_path"; then
+            return 0 # 成功
+        else
+            return 1 # 権限付与失敗
+        fi
+    else
+        return 1 # ダウンロード失敗
+    fi
 }
 
 # MAP-E設定情報を表示する関数
@@ -1775,25 +1790,30 @@ mape_display() {
 
 internet_map_main() {
 
-# 実行
-if ! mape_mold; then
-    # mape_mold failed, error message already printed inside the function.
-    debug_log "DEBUG" "mape_mold function failed. Exiting script."
-    exit 1 # Exit script with error status
-fi
-
-# mape_config
-
-mape_display
-
-printf "\n%s\n" "$(color green "$(get_message MSG_MAPE_PARAMS_CALC_SUCCESS)")"
-printf "%s\n" "$(color yellow "$(get_message MSG_MAPE_APPLY_SUCCESS)")"
-read -r -n 1 -s
-printf "\n"
+    # mapパッケージのインストール確認
+    install_package map hidden
     
-reboot
+    # 実行
+    if ! mape_mold; then
+        # mape_mold failed, error message already printed inside the function.
+        debug_log "DEBUG" "mape_mold function failed. Exiting script."
+        exit 1 # Exit script with error status
+    fi
 
-exit 0 # Explicitly exit with success status
+    mape_config
+
+    replace_map_sh
+    
+    mape_display
+
+    printf "\n%s\n" "$(color green "$(get_message MSG_MAPE_PARAMS_CALC_SUCCESS)")"
+    printf "%s\n" "$(color yellow "$(get_message MSG_MAPE_APPLY_SUCCESS)")"
+    read -r -n 1 -s
+    printf "\n"
+    
+    reboot
+
+    exit 0 # Explicitly exit with success status
 }
 
 internet_map_main
