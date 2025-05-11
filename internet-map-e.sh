@@ -1863,5 +1863,5 @@ internet_map_main() {
     exit 0 # Explicitly exit with success status
 }
 
-internet_map_main
+# internet_map_main
 
