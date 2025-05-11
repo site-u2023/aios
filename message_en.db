@@ -14,6 +14,7 @@ en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix
 en|MSG_MAPE_APPLY_SUCCESS=Press any key (the system will reboot)
 en|MSG_MAPE_IPV6_PREFIX_FAILED=Failed to get IPv6 prefix
 en|MSG_MAPE_PARAMS_CALC_SUCCESS=MAP-E parameters calculated successfully
+en|MSG_MAPE_RESTORE_COMPLETE=MAP-E settings have been successfully restored
 
 # internet-ds-lite.sh
 en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {sp}
