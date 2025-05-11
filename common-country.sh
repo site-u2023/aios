@@ -960,6 +960,71 @@ try_setup_from_argument() {
     esac
 }
 
+setup_location() {
+    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
+        debug_log "DEBUG" "language.ch not found, skipping location setup"
+        return
+    fi
+
+    # キャッシュファイルから値を取得
+    local zonename timezone language
+    zonename="$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null)"
+    timezone="$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null)"
+    language="$(cat "${CACHE_DIR}/language.ch" 2>/dev/null)"
+
+    # zonenameのデフォルト判定と設定
+    local current_zonename
+    current_zonename="$(uci get system.@system[0].zonename 2>/dev/null)"
+    if [ -z "$current_zonename" ] || [ "$current_zonename" = "00" ] || [ "$current_zonename" = "UTC" ]; then
+        if [ -n "$zonename" ] && [ "$zonename" != "00" ] && [ "$zonename" != "UTC" ]; then
+            debug_log "DEBUG" "zonename is default or unset. Setting zonename from cache: $zonename"
+            uci set system.@system[0].zonename="$zonename"
+        fi
+    fi
+
+    # timezoneのデフォルト判定と設定
+    local current_timezone
+    current_timezone="$(uci get system.@system[0].timezone 2>/dev/null)"
+    if [ -z "$current_timezone" ] || [ "$current_timezone" = "UTC" ]; then
+        if [ -n "$timezone" ] && [ "$timezone" != "UTC" ]; then
+            debug_log "DEBUG" "timezone is default or unset. Setting timezone from cache: $timezone"
+            uci set system.@system[0].timezone="$timezone"
+        fi
+    fi
+
+    # NTPサーバ自動設定: language.ch値を使い、バリデートしてからセット
+    local ntp_pool ntp_valid=0
+    if [ -n "$language" ]; then
+        ntp_pool="$language"
+        # 0.$language.pool.ntp.org が名前解決できるかチェック（busybox nslookup使用）
+        if nslookup "0.$ntp_pool.pool.ntp.org" >/dev/null 2>&1; then
+            ntp_valid=1
+        fi
+    fi
+
+    if [ "$ntp_valid" -eq 1 ]; then
+        debug_log "DEBUG" "Setting NTP server to 0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+        uci set system.ntp.server="0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+    else
+        debug_log "DEBUG" "NTP pool for language '$language' not found or language.ch missing. Skipping NTP server change."
+    fi
+
+    # システムの説明と備考を設定
+    local current_description current_notes
+    current_description="$(uci get system.@system[0].description 2>/dev/null)"
+    if [ -z "$current_description" ]; then
+        uci set system.@system[0].description="Configured automatically by aios"
+    fi
+    current_notes="$(uci get system.@system[0].notes 2>/dev/null)"
+    if [ -z "$current_notes" ]; then
+        uci set system.@system[0].notes="Configured at $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
+    
+    uci commit system
+    /etc/init.d/system reload
+    /etc/init.d/sysntpd restart
+}
+
 # =========================================================
 # メインエントリーポイント関数
 # 国・地域設定の全体的なフローを制御する
