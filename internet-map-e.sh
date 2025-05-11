@@ -1756,6 +1756,84 @@ mape_display() {
     return 0
 }
 
+# MAP-E設定のバックアップを復元する関数
+# 戻り値:
+# 0: 1つ以上のバックアップが正常に復元された
+# 1: 復元対象のバックアップファイルが1つも見つからなかった
+# 2: 1つ以上のファイルの復元に失敗した
+restore_mape() {
+    local backup_files_restored_count=0
+    local backup_files_not_found_count=0
+    local restore_failed_count=0
+    local total_files_to_check=0
+
+    # 対象ファイルとバックアップファイルのマッピング
+    # 構造: "オリジナルファイル名:バックアップファイル名"
+    local files_to_restore="
+        /etc/config/network:/etc/config/network.map-e.old
+        /etc/config/dhcp:/etc/config/dhcp.map-e.old
+        /etc/config/firewall:/etc/config/firewall.map-e.old
+        /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.old
+    "
+
+    debug_log "DEBUG" "Starting restore_mape_backup function."
+
+    # 各ファイルの復元処理
+    for item in $files_to_restore; do
+        total_files_to_check=$((total_files_to_check + 1))
+        local original_file
+        local backup_file
+        original_file=$(echo "$item" | cut -d':' -f1)
+        backup_file=$(echo "$item" | cut -d':' -f2)
+
+        if [ -f "$backup_file" ]; then
+            debug_log "DEBUG" "Attempting to restore '$original_file' from '$backup_file'."
+            if cp "$backup_file" "$original_file"; then
+                debug_log "DEBUG" "Successfully restored '$original_file' from '$backup_file'."
+                backup_files_restored_count=$((backup_files_restored_count + 1))
+                # バックアップファイルを削除する場合はここにコマンドを追加 (例: rm -f "$backup_file")
+                # 例: if [ "$original_file" != "/lib/netifd/proto/map.sh" ]; then rm -f "$backup_file"; fi # map.sh.old は残す場合など
+            else
+                debug_log "DEBUG" "Failed to copy '$backup_file' to '$original_file'." # エラーの事実はDEBUGレベルで記録
+                restore_failed_count=$((restore_failed_count + 1))
+            fi
+        else
+            debug_log "DEBUG" "Backup file '$backup_file' not found. Skipping restore for '$original_file'."
+            backup_files_not_found_count=$((backup_files_not_found_count + 1))
+        fi
+    done
+
+    debug_log "DEBUG" "Restore process summary: Total checked=$total_files_to_check, Restored=$backup_files_restored_count, Not found=$backup_files_not_found_count, Failed=$restore_failed_count."
+
+    if [ "$restore_failed_count" -gt 0 ]; then
+        debug_log "DEBUG" "Restore completed with errors." # エラーの事実はDEBUGレベルで記録
+        return 2 # 1つ以上のファイルの復元に失敗
+    elif [ "$backup_files_restored_count" -gt 0 ]; then
+        debug_log "DEBUG" "Restore completed successfully for at least one file."
+        return 0 # 1つ以上のバックアップが正常に復元された
+    else
+        # この分岐は backup_files_not_found_count == total_files_to_check と同義
+        debug_log "DEBUG" "No backup files were found to restore."
+        return 1 # 復元対象のバックアップファイルが1つも見つからなかった
+    fi
+
+    debug_log "DEBUG" "Attempting to remove 'map' package."
+    if opkg remove map >/dev/null 2>&1; then
+        debug_log "DEBUG" "'map' package removed successfully."
+    else
+        debug_log "DEBUG" "Failed to remove 'map' package or package was not installed. Continuing."
+    fi
+    
+    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE__COMPLETE")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+    read -r -n 1 -s
+    printf "\n"
+    
+    reboot
+
+    exit 0 # Explicitly exit with success status 
+}
+
 internet_map_main() {
 
     # mapパッケージのインストール確認
@@ -1774,8 +1852,8 @@ internet_map_main() {
     
     mape_display
 
-    printf "\n%s\n" "$(color green "$(get_message MSG_MAPE_PARAMS_CALC_SUCCESS)")"
-    printf "%s\n" "$(color yellow "$(get_message MSG_MAPE_APPLY_SUCCESS)")"
+    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
     printf "\n"
     
