@@ -11,7 +11,7 @@ en|MSG_NURO_APPLY_SUCCESS=NURO MAP-E configuration completed. Please reboot the 
 en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix
 
 # internet-map-e.sh
-en|MSG_MAPE_APPLY_SUCCESS=Please reboot the system
+en|MSG_MAPE_APPLY_SUCCESS=Press any key (the system will reboot)
 en|MSG_MAPE_IPV6_PREFIX_FAILED=Failed to get IPv6 prefix
 en|MSG_MAPE_PARAMS_CALC_SUCCESS=MAP-E parameters calculated successfully
 
