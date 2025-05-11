@@ -1592,7 +1592,8 @@ mape_config() {
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-
+    uci set network.wan6.ip6prefix="${CE_ADDR}::/64"
+    
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
     uci set network.${WANMAP}.proto='map'
