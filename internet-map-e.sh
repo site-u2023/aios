@@ -1605,21 +1605,21 @@ mape_config() {
     uci commit firewall && debug_log "DEBUG" "UCI firewall committed." || debug_log "DEBUG" "Failed to commit firewall." 
 
     # 設定情報の表示 (printfを使用 - これはユーザー向けなので変更しない)
-    echo ""
-    echo "[INFO] Applied Configuration:" # INFOレベルだがユーザー向けなのでそのまま
-    printf "  wan ipaddr6: \033[1;33m%s\033[0m\n" "${NET_ADDR6}"
+    # echo ""
+    #cho "[INFO] Applied Configuration:" # INFOレベルだがユーザー向けなのでそのまま
+    #printf "  wan ipaddr6: \033[1;33m%s\033[0m\n" "${NET_ADDR6}"
     # printf "  wan6 ip6prefix: %s::/64\n" "${CE_ADDR}" # wan6には設定しない
-    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${BR}"
-    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IPV4}" # IPV4を表示
-    printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP4PREFIXLEN}"
-    printf "  %s ip6prefix: \033[1;32m%s::\033[0m\n" "${WANMAP}" "${IP6PFX}" # IP6PFXを表示
-    printf "  %s ip6prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP6PREFIXLEN}"
-    printf "  %s ealen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${EALEN}"
-    printf "  %s psidlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${PSIDLEN}"
-    printf "  %s offset: \033[1;32m%s\033[0m\n" "${WANMAP}" "${OFFSET}"
+    #printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${BR}"
+    #printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IPV4}" # IPV4を表示
+    #printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP4PREFIXLEN}"
+    #printf "  %s ip6prefix: \033[1;32m%s::\033[0m\n" "${WANMAP}" "${IP6PFX}" # IP6PFXを表示
+    #printf "  %s ip6prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP6PREFIXLEN}"
+    #printf "  %s ealen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${EALEN}"
+    #printf "  %s psidlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${PSIDLEN}"
+    #printf "  %s offset: \033[1;32m%s\033[0m\n" "${WANMAP}" "${OFFSET}"
 
-    echo ""
-    echo "MAP-E configuration completed. Please reboot the system" # ユーザー向けメッセージなのでそのまま
+    #echo ""
+    #echo "MAP-E configuration completed. Please reboot the system" # ユーザー向けメッセージなのでそのまま
 
     return 0
 }
@@ -1652,10 +1652,15 @@ if ! mape_mold; then
     exit 1 # Exit script with error status
 fi
 
-mape_display
-# mape_config
+mape_config
 
-printf "%s\n" "$(color green "MAP-E parameters calculated successfully.")"
-#reboot
+mape_display
+
+printf "\n%s\n" "$(color green "MAP-E parameters calculated successfully.")"
+printf "%s\n" "$(color yellow "Press any key to reboot the device.")"
+read -r -n 1 -s
+printf "\n"
+    
+reboot
 
 exit 0 # Explicitly exit with success status
