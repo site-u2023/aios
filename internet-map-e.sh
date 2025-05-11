@@ -1257,7 +1257,7 @@ EOF
     IP4PREFIXLEN=""
     IP6PFX=""
     BR=""
-    CE_ADDR=""
+    CE=""
 
     # プレフィックス値に対応するデータを取得
     local prefix31_hex
@@ -1403,8 +1403,8 @@ EOF
     CE5=$(printf %04x "$CE_HEXTET5")
     CE6=$(printf %04x "$CE_HEXTET6")
     CE7=$(printf %04x "$CE_HEXTET7")
-    CE_ADDR="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
-    # debug_log "DEBUG" "Generated CE address (CE_ADDR): $CE_ADDR" # If debug_log exists
+    CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
+    # debug_log "DEBUG" "Generated CE address (CE): $CE" # If debug_log exists
 
     # EALENとプレフィックス長の計算
     EALEN=$(( 56 - IP6PREFIXLEN ))
@@ -1529,7 +1529,7 @@ OK_mape_config() {
     # echo ""
     # echo "[INFO] Applied Configuration:" # INFOレベルだがユーザー向けなのでそのまま
     # printf "  wan ipaddr6: \033[1;33m%s\033[0m\n" "${NET_ADDR6}"
-    # printf "  wan6 ip6prefix: %s::/64\n" "${CE_ADDR}" # wan6には設定しない
+    # printf "  wan6 ip6prefix: %s::/64\n" "${CE}" # wan6には設定しない
     # printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${BR}"
     # printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IPV4}" # IPV4を表示
     # printf "  %s ip4prefixlen: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IP4PREFIXLEN}"
@@ -1580,11 +1580,11 @@ OK2_mape_config() {
     uci set dhcp.wan6.ndp='relay'
     # dhcp.wan6.interface と dhcp.wan6.ignore はバージョン判定ロジック内で設定
 
-    # WAN6 (mape_moldの出力変数 CE_ADDR を使用)
+    # WAN6 (mape_moldの出力変数 CE を使用)
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    uci set network.wan6.ip6prefix="${CE_ADDR}::/64" # mape_moldの出力 ${CE_ADDR} を使用
+    uci set network.wan6.ip6prefix="${CE}::/64" # mape_moldの出力 ${CE} を使用
 
     # WANMAP (mape_moldの出力変数に合わせる)
     uci set network.${WANMAP}=interface
@@ -1710,7 +1710,7 @@ mape_config() {
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    uci set network.wan6.ip6prefix="${CE_ADDR}::/64"
+    uci set network.wan6.ip6prefix="${CE}::/64"
 
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
@@ -1836,7 +1836,7 @@ mape_display() {
     echo ""
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6 Address: $CE_ADDR" # "  CE IPv6アドレス: $CE_ADDR"
+    echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
     echo "  IPv4 Address: $IPV4" # "  IPv4アドレス: $IPV4"
     echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
 
