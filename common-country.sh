@@ -1072,7 +1072,7 @@ setup_location() {
     fi
     
     uci commit system
-    /etc/init.d/system reload
+    # /etc/init.d/system reload
     /etc/init.d/sysntpd restart 
 }
 
