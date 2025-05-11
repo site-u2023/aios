@@ -1454,9 +1454,6 @@ OK_mape_config() {
     local WANMAP='wanmap' # 設定セクション名
     local ZOON_NO='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
-    # mapパッケージのインストール確認
-    install_package map silent
-
     # 設定のバックアップ作成 
     debug_log "DEBUG" "Backing up configuration files..." 
     cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config." 
@@ -1591,21 +1588,10 @@ mape_config() {
     debug_log "DEBUG" "DHCP WAN6 settings will be primarily managed by network.wan6 (proto=dhcpv6)."
 
 
-    # --- WAN6 インターフェース設定 ---
-    local PD_PREFIX_WAN6
-    network_get_prefix PD_PREFIX_WAN6 wan6
-    
+    # --- WAN6 インターフェース設定 ---   
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    if [ -n "$PD_PREFIX_WAN6" ]; then
-        uci set network.wan6.ip6prefix="$PD_PREFIX_WAN6"
-        debug_log "DEBUG" "Set network.wan6.ip6prefix to ${PD_PREFIX_WAN6} (obtained from wan6)"
-    else
-        debug_log "DEBUG" "Failed to get IPv6 prefix from wan6 for network.wan6.ip6prefix."
-        # 取得失敗時は、network.wan6.ip6prefix を設定しない (または削除する)
-        uci delete network.wan6.ip6prefix
-    fi
 
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
@@ -1623,6 +1609,25 @@ mape_config() {
     uci set network.${WANMAP}.encaplimit='ignore'
     uci set network.${WANMAP}.legacymap='1'
 
+    # --- バージョン固有設定 ---
+    local osversion
+    if [ -f "${CACHE_DIR}/osversion.ch" ]; then
+        osversion=$(cat "${CACHE_DIR}/osversion.ch")
+        debug_log "DEBUG" "OS Version read from cache: $osversion"
+
+        if echo "$osversion" | grep -qE '^19(\.07(\.[0-9]+)?)?'; then
+            debug_log "DEBUG" "Applying settings for OpenWrt 19.07 compatible version"
+            uci -q delete network.${WANMAP}.tunlink # 既存のtunlinkをクリア
+            uci add_list network.${WANMAP}.tunlink='wan6'
+        else
+            debug_log "DEBUG" "Applying settings for OpenWrt versions newer than 19.07"
+            uci set network.${WANMAP}.tunlink='wan6'
+        fi
+    else
+        debug_log "WARN" "osversion.ch not found in ${CACHE_DIR}. Applying default (newer version) tunlink setting."
+        uci set network.${WANMAP}.tunlink='wan6' # フォールバック
+    fi
+    
     # --- ファイアウォール設定 (ゾーン名'wan'で検索し、インターフェースを入れ替え) ---
     local wan_zone_uci_path
     # "firewall.@zone[?(@.name='wan')]" のようなUCIパスで検索
@@ -1660,48 +1665,11 @@ mape_config() {
         debug_log "WARN" "Firewall zone named '${wan_firewall_zone_name}' not found. Firewall rule for MAP-E may need manual configuration."
     fi
 
-    # --- バージョン固有設定 ---
-    local osversion
-    if [ -f "${CACHE_DIR}/osversion.ch" ]; then
-        osversion=$(cat "${CACHE_DIR}/osversion.ch")
-        debug_log "DEBUG" "OS Version read from cache: $osversion"
-
-        if echo "$osversion" | grep -qE '^19(\.07(\.[0-9]+)?)?'; then
-            debug_log "DEBUG" "Applying settings for OpenWrt 19.07 compatible version"
-            uci -q delete network.${WANMAP}.tunlink # 既存のtunlinkをクリア
-            uci add_list network.${WANMAP}.tunlink='wan6'
-        else
-            debug_log "DEBUG" "Applying settings for OpenWrt versions newer than 19.07"
-            uci set network.${WANMAP}.tunlink='wan6'
-        fi
-    else
-        debug_log "WARN" "osversion.ch not found in ${CACHE_DIR}. Applying default (newer version) tunlink setting."
-        uci set network.${WANMAP}.tunlink='wan6' # フォールバック
-    fi
-
     # 設定の保存
     debug_log "DEBUG" "Committing UCI changes..."
     uci commit network && debug_log "DEBUG" "UCI network committed." || debug_log "ERROR" "Failed to commit network."
     uci commit dhcp && debug_log "DEBUG" "UCI dhcp committed." || debug_log "ERROR" "Failed to commit dhcp."
     uci commit firewall && debug_log "DEBUG" "UCI firewall committed." || debug_log "ERROR" "Failed to commit firewall."
-
-    # 設定情報の表示 (変更なし)
-    echo ""
-    echo "[INFO] Applied Configuration:"
-    printf "  wan6 IPv6 Address (from NET_ADDR6): \033[1;33m%s\033[0m\n" "${NEW_IP6_PREFIX}"
-    if [ -n "$PD_PREFIX_WAN6" ]; then
-        printf "  wan6 Delegated Prefix (for LAN): \033[1;33m%s\033[0m\n" "${PD_PREFIX_WAN6}"
-    fi
-    printf "  %s peeraddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${BR}"
-    printf "  %s ipaddr: \033[1;32m%s\033[0m\n" "${WANMAP}" "${IPV4}"
-    # (以下、表示部分は変更なしのため省略) ...
-    printf "  %s legacymap: \033[1;32m1\033[0m\n" "${WANMAP}"
-
-    echo ""
-    printf "%s\n" "$(color yellow "Press any key to reboot the device.")"
-    read -r -n 1 -s
-    printf "\n"
-    reboot
 
     return 0
 }
