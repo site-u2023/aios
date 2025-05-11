@@ -963,11 +963,12 @@ try_setup_from_argument() {
 setup_location() {
     # --- ローカルNTPサーバー機能の有効化オプション ---
     # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
-    # system.ntp.interface が 'lan' に設定されます。
-    # デフォルトは false (デバイス自身の時刻同期のみ行い、NTPサーバーとしては機能しない)。
-    # local ENABLE_LOCAL_NTP_SERVER='false' 
-    # 例: LAN向けNTPサーバー機能を有効にする場合は以下のように変更
-    local ENABLE_LOCAL_NTP_SERVER='true'
+    # system.ntp.enable_server が '1' に、system.ntp.interface が 'lan' に設定されます。
+    # false の場合、aios は system.ntp.enable_server と system.ntp.interface を変更しません。
+    # デフォルトは true (デバイス自身の時刻同期を行い、NTPサーバーとしても機能する)。
+    local ENABLE_LOCAL_NTP_SERVER='true' 
+    # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
+    # local ENABLE_LOCAL_NTP_SERVER='false'
     # --- ローカルNTPサーバー機能の有効化オプションここまで ---
 
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
@@ -1019,38 +1020,32 @@ setup_location() {
             # 1. NTPクライアント機能の有効化 (常に有効にする)
             local current_ntp_enable
             current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
-            if [ "$current_ntp_enable" = "0" ] || [ -z "$current_ntp_enable" ]; then
+            if [ "$current_ntp_enable" != "1" ]; then # '0' または未設定の場合に '1' にする
                  debug_log "DEBUG" "Enabling NTP client (system.ntp.enable=1)"
                  uci set system.ntp.enable='1'
             fi
 
-            # 2. DHCP経由のNTPサーバー使用を無効化 (常に無効にする)
-            local current_dhcp_ntp_enable_server
-            current_dhcp_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
-            if [ "$current_dhcp_ntp_enable_server" = "1" ]; then
-                debug_log "DEBUG" "Disabling 'Use NTP servers advertised by DHCP' (system.ntp.enable_server=0)"
-                uci set system.ntp.enable_server='0'
-            elif [ -z "$current_dhcp_ntp_enable_server" ] && uci show system | grep -q "system.ntp=\|system.ntp.enable_server=" ; then
-                debug_log "DEBUG" "Explicitly disabling 'Use NTP servers advertised by DHCP' as it's unset or default (system.ntp.enable_server=0)"
-                uci set system.ntp.enable_server='0'
-            fi
-
-            # 3. ローカルNTPサーバー機能のオプションに応じた設定
+            # 2. ローカルNTPサーバー機能のオプションに応じた設定
             if [ "$ENABLE_LOCAL_NTP_SERVER" = "true" ]; then
-                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Configuring device as a local NTP server for LAN."
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Enabling device as a local NTP server for LAN."
+                # NTPサーバー機能を有効化
+                local current_ntp_enable_server
+                current_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
+                if [ "$current_ntp_enable_server" != "1" ]; then
+                    debug_log "DEBUG" "Enabling NTP server functionality (system.ntp.enable_server=1)"
+                    uci set system.ntp.enable_server='1'
+                fi
                 # NTPサーバーとしてLANにバインド
                 local current_ntp_interface
                 current_ntp_interface=$(uci get system.ntp.interface 2>/dev/null)
-                if [ "$current_ntp_interface" != "lan" ]; then # 既にlanなら何もしない
+                if [ "$current_ntp_interface" != "lan" ]; then
                     debug_log "DEBUG" "Binding NTP server to LAN interface (system.ntp.interface=lan)"
                     uci set system.ntp.interface='lan'
                 fi
             else
-                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. Device will not be configured as a local NTP server."
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. aios will not change system.ntp.enable_server or system.ntp.interface."
+                # system.ntp.enable_server は変更しない (ユーザー設定を尊重)
                 # system.ntp.interface は変更しない (ユーザー設定を尊重)
-                # もしデフォルトでNTPサーバー機能を明確に無効化したい場合は、
-                # uci delete system.ntp.interface や uci set system.ntp.interface='' などを検討できるが、
-                # 今回は「変更しない」方針。
             fi
         else
             debug_log "WARN" "system.ntp UCI section not found. Cannot configure NTP settings."
