@@ -822,28 +822,55 @@ information_main() {
     local cache_zone_file="${CACHE_DIR}/zonename.ch"
     local cache_tz_file="${CACHE_DIR}/timezone.ch"
     local cache_isp_file="${CACHE_DIR}/isp_info.ch"
+    # 2025-05-11 ユーザーログから追加されたキャッシュファイル
+    local cache_isp_as_file="${CACHE_DIR}/isp_as.ch"
+    local cache_region_name_file="${CACHE_DIR}/region_name.ch"
+
 
     # 必須キャッシュファイルの存在と中身をチェック
+    # We check for -s (non-empty) for essential ones.
     if [ -s "$cache_lang_file" ] && [ -s "$cache_zone_file" ] && [ -s "$cache_tz_file" ]; then
         # キャッシュから情報を読み込み
         local cached_lang=$(cat "$cache_lang_file" 2>/dev/null)
         local cached_zone=$(cat "$cache_zone_file" 2>/dev/null)
         local cached_tz=$(cat "$cache_tz_file" 2>/dev/null)
+        
         local cached_isp=""
         local cached_as=""
+        local cached_region_name="" # region_name 用の変数を追加
 
-        # ISP情報があれば読み込み
-        if [ -s "$cache_isp_file" ]; then
-            cached_isp=$(sed -n '1p' "$cache_isp_file" 2>/dev/null)
-            cached_as=$(sed -n '2p' "$cache_isp_file" 2>/dev/null)
-        else
-             cached_isp=$(get_message MSG_ISP_INFO_UNKNOWN)
-             cached_as=$(get_message MSG_ISP_INFO_UNKNOWN)
+        # ISP情報があれば読み込み (isp_info.ch は ISP名とAS番号が1行ずつだったが、ログでは分離しているため合わせる)
+        if [ -s "$cache_isp_file" ]; then # isp_info.ch にはISP名のみが入っている想定 (ログより)
+            cached_isp=$(cat "$cache_isp_file" 2>/dev/null)
+        fi
+        if [ -s "$cache_isp_as_file" ]; then # isp_as.ch
+            cached_as=$(cat "$cache_isp_as_file" 2>/dev/null)
+        fi
+        if [ -s "$cache_region_name_file" ]; then # region_name.ch
+            cached_region_name=$(cat "$cache_region_name_file" 2>/dev/null)
         fi
 
-        # 読み込んだ情報が空でないことを最終確認
+        # ISP情報が取得できなかった場合のフォールバック
+        if [ -z "$cached_isp" ] && command -v get_message >/dev/null 2>&1; then
+            cached_isp=$(get_message MSG_ISP_INFO_UNKNOWN 2>/dev/null || echo "N/A")
+        elif [ -z "$cached_isp" ]; then
+            cached_isp="N/A"
+        fi
+        if [ -z "$cached_as" ] && command -v get_message >/dev/null 2>&1; then
+            cached_as=$(get_message MSG_ISP_INFO_UNKNOWN 2>/dev/null || echo "N/A") # AS番号も同様に
+        elif [ -z "$cached_as" ]; then
+            cached_as="N/A"
+        fi
+        # Region Name のフォールバックも同様に (メッセージキーは仮)
+        if [ -z "$cached_region_name" ] && command -v get_message >/dev/null 2>&1; then
+            cached_region_name=$(get_message MSG_REGION_NAME_UNKNOWN 2>/dev/null || echo "N/A")
+        elif [ -z "$cached_region_name" ];then
+            cached_region_name="N/A"
+        fi
+
+        # 読み込んだ情報が空でないことを最終確認 (主要なもの)
         if [ -n "$cached_lang" ] && [ -n "$cached_zone" ] && [ -n "$cached_tz" ]; then
-            debug_log "DEBUG" "Valid location cache found. Displaying information using display_detected_location."
+            debug_log "DEBUG" "Valid location cache found. Displaying information."
 
             # 翻訳システムの初期化を確認/実行 (display_detected_location がメッセージキーを使うため)
             if command -v init_translation >/dev/null 2>&1; then
@@ -853,28 +880,22 @@ information_main() {
                      init_translation # デフォルト試行
                  fi
             else
-                 debug_log "WARNING" "init_translation function not found. Cannot ensure messages are translated."
+                 debug_log "WARNING" "init_translation function not found. Cannot ensure messages are translated for display."
             fi
 
-            # --- ここでNTP自動設定 ---
-            if command -v setup_location >/dev/null 2>&1; then
-                setup_location
-            else
-                debug_log "DEBUG" "setup_location function not found, skipping NTP configuration"
-            fi
-
-            # 元の display_detected_location を呼び出す (引数も元の形式に戻す)
             if command -v display_detected_location >/dev/null 2>&1; then
+                # display_detected_location の引数構成は元の common-information.sh の定義を参照
+                # display_detected_location(detection_source, detected_country, detected_zonename, detected_timezone, detected_isp, detected_as)
                 display_detected_location "Cache" "$cached_lang" "$cached_zone" "$cached_tz" "$cached_isp" "$cached_as"
                 printf "\n"
             else
                 debug_log "ERROR" "display_detected_location function not found. Cannot display location."
             fi
         else
-            debug_log "DEBUG" "One or more essential cached values are empty after reading. Skipping display."
+            debug_log "DEBUG" "One or more essential cached values (lang, zone, tz) are empty after reading. Skipping display."
         fi
     else
-        debug_log "DEBUG" "Essential location cache files missing or empty. Skipping display."
+        debug_log "DEBUG" "Essential location cache files (lang, zone, tz) missing or empty. Skipping display."
     fi
 
     debug_log "DEBUG" "Exiting information_main()"
