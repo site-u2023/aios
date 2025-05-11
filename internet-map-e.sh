@@ -1450,7 +1450,7 @@ EOF
 }
 
 # MAP-E設定を適用する関数
-mape_config() {
+OK_mape_config() {
     local WANMAP='wanmap' # 設定セクション名
     local ZOON_NO='1'       # WANが属するファイアウォールゾーンのインデックス (環境依存の可能性あり、通常は1)
 
@@ -1546,7 +1546,7 @@ mape_config() {
 }
 
 # MAP-E設定を適用する関数
-OK_mape_config() {
+mape_config() {
     local WANMAP='wanmap' # 設定セクション名
     local wan_firewall_zone_name='wan' # WANが属するファイアウォールゾーンの名前 (検索用)
 
@@ -1556,7 +1556,7 @@ OK_mape_config() {
     cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "dhcp backup created." || debug_log "DEBUG" "Failed to backup dhcp config."
     cp /etc/config/firewall /etc/config/firewall.map-e.old && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config."
 
-    debug_log "DEBUG" "Applying MAP-E configuration using UCI (reflecting latest user feedback)"
+    debug_log "DEBUG" "Applying MAP-E configuration using UCI (reflecting latest user feedback and external references)" # メッセージ更新
 
     # 既存のwanインターフェースの自動起動を停止
     uci set network.wan.auto='0'
@@ -1564,36 +1564,34 @@ OK_mape_config() {
     # --- DHCP LAN 設定 (より標準的なサーバーモードを提案) ---
     uci set dhcp.lan.ra='server'
     uci set dhcp.lan.dhcpv6='server'
-    uci set dhcp.lan.ndp='disabled'
-    uci set dhcp.lan.ra_management='1' # または '2'。'1'はアドレスもDHCPv6で管理する場合
-    uci set dhcp.lan.ra_default='1'    # デフォルトルーターとして広告
-    # uci delete dhcp.lan.force # forceオプションは通常不要なため削除を提案
+    uci set dhcp.lan.ndp='disabled' # 通常、RAがserverならndpはdisabledで良い
+    uci set dhcp.lan.ra_management='1' 
+    uci set dhcp.lan.ra_default='1'    
+    # uci delete dhcp.lan.force # 通常不要
 
-    # --- DHCP WAN6 設定 (network.wan6 の設定を優先し、ここでは最小限またはクリア) ---
+    # --- DHCP WAN6 設定 ---
     # network.wan6 で proto='dhcpv6' が設定されていれば、このセクションは多くの場合自動的に処理される。
-    # 明示的にクリーンな状態にするため、既存のdhcp.wan6セクションを削除することも検討できる。
-    # ただし、実績スクリプトが relay 設定をしていた背景があるかもしれないため、
-    # ここでは、より害の少ない「何もしない」か、あるいはnetwork.wan6の設定に完全に委ねる形を推奨。
-    # ユーザーが実績スクリプトの設定に戻したい場合は、前回のコードを参照。
-    # 今回は、network.wan6がDHCPv6クライアントとして動作することを前提とし、
-    # dhcp.wan6セクションでの明示的なrelay設定は行わない。
-    # もし既存のdhcp.wan6が問題を起こす場合は削除を検討:
-    # uci delete dhcp.wan6
+    # ユーザーの以前のスクリプトには dhcp.wan6 の設定があったため、基本的なrelay設定を残すか、
+    # network.wan6 に完全に委ねるか検討の余地あり。
+    # ここでは、network.wan6がDHCPv6クライアントとして動作することを前提とし、
+    # dhcp.wan6セクションでの明示的なrelay設定は行わない（または最小限に）。
+    # もし既存の `dhcp.wan6` セクションが問題を起こす場合は削除も検討。
+    # uci -q delete dhcp.wan6 # 必要に応じてコメント解除
     # uci set dhcp.wan6=dhcp
-    # uci set dhcp.wan6.interface='wan6'
-    # uci set dhcp.wan6.ignore='0' # クライアントとして動作
-    # uci set dhcp.wan6.ra='disabled'
-    # uci set dhcp.wan6.dhcpv6='disabled'
-    # uci set dhcp.wan6.ndp='disabled'
+    # uci set dhcp.wan6.interface='wan6' # wan6インターフェースを指定
+    # uci set dhcp.wan6.ra='relay'
+    # uci set dhcp.wan6.dhcpv6='relay'
+    # uci set dhcp.wan6.ndp='relay'
+    # uci set dhcp.wan6.master='1' # wan6がマスターでない場合があるため注意
     debug_log "DEBUG" "DHCP WAN6 settings will be primarily managed by network.wan6 (proto=dhcpv6)."
 
 
     # --- WAN6 インターフェース設定 ---   
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
-    uci set network.wan6.reqprefix='auto'
-    uci set network.wan6.ip6prefix="${CE_ADDR}::/64"
-    
+    uci set network.wan6.reqprefix='auto' # ISPからプレフィックス委任を要求
+    # uci -q delete network.wan6.ip6prefix # ★変更点: CE_ADDRの固定割り当てを削除
+
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
     uci set network.${WANMAP}.proto='map'
@@ -1601,14 +1599,14 @@ OK_mape_config() {
     uci set network.${WANMAP}.peeraddr="${BR}"
     uci set network.${WANMAP}.ipaddr="${IPV4}"
     uci set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::" # mape_moldで計算されたプレフィックス
     uci set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
     uci set network.${WANMAP}.ealen="${EALEN}"
     uci set network.${WANMAP}.psidlen="${PSIDLEN}"
     uci set network.${WANMAP}.offset="${OFFSET}"
     uci set network.${WANMAP}.mtu='1460'
     uci set network.${WANMAP}.encaplimit='ignore'
-    uci set network.${WANMAP}.legacymap='1'
+    uci set network.${WANMAP}.legacymap='1' # OCNでは1が推奨されることが多い
 
     # --- バージョン固有設定 ---
     local osversion
@@ -1616,52 +1614,59 @@ OK_mape_config() {
         osversion=$(cat "${CACHE_DIR}/osversion.ch")
         debug_log "DEBUG" "OS Version read from cache: $osversion"
 
+        # OpenWrt 19.07系統かそれ以外かでtunlinkの設定方法が異なる場合がある
         if echo "$osversion" | grep -qE '^19(\.07(\.[0-9]+)?)?'; then
-            debug_log "DEBUG" "Applying settings for OpenWrt 19.07 compatible version"
+            debug_log "DEBUG" "Applying tunlink settings for OpenWrt 19.07 compatible version"
             uci -q delete network.${WANMAP}.tunlink # 既存のtunlinkをクリア
-            uci add_list network.${WANMAP}.tunlink='wan6'
+            uci add_list network.${WANMAP}.tunlink='wan6' # リストとして追加
         else
-            debug_log "DEBUG" "Applying settings for OpenWrt versions newer than 19.07"
-            uci set network.${WANMAP}.tunlink='wan6'
+            debug_log "DEBUG" "Applying tunlink settings for OpenWrt versions newer than 19.07"
+            uci set network.${WANMAP}.tunlink='wan6' # 通常はこれで良い
         fi
     else
         debug_log "WARN" "osversion.ch not found in ${CACHE_DIR}. Applying default (newer version) tunlink setting."
         uci set network.${WANMAP}.tunlink='wan6' # フォールバック
     fi
     
-    # --- ファイアウォール設定 (ゾーン名'wan'で検索し、インターフェースを入れ替え) ---
+    # --- ファイアウォール設定 (ゾーン名'wan'で検索し、インターフェースを入れ替え、設定強化) ---
     local wan_zone_uci_path
-    # "firewall.@zone[?(@.name='wan')]" のようなUCIパスで検索
     wan_zone_uci_path=$(uci show firewall | awk -F '=' -v z_name="${wan_firewall_zone_name}" 'BEGIN{ztf="\047"z_name"\047"} $1 ~ /^firewall\.@zone\[[0-9]+\]\.name$/ && $2 == ztf {sub(/\.name$/,"",$1); print $1; exit}')
     
     if [ -n "$wan_zone_uci_path" ]; then
         debug_log "DEBUG" "Found firewall zone '${wan_firewall_zone_name}' at UCI path ${wan_zone_uci_path}"
-        # ゾーンに関連付けられているネットワークインターフェースのリストを取得
-        local current_networks_in_zone
-        current_networks_in_zone=$(uci get "${wan_zone_uci_path}.network")
         
+        # 古いWANインターフェースをゾーンから削除 (存在すれば)
+        local current_networks_in_zone
+        current_networks_in_zone=$(uci -q get "${wan_zone_uci_path}.network") # -qでエラー抑制
         local net_if
-        local found_old_wan=0
-        # 古いWANインターフェース名（'wan', 'wan_6', 'br-wan'など、よく使われるものを想定）を削除試行
-        # より確実には、削除対象のインターフェース名をユーザーに確認するか、
-        # MAP-E設定前の状態から推測する必要がある。
-        # ここでは、一般的に'wan'が使われることが多いと仮定し、それを削除する。
-        # ユーザーが実績スクリプトで'wan'を固定削除していたことを考慮。
         for net_if in $current_networks_in_zone; do
-            if [ "$net_if" = "wan" ]; then # ここで 'wan' を探す
-                uci del_list "${wan_zone_uci_path}.network=wan" # リストから特定の値を削除
+            if [ "$net_if" = "wan" ]; then 
+                uci del_list "${wan_zone_uci_path}.network=wan"
                 debug_log "DEBUG" "Removed 'wan' from firewall zone ${wan_zone_uci_path}"
-                found_old_wan=1
-                break # 'wan'が見つかればループを抜ける
+                break 
             fi
         done
-        if [ "$found_old_wan" -eq 0 ]; then
-            debug_log "INFO" "Interface 'wan' not found in network list of zone ${wan_zone_uci_path}. No removal needed or check interface name."
-        fi
         
-        # 新しいMAP-Eインターフェースをゾーンに追加 (重複追加を避けるため、存在確認はUCI側で行われる)
-        uci add_list "${wan_zone_uci_path}.network=${WANMAP}"
-        debug_log "DEBUG" "Added '${WANMAP}' to firewall zone ${wan_zone_uci_path}"
+        # 新しいMAP-Eインターフェースをゾーンに追加 (重複追加を避ける)
+        local is_wanmap_in_zone=0
+        for net_if in $(uci -q get "${wan_zone_uci_path}.network"); do
+            if [ "$net_if" = "$WANMAP" ]; then
+                is_wanmap_in_zone=1
+                break
+            fi
+        done
+        if [ "$is_wanmap_in_zone" -eq 0 ]; then
+            uci add_list "${wan_zone_uci_path}.network=${WANMAP}"
+            debug_log "DEBUG" "Added '${WANMAP}' to firewall zone ${wan_zone_uci_path}"
+        else
+            debug_log "DEBUG" "'${WANMAP}' already in firewall zone ${wan_zone_uci_path}"
+        fi
+
+        # ★変更点: マスカレードとMSS Clampingをゾーンに設定
+        uci set "${wan_zone_uci_path}.masq='1'"
+        uci set "${wan_zone_uci_path}.mtu_fix='1'"
+        debug_log "DEBUG" "Set masq=1 and mtu_fix=1 for zone ${wan_zone_uci_path}"
+
     else
         debug_log "WARN" "Firewall zone named '${wan_firewall_zone_name}' not found. Firewall rule for MAP-E may need manual configuration."
     fi
