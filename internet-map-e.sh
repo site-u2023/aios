@@ -1545,6 +1545,128 @@ OK_mape_config() {
     return 0
 }
 
+OK2_mape_config() {
+    local WANMAP='wanmap' # 設定セクション名 (ユーザー定義)
+    # local ZOON_NO='1' # 固定インデックスは使用しない (動的検索に変更)
+
+    # 設定のバックアップ作成 (ユーザー提示のOK_mape_configの通り、これは正しい記述です)
+    debug_log "DEBUG" "Backing up configuration files..." 
+    cp /etc/config/network /etc/config/network.map-e.old && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config." 
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.old && debug_log "DEBUG" "dhcp backup created." || debug_log "DEBUG" "Failed to backup dhcp config." 
+    cp /etc/config/firewall /etc/config/firewall.map-e.old && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config." 
+
+    # --- UCI設定 ---
+    debug_log "DEBUG" "Applying MAP-E configuration using UCI" 
+
+    uci set network.wan.auto='0'
+
+    # DHCP LAN (ユーザー提示のOK_mape_configの値)
+    uci set dhcp.lan.ra='relay'
+    uci set dhcp.lan.dhcpv6='relay'
+    uci set dhcp.lan.ndp='relay'
+    uci set dhcp.lan.force='1'
+    # 以下の dhcp.lan 設定は、ユーザーの uci show dhcp 出力に基づいており、
+    # 元の OK_mape_config には直接記述がないため、必要に応じてユーザー様が有効化・調整してください。
+    # uci set dhcp.lan.ra_slaac='1'
+    # uci delete dhcp.lan.ra_flags
+    # uci add_list dhcp.lan.ra_flags='managed-config'
+    # uci add_list dhcp.lan.ra_flags='other-config'
+
+    # DHCP WAN6 (ユーザー提示のOK_mape_configの値)
+    uci set dhcp.wan6=dhcp
+    uci set dhcp.wan6.master='1'
+    uci set dhcp.wan6.ra='relay'
+    uci set dhcp.wan6.dhcpv6='relay'
+    uci set dhcp.wan6.ndp='relay'
+    # dhcp.wan6.interface と dhcp.wan6.ignore はバージョン判定ロジック内で設定
+
+    # WAN6 (mape_moldの出力変数 CE_ADDR を使用)
+    uci set network.wan6.proto='dhcpv6'
+    uci set network.wan6.reqaddress='try'
+    uci set network.wan6.reqprefix='auto'
+    uci set network.wan6.ip6prefix="${CE_ADDR}::/64" # mape_moldの出力 ${CE_ADDR} を使用
+
+    # WANMAP (mape_moldの出力変数に合わせる)
+    uci set network.${WANMAP}=interface
+    uci set network.${WANMAP}.proto='map'
+    uci set network.${WANMAP}.maptype='map-e'
+    uci set network.${WANMAP}.peeraddr="${BR}"
+    uci set network.${WANMAP}.ipaddr="${IPV4}"
+    uci set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
+    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
+    uci set network.${WANMAP}.ealen="${EALEN}"
+    uci set network.${WANMAP}.psidlen="${PSIDLEN}"
+    uci set network.${WANMAP}.offset="${OFFSET}"
+    uci set network.${WANMAP}.mtu='1460'
+    uci set network.${WANMAP}.encaplimit='ignore'
+    # legacymap と tunlink はバージョン判定ロジック内で設定
+
+    # FW (ゾーン名 'wan' で動的に検索し、インターフェースを入れ替え)
+    local wan_firewall_zone_name='wan' # WANが属するファイアウォールゾーンの名前
+    local firewall_zone_path
+    
+    # 指定された名前のゾーンのUCIパス (例: firewall.@zone[1]) を取得
+    firewall_zone_path=$(uci show firewall | awk -F'[.=]' -v z_name="${wan_firewall_zone_name}" '
+        $1 == "firewall" && $3 == "name" && $4 == "\047"z_name"\047" {
+            print $1"."$2; # firewall.@zone[x] を出力
+            exit;
+        }
+    ')
+
+    if [ -n "$firewall_zone_path" ]; then
+        debug_log "DEBUG" "Found firewall zone '${wan_firewall_zone_name}' at UCI path ${firewall_zone_path}"
+        
+        # ゾーンに関連付けられているネットワークインターフェースのリストから 'wan' を削除
+        # uci del_list は指定された値が存在する場合のみ削除するため、エラーにはなりにくい
+        uci del_list "${firewall_zone_path}.network=wan"
+        # 新しいMAP-Eインターフェースをゾーンに追加 (存在しない場合のみ追加される)
+        uci add_list "${firewall_zone_path}.network=${WANMAP}"
+        debug_log "DEBUG" "Firewall zone ${firewall_zone_path} updated to include ${WANMAP} and remove 'wan' (if existed)."
+        
+        # 一般的なMAP-E設定で推奨される項目 (元のOK_mape_configにはないためコメントアウト)
+        # uci set "${firewall_zone_path}.masq='1'"
+        # uci set "${firewall_zone_path}.mtu_fix='1'"
+    else
+        debug_log "DEBUG" "Firewall zone named '${wan_firewall_zone_name}' not found. Manual firewall configuration may be required."
+    fi
+
+    # Version-specific settings (ユーザー提示のキャッシュファイル参照ロジックと設定内容を厳守)
+    local osversion="" # 初期化
+    if [ -f "${CACHE_DIR}/osversion.ch" ]; then
+        osversion=$(cat "${CACHE_DIR}/osversion.ch")
+        debug_log "DEBUG" "Read osversion from ${CACHE_DIR}/osversion.ch: $osversion"
+    else
+        debug_log "DEBUG" "${CACHE_DIR}/osversion.ch not found. osversion remains empty."
+        # osversionが空のままなので、下のif文ではelseブロックが実行される
+    fi
+
+    if [ "$osversion" = "19" ]; then
+        debug_log "DEBUG" "Applying OpenWrt 19 specific settings (original OK_mape_config logic)."
+        # 元のOK_mape_configの通り、tunlinkのadd_listのみ実行
+        uci add_list network.${WANMAP}.tunlink='wan6'
+        # 元のOK_mape_configでは、19の場合に他の設定(legacymapやdhcp.wan6.*)は行わない
+    else
+        # "19"でない場合 (キャッシュファイルなし、または"19"以外の内容)
+        debug_log "DEBUG" "Applying OpenWrt non-19 specific settings (original OK_mape_config logic)."
+        # 元のOK_mape_configの通りに設定
+        uci set dhcp.wan6.interface='wan6'
+        uci set dhcp.wan6.ignore='1'
+        uci set network.${WANMAP}.legacymap='1'
+        uci set network.${WANMAP}.tunlink='wan6'
+    fi
+
+    # 設定の保存 (最後に1回だけcommit)
+    debug_log "DEBUG" "Committing all UCI changes..." 
+    if uci commit; then
+        debug_log "DEBUG" "UCI changes committed successfully."
+    else
+        debug_log "DEBUG" "Failed to commit UCI changes."
+    fi
+    
+    return 0
+}
+
 # MAP-E設定を適用する関数
 mape_config() {
     local WANMAP='wanmap' # 設定セクション名
