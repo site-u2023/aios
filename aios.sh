@@ -2120,16 +2120,16 @@ setup_password_hostname() {
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
             printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
-            stty -echo
-            read new_password
-            stty echo
+            # stty -echo # 変更点: stty -echo を削除
+            read -s new_password # 変更点: read に -s オプションを追加
+            # stty echo # 変更点: stty echo を削除
             printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
-            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
-            stty -echo
-            read confirm_password
-            stty echo
+            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")" # メッセージキー確認: MSG_CONFIRM_PASSWORD の方が適切かもしれません
+            # stty -echo # 変更点: stty -echo を削除
+            read -s confirm_password # 変更点: read に -s オプションを追加
+            # stty echo # 変更点: stty echo を削除
             printf "\n"
             [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
