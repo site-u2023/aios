@@ -970,6 +970,137 @@ setup_location() {
     local ENABLE_LOCAL_NTP_SERVER='true' 
     # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
     # local ENABLE_LOCAL_NTP_SERVER='false'
+    local backup_failed_flag=0 # バックアップ失敗フラグ
+
+    # 設定のバックアップ作成
+    debug_log "DEBUG" "Backing up system configuration..."
+    if cp /etc/config/system /etc/config/system.location.old; then
+        debug_log "DEBUG" "System configuration successfully backed up to /etc/config/system.location.old"
+    else
+        debug_log "DEBUG" "Failed to backup system configuration to /etc/config/system.location.old"
+        backup_failed_flag=1
+    fi
+
+    if [ "$backup_failed_flag" -ne 0 ]; then
+        debug_log "DEBUG" "System configuration could not be backed up. Proceeding with caution."
+        # ユーザーに通知し、処理を中断するかどうかを確認するロジックは、指示がない限り追加しません。
+    fi
+
+    if [ ! -f "${CACHE_DIR}/language.ch" ]; then
+        debug_log "DEBUG" "language.ch not found, skipping location setup"
+        return
+    fi
+
+    # キャッシュファイルから値を取得
+    local zonename timezone language
+    zonename="$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null)"
+    timezone="$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null)"
+    language="$(cat "${CACHE_DIR}/language.ch" 2>/dev/null)"
+
+    # zonenameのデフォルト判定と設定
+    local current_zonename
+    current_zonename="$(uci get system.@system[0].zonename 2>/dev/null)"
+    if [ -z "$current_zonename" ] || [ "$current_zonename" = "00" ] || [ "$current_zonename" = "UTC" ]; then
+        if [ -n "$zonename" ] && [ "$zonename" != "00" ] && [ "$zonename" != "UTC" ]; then
+            debug_log "DEBUG" "Setting zonename from cache: $zonename"
+            uci set system.@system[0].zonename="$zonename"
+        fi
+    fi
+
+    # timezoneのデフォルト判定と設定
+    local current_timezone
+    current_timezone="$(uci get system.@system[0].timezone 2>/dev/null)"
+    if [ -z "$current_timezone" ] || [ "$current_timezone" = "UTC" ]; then
+        if [ -n "$timezone" ] && [ "$timezone" != "UTC" ]; then
+            debug_log "DEBUG" "Setting timezone from cache: $timezone"
+            uci set system.@system[0].timezone="$timezone"
+        fi
+    fi
+
+    # NTPサーバ自動設定: language.ch値を使い、バリデートしてからセット
+    local ntp_pool ntp_valid=0
+    if [ -n "$language" ]; then
+        ntp_pool="$language"
+        if nslookup "0.$ntp_pool.pool.ntp.org" >/dev/null 2>&1; then
+            ntp_valid=1
+        fi
+    fi
+
+    if [ "$ntp_valid" -eq 1 ]; then
+        debug_log "DEBUG" "Setting NTP server to 0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+        uci set system.ntp.server="0.$ntp_pool.pool.ntp.org 1.$ntp_pool.pool.ntp.org 2.$ntp_pool.pool.ntp.org 3.$ntp_pool.pool.ntp.org"
+        
+        # system.ntp セクションの存在確認
+        if uci get system.ntp >/dev/null 2>/dev/null; then
+            # 1. NTPクライアント機能の有効化 (これは ENABLE_LOCAL_NTP_SERVER の値に関わらず行う)
+            local current_ntp_enable
+            current_ntp_enable=$(uci get system.ntp.enable 2>/dev/null)
+            if [ "$current_ntp_enable" != "1" ]; then
+                 debug_log "DEBUG" "Enabling NTP client (system.ntp.enable=1)"
+                 uci set system.ntp.enable='1'
+            fi
+
+            # 2. ローカルNTPサーバー機能のオプションに応じた設定
+            if [ "$ENABLE_LOCAL_NTP_SERVER" = "true" ]; then
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Configuring manual NTP settings."
+                # NTPサーバー機能を有効化 (クライアントにNTPサービスを提供)
+                local current_ntp_enable_server
+                current_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
+                if [ "$current_ntp_enable_server" != "1" ]; then
+                    debug_log "DEBUG" "Enabling NTP server functionality to provide service (system.ntp.enable_server=1)"
+                    uci set system.ntp.enable_server='1'
+                fi
+                # NTPサーバーとしてLANにバインド
+                local current_ntp_interface
+                current_ntp_interface=$(uci get system.ntp.interface 2>/dev/null)
+                if [ "$current_ntp_interface" != "lan" ]; then
+                    debug_log "DEBUG" "Binding NTP server to LAN interface (system.ntp.interface=lan)"
+                    uci set system.ntp.interface='lan'
+                fi
+                # LuCI「DHCPから通知されたサーバを使用」: OFF (system.ntp.use_dhcp='0')
+                if [ "$(uci get system.ntp.use_dhcp 2>/dev/null)" != "0" ]; then
+                    debug_log "DEBUG" "Setting system.ntp.use_dhcp=0 to disable NTP from DHCP"
+                    uci set system.ntp.use_dhcp='0'
+                fi
+            else # ENABLE_LOCAL_NTP_SERVER is false
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. NTP settings (enable_server, use_dhcp, interface) will not be changed by this script."
+                # この場合、system.ntp.enable_server, system.ntp.use_dhcp, system.ntp.interface は
+                # スクリプトによって変更されません。既存の設定が維持されます。
+            fi
+        else
+            debug_log "DEBUG" "system.ntp UCI section not found. Cannot configure NTP settings."
+        fi
+    else
+        debug_log "DEBUG" "NTP pool for language '$language' not found or language.ch missing. Skipping NTP server change."
+    fi
+
+    # システムの説明と備考を設定
+    local current_description current_notes
+    current_description="$(uci get system.@system[0].description 2>/dev/null)"
+    if [ -z "$current_description" ]; then
+        uci set system.@system[0].description="Configured automatically by aios"
+    fi
+    current_notes="$(uci get system.@system[0].notes 2>/dev/null)"
+    if [ -z "$current_notes" ]; then
+
+        uci set system.@system[0].notes="Configured at $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
+    
+    uci commit system
+    # /etc/init.d/system reload
+    /etc/init.d/sysntpd restart 
+}
+
+OK_setup_location() {
+    # --- ローカルNTPサーバー機能の有効化オプション ---
+    # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
+    # この場合、system.ntp.enable_server が '1' に、system.ntp.interface が 'lan' に設定され、
+    # system.ntp.use_dhcp が '0' (DHCPからのNTPサーバーを使用しない) に設定されます。
+    # false の場合、aios は system.ntp.enable_server, system.ntp.interface, system.ntp.use_dhcp を変更しません。
+    # デフォルトは true (デバイス自身の時刻同期を行い、NTPサーバーとしても機能する)。
+    local ENABLE_LOCAL_NTP_SERVER='true' 
+    # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
+    # local ENABLE_LOCAL_NTP_SERVER='false'
 
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
         debug_log "DEBUG" "language.ch not found, skipping location setup"
