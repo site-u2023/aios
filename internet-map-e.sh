@@ -1824,7 +1824,7 @@ restore_mape() {
         debug_log "DEBUG" "Failed to remove 'map' package or package was not installed. Continuing."
     fi
     
-    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE__COMPLETE")")"
+    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE_COMPLETE")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
     printf "\n"
