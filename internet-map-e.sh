@@ -1786,8 +1786,8 @@ fi
 
 mape_display
 
-printf "\n%s\n" "$(color green "MAP-E parameters calculated successfully.")"
-printf "%s\n" "$(color yellow "Press any key to reboot the device.")"
+printf "\n%s\n" "$(color green "$(get_message MSG_MAPE_PARAMS_CALC_SUCCESS)")"
+printf "%s\n" "$(color yellow "$(get_message MSG_MAPE_APPLY_SUCCESS)")"
 read -r -n 1 -s
 printf "\n"
     
