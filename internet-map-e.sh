@@ -1602,7 +1602,7 @@ OK2_mape_config() {
     uci set network.${WANMAP}.encaplimit='ignore'
     # legacymap と tunlink はバージョン判定ロジック内で設定
 
-    # FW (ゾーン名 'wan' で動的に検索し、インターフェースを入れ替え)
+    # FW (ゾーン名 'wan' で動的に検索し、インターフェースを適切に設定)
     local wan_firewall_zone_name='wan' # WANが属するファイアウォールゾーンの名前
     local firewall_zone_path
     
@@ -1617,16 +1617,19 @@ OK2_mape_config() {
     if [ -n "$firewall_zone_path" ]; then
         debug_log "DEBUG" "Found firewall zone '${wan_firewall_zone_name}' at UCI path ${firewall_zone_path}"
         
-        # ゾーンに関連付けられているネットワークインターフェースのリストから 'wan' を削除
-        # uci del_list は指定された値が存在する場合のみ削除するため、エラーにはなりにくい
+        # 物理 'wan' インターフェースをWANゾーンから削除 (MAP-Eでは直接使用しないため)
         uci del_list "${firewall_zone_path}.network=wan"
-        # 新しいMAP-Eインターフェースをゾーンに追加 (存在しない場合のみ追加される)
-        uci add_list "${firewall_zone_path}.network=${WANMAP}"
-        debug_log "DEBUG" "Firewall zone ${firewall_zone_path} updated to include ${WANMAP} and remove 'wan' (if existed)."
         
-        # 一般的なMAP-E設定で推奨される項目 (元のOK_mape_configにはないためコメントアウト)
-        # uci set "${firewall_zone_path}.masq='1'"
-        # uci set "${firewall_zone_path}.mtu_fix='1'"
+        # 'wan6' (IPv6ネイティブ通信用) をWANゾーンに追加 (存在すれば何もしない)
+        uci add_list "${firewall_zone_path}.network=wan6"
+        
+        # '${WANMAP}' (MAP-EトンネルのIPv4通信用) をWANゾーンに追加 (存在すれば何もしない)
+        uci add_list "${firewall_zone_path}.network=${WANMAP}"
+        
+        # MAP-Eで推奨されるファイアウォール設定を適用
+        uci set "${firewall_zone_path}.masq='1'"
+        uci set "${firewall_zone_path}.mtu_fix='1'"
+        debug_log "DEBUG" "Firewall zone ${firewall_zone_path} updated: removed 'wan' (if existed), ensured 'wan6' and '${WANMAP}' are present, set masq=1, mtu_fix=1."
     else
         debug_log "DEBUG" "Firewall zone named '${wan_firewall_zone_name}' not found. Manual firewall configuration may be required."
     fi
@@ -1645,14 +1648,14 @@ OK2_mape_config() {
         debug_log "DEBUG" "Applying OpenWrt 19 specific settings (original OK_mape_config logic)."
         # 元のOK_mape_configの通り、tunlinkのadd_listのみ実行
         uci add_list network.${WANMAP}.tunlink='wan6'
-        # 元のOK_mape_configでは、19の場合に他の設定(legacymapやdhcp.wan6.*)は行わない
+        # legacymap は map.sh (19系用) 内部で処理されるため、ここでは設定しない
     else
         # "19"でない場合 (キャッシュファイルなし、または"19"以外の内容)
         debug_log "DEBUG" "Applying OpenWrt non-19 specific settings (original OK_mape_config logic)."
         # 元のOK_mape_configの通りに設定
         uci set dhcp.wan6.interface='wan6'
         uci set dhcp.wan6.ignore='1'
-        uci set network.${WANMAP}.legacymap='1'
+        uci set network.${WANMAP}.legacymap='1' # 非19系ではここで設定 (新しいmap.shが参照)
         uci set network.${WANMAP}.tunlink='wan6'
     fi
 
