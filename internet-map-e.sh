@@ -1781,7 +1781,7 @@ internet_map_main() {
     
     reboot
 
-    return 0 # Explicitly exit with success status
+    exit 0 # Explicitly exit with success status
 }
 
 internet_map_main
