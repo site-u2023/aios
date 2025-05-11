@@ -239,18 +239,22 @@ internet_auto_config_main() {
     # --- 5. Execute Configuration Based on Type ---
     case "$connection_type" in
         "map-e")
-            debug_log "DEBUG" "MAP-E connection confirmed. Sourcing MAP-E script to execute its main function..."
+            debug_log "DEBUG" "MAP-E connection confirmed. Sourcing MAP-E script..." # ★変更箇所: メッセージ修正
             if . "$MAP_E_SCRIPT"; then
-                # If sourcing is successful, internet-map-e.sh's main function (internet_map_main)
-                # which is called at the end of internet-map-e.sh, will have executed.
-                # If internet_map_main calls 'exit', this script (internet-auto-config.sh) will also terminate.
-                debug_log "DEBUG" "MAP-E script ($MAP_E_SCRIPT_NAME) was sourced. Its internal main function should have executed."
-                # No explicit function call needed here as per user's request.
-                # The exit_code handling below might not be reached if internet-map-e.sh exits.
+                debug_log "DEBUG" "MAP-E script ($MAP_E_SCRIPT_NAME) sourced successfully." # ★変更箇所: メッセージ修正
+                if command -v internet_map_main >/dev/null 2>&1; then # ★変更箇所: internet_map_main 関数の存在確認
+                    debug_log "DEBUG" "Executing internet_map_main function from $MAP_E_SCRIPT_NAME" # ★変更箇所: 実行前ログ
+                    internet_map_main # ★変更箇所: internet_map_main 関数を明示的に呼び出す
+                    # internet_map_main 関数内で exit 0 が呼ばれるため、通常はこの後の処理には到達しない
+                else
+                    debug_log "DEBUG" "Function 'internet_map_main' not found in $MAP_E_SCRIPT_NAME." # ★変更箇所: エラーログ
+                    printf "%s\n" "$(color red "Error: Required function 'internet_map_main' not found in script '$MAP_E_SCRIPT_NAME'.")" >&2
+                    exit_code=1
+                fi
             else
                 debug_log "DEBUG" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME"
                 printf "%s\n" "$(color red "Error: Failed to load script '$MAP_E_SCRIPT_NAME'.")" >&2
-                exit_code=1 # Mark error if sourcing itself fails
+                exit_code=1 
             fi
             ;;
         "ds-lite")
@@ -279,12 +283,12 @@ internet_auto_config_main() {
         "unknown")
             debug_log "DEBUG" "Could not automatically determine the IPoE connection type for ASN $asn."
             printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn")")"
-            exit_code=1 # Mark as error because connection type is unknown
+            exit_code=1 
             ;;
         *)
             debug_log "DEBUG" "Unexpected connection type returned: $connection_type"
             printf "%s\n" "$(color red "Error: Unexpected value encountered: $connection_type")" >&2
-            exit_code=1 # Mark as error for unexpected type
+            exit_code=1 
             ;;
     esac
 
