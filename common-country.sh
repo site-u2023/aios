@@ -1067,10 +1067,17 @@ country_main() {
     fi
 
     if [ "$setup_result" -eq 0 ]; then
-        debug_log "DEBUG" "country_main() completed successfully"
+        debug_log "INFO" "Country and timezone selection completed. Applying to system configuration."
+        if command -v setup_location >/dev/null 2>&1; then
+            setup_location
+        else
+            debug_log "DEBUG" "setup_location function not found. Cannot apply system configuration."
+        fi
+        # --- setup_location 呼び出しここまで ---
+        debug_log "DEBUG" "country_main() completed successfully after attempting system setup."
         return 0
     else
-        debug_log "DEBUG" "country_main() completed with failure"
+        debug_log "DEBUG" "country_main() completed with failure. System setup not attempted."
         return 1
     fi
 }
