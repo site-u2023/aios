@@ -1067,7 +1067,7 @@ country_main() {
     fi
 
     if [ "$setup_result" -eq 0 ]; then
-        debug_log "INFO" "Country and timezone selection completed. Applying to system configuration."
+        debug_log "DEBUG" "Country and timezone selection completed. Applying to system configuration."
         if command -v setup_location >/dev/null 2>&1; then
             setup_location
         else
