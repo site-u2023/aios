@@ -963,10 +963,9 @@ try_setup_from_argument() {
 setup_location() {
     # --- ローカルNTPサーバー機能の有効化オプション ---
     # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
-    # この場合、system.ntp.interface が 'lan' に設定されます。
-    # system.ntp.enable_server (DHCP経由のNTPサーバー使用) は、aiosがNTPサーバーリストを
-    # 設定するため、このオプションの値に関わらず常に '0' (無効) になります。
-    # デフォルトは true。
+    # この場合、system.ntp.enable_server が '1' に、system.ntp.interface が 'lan' に設定されます。
+    # false の場合、aios は system.ntp.enable_server と system.ntp.interface を変更しません。
+    # デフォルトは true (デバイス自身の時刻同期を行い、NTPサーバーとしても機能する)。
     local ENABLE_LOCAL_NTP_SERVER='true' 
     # 例: LAN向けNTPサーバー機能をaiosで設定しない場合は以下のように変更
     # local ENABLE_LOCAL_NTP_SERVER='false'
@@ -1026,18 +1025,16 @@ setup_location() {
                  uci set system.ntp.enable='1'
             fi
 
-            # 2. DHCP経由のNTPサーバー使用を無効化 (常に '0' を目指す)
-            # これが「DHCPから通知されたサーバを使用はOFF」に相当します。
-            local current_ntp_enable_server
-            current_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
-            if [ "$current_ntp_enable_server" != "0" ]; then
-                debug_log "DEBUG" "Disabling 'Use NTP servers advertised by DHCP' (system.ntp.enable_server=0)"
-                uci set system.ntp.enable_server='0'
-            fi
-
-            # 3. ローカルNTPサーバー機能のオプションに応じた設定
+            # 2. ローカルNTPサーバー機能のオプションに応じた設定
             if [ "$ENABLE_LOCAL_NTP_SERVER" = "true" ]; then
-                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Configuring device as a local NTP server for LAN."
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is true. Enabling device as a local NTP server for LAN."
+                # NTPサーバー機能を有効化 (クライアントにNTPサービスを提供)
+                local current_ntp_enable_server
+                current_ntp_enable_server=$(uci get system.ntp.enable_server 2>/dev/null)
+                if [ "$current_ntp_enable_server" != "1" ]; then
+                    debug_log "DEBUG" "Enabling NTP server functionality to provide service (system.ntp.enable_server=1)"
+                    uci set system.ntp.enable_server='1'
+                fi
                 # NTPサーバーとしてLANにバインド
                 local current_ntp_interface
                 current_ntp_interface=$(uci get system.ntp.interface 2>/dev/null)
@@ -1046,11 +1043,9 @@ setup_location() {
                     uci set system.ntp.interface='lan'
                 fi
             else
-                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. aios will not change system.ntp.interface."
-                # system.ntp.interface は変更しない (ユーザー設定を尊重)
-                # もし 'false' の場合に明示的にインターフェースバインドを解除したい場合は、
-                # ここで uci set system.ntp.interface='' などを検討できますが、
-                # 現状は「変更しない」方針です。
+                debug_log "DEBUG" "ENABLE_LOCAL_NTP_SERVER is false. aios will not change system.ntp.enable_server or system.ntp.interface."
+                # system.ntp.enable_server は変更しない (ユーザー設定と前回指示を尊重)
+                # system.ntp.interface は変更しない (ユーザー設定と前回指示を尊重)
             fi
         else
             debug_log "WARN" "system.ntp UCI section not found. Cannot configure NTP settings."
