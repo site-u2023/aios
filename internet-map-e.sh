@@ -1759,14 +1759,15 @@ mape_display() {
 
 # MAP-E設定のバックアップを復元する関数
 # 戻り値:
-# 0: 1つ以上のバックアップが正常に復元された
-# 1: 復元対象のバックアップファイルが1つも見つからなかった
-# 2: 1つ以上のファイルの復元に失敗した
+# 0: 1つ以上のバックアップが正常に復元され、再起動プロセス開始
+# 1: 復元対象のバックアップファイルが1つも見つからなかった / またはその他のエラー
+# 2: 1つ以上のファイルの復元に失敗したが、処理は継続し再起動プロセス開始
 restore_mape() {
     local backup_files_restored_count=0
     local backup_files_not_found_count=0
     local restore_failed_count=0
     local total_files_to_check=0
+    local overall_restore_status=1 # 初期値を「失敗または何もせず」に設定
 
     # 対象ファイルとバックアップファイルのマッピング
     # 構造: "オリジナルファイル名:バックアップファイル名"
@@ -1777,7 +1778,7 @@ restore_mape() {
         /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.old
     "
 
-    debug_log "DEBUG" "Starting restore_mape_backup function."
+    debug_log "DEBUG" "Starting restore_mape function." # 関数名を修正
 
     # 各ファイルの復元処理
     for item in $files_to_restore; do
@@ -1792,10 +1793,8 @@ restore_mape() {
             if cp "$backup_file" "$original_file"; then
                 debug_log "DEBUG" "Successfully restored '$original_file' from '$backup_file'."
                 backup_files_restored_count=$((backup_files_restored_count + 1))
-                # バックアップファイルを削除する場合はここにコマンドを追加 (例: rm -f "$backup_file")
-                # 例: if [ "$original_file" != "/lib/netifd/proto/map.sh" ]; then rm -f "$backup_file"; fi # map.sh.old は残す場合など
             else
-                debug_log "DEBUG" "Failed to copy '$backup_file' to '$original_file'." # エラーの事実はDEBUGレベルで記録
+                debug_log "DEBUG" "Failed to copy '$backup_file' to '$original_file'."
                 restore_failed_count=$((restore_failed_count + 1))
             fi
         else
@@ -1807,32 +1806,45 @@ restore_mape() {
     debug_log "DEBUG" "Restore process summary: Total checked=$total_files_to_check, Restored=$backup_files_restored_count, Not found=$backup_files_not_found_count, Failed=$restore_failed_count."
 
     if [ "$restore_failed_count" -gt 0 ]; then
-        debug_log "DEBUG" "Restore completed with errors." # エラーの事実はDEBUGレベルで記録
-        return 2 # 1つ以上のファイルの復元に失敗
+        debug_log "DEBUG" "Restore completed with errors."
+        overall_restore_status=2 # 1つ以上のファイルの復元に失敗
     elif [ "$backup_files_restored_count" -gt 0 ]; then
         debug_log "DEBUG" "Restore completed successfully for at least one file."
-        return 0 # 1つ以上のバックアップが正常に復元された
+        overall_restore_status=0 # 1つ以上のバックアップが正常に復元された
     else
         # この分岐は backup_files_not_found_count == total_files_to_check と同義
         debug_log "DEBUG" "No backup files were found to restore."
-        return 1 # 復元対象のバックアップファイルが1つも見つからなかった
+        overall_restore_status=1 # 復元対象のバックアップファイルが1つも見つからなかった
     fi
 
-    debug_log "DEBUG" "Attempting to remove 'map' package."
-    if opkg remove map >/dev/null 2>&1; then
-        debug_log "DEBUG" "'map' package removed successfully."
-    else
-        debug_log "DEBUG" "Failed to remove 'map' package or package was not installed. Continuing."
+    # overall_restore_status が 0 (成功) または 2 (一部失敗だが復元試行はあった) の場合に後続処理を実行
+    if [ "$overall_restore_status" -eq 0 ] || [ "$overall_restore_status" -eq 2 ]; then
+        debug_log "DEBUG" "Attempting to remove 'map' package as part of restore process."
+        if opkg remove map >/dev/null 2>&1; then
+            debug_log "DEBUG" "'map' package removed successfully."
+        else
+            debug_log "DEBUG" "Failed to remove 'map' package or package was not installed. Continuing."
+        fi
+        
+        printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE_COMPLETE")")"
+        # 注意: MSG_MAPE_APPLY_SUCCESS はMAP-E設定適用成功時のメッセージです。
+        # 復元完了後の再起動を促すメッセージとしては、例えば MSG_MAPE_RESTORE_REBOOT_PROMPT のような
+        # 新しいメッセージキーを用意する方が適切かもしれません。現状はユーザー指示通り維持します。
+        printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+        read -r -n 1 -s
+        printf "\n"
+        
+        debug_log "DEBUG" "Rebooting system after restore."
+        reboot
+        return 0 # reboot が呼ばれるので、ここには到達しないはずだが念のため
+    elif [ "$overall_restore_status" -eq 1 ]; then
+        # バックアップファイルが見つからなかった場合
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_NO_BACKUP_FOUND")")" # 新しいメッセージキー
+        return 1 # 失敗として返す
     fi
     
-    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE_COMPLETE")")"
-    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
-    read -r -n 1 -s
-    printf "\n"
-    
-    reboot
-
-    exit 0 # Explicitly exit with success status 
+    # 通常はここまで来ないはずだが、万が一のためのフォールバック
+    return "$overall_restore_status"
 }
 
 internet_map_main() {
