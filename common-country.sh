@@ -965,9 +965,9 @@ setup_location() {
     # true に設定すると、このデバイスがLAN内の他のデバイスにNTPサービスを提供します。
     # system.ntp.interface が 'lan' に設定されます。
     # デフォルトは false (デバイス自身の時刻同期のみ行い、NTPサーバーとしては機能しない)。
-    local ENABLE_LOCAL_NTP_SERVER='false' 
+    # local ENABLE_LOCAL_NTP_SERVER='false' 
     # 例: LAN向けNTPサーバー機能を有効にする場合は以下のように変更
-    # local ENABLE_LOCAL_NTP_SERVER='true'
+    local ENABLE_LOCAL_NTP_SERVER='true'
     # --- ローカルNTPサーバー機能の有効化オプションここまで ---
 
     if [ ! -f "${CACHE_DIR}/language.ch" ]; then
