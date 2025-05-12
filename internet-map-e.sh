@@ -1,7 +1,7 @@
 #!/bin/sh
 # this script based https://github.com/missing233/map-e
 
-SCRIPT_VERSION="2025.05.12-02-01"
+SCRIPT_VERSION="2025.05.12-02-02"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
