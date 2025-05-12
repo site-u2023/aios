@@ -136,7 +136,7 @@ update_package_list() {
     local retry=0
 
     while [ $retry -lt "${WGET_MAX_RETRIES:-5}" ]; do
-        update_status=0
+        update_status=0 # Reset status for each retry attempt
 
         if [ "$PACKAGE_MANAGER" = "opkg" ]; then
             # --- opkgは従来通り直列処理 ---
@@ -159,39 +159,85 @@ update_package_list() {
             apk_repos=$(grep -v '^[[:space:]]*#' /etc/apk/repositories 2>/dev/null | grep -v '^[[:space:]]*$')
             for repo in $apk_repos; do
                 (
+                    # Ensure the log directory exists
+                    mkdir -p "$LOG_DIR"
                     debug_log "DEBUG" "Running apk update --repository $repo"
                     apk update --repository "$repo" >> "${LOG_DIR}/apk_update_$(echo "$repo" | md5sum | awk '{print $1}').log" 2>&1
                 ) &
                 pids="$pids $!"
                 parallel_count=$((parallel_count + 1))
+                
                 # 並列数制御
                 if [ "$parallel_count" -ge "${MAX_PARALLEL_TASKS:-2}" ]; then
-                    wait $(echo "$pids" | awk '{print $1}')
-                    pids=$(echo "$pids" | awk '{$1=""; print $0}')
-                    parallel_count=$((parallel_count - 1))
+                    local pid_to_wait
+                    pid_to_wait=$(echo "$pids" | awk '{print $1}') # Get the first PID
+
+                    if [ -n "$pid_to_wait" ]; then
+                        debug_log "DEBUG" "Max parallel tasks (${MAX_PARALLEL_TASKS:-2}) reached. Waiting for PID: $pid_to_wait from pids: [$pids]"
+                        if ! wait "$pid_to_wait"; then
+                            debug_log "ERROR" "Background 'apk update' (PID: $pid_to_wait) failed during concurrency control."
+                            update_status=1 # Record failure
+                        else
+                            debug_log "DEBUG" "Background 'apk update' (PID: $pid_to_wait) completed successfully during concurrency control."
+                        fi
+                        
+                        # Remove the first PID from the list.
+                        pids=$(echo "$pids" | awk '{$1=""; print $0; exit}')
+                        pids=$(echo $pids) # Normalize spaces by re-evaluating the string
+                        debug_log "DEBUG" "PID $pid_to_wait processed. Remaining pids: [$pids]"
+                        
+                        parallel_count=$((parallel_count - 1))
+                    else
+                        debug_log "WARN" "Concurrency control: Max tasks reached, but pid_to_wait is empty. Pids: [$pids], Count: $parallel_count."
+                        # Decrement count anyway to prevent potential infinite loop if state is inconsistent,
+                        # but this situation ideally shouldn't happen.
+                        parallel_count=$((parallel_count - 1))
+                    fi
+                    # Safety for parallel_count
+                    if [ $parallel_count -lt 0 ]; then parallel_count=0; fi
                 fi
             done
+            
             # 残りを待つ
+            debug_log "DEBUG" "Waiting for remaining PIDs: [$pids]"
             for pid in $pids; do
-                wait "$pid" || update_status=1
+                if [ -n "$pid" ]; then # Ensure pid is not empty
+                    if ! wait "$pid"; then
+                         debug_log "ERROR" "Remaining background 'apk update' (PID: $pid) failed."
+                         update_status=1
+                    else
+                         debug_log "DEBUG" "Remaining background 'apk update' (PID: $pid) completed successfully."
+                    fi
+                fi
             done
-            # パッケージリストキャッシュ生成
-            apk search > "$package_cache" 2>/dev/null
-            if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
-                update_status=1
+            
+            # パッケージリストキャッシュ生成 (only if all updates seemed to succeed so far)
+            if [ $update_status -eq 0 ]; then
+                debug_log "DEBUG" "All parallel apk updates completed. Generating package list cache."
+                apk search > "$package_cache" 2>/dev/null
+                if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
+                    debug_log "ERROR" "Failed to generate package list cache using 'apk search' or cache is empty."
+                    update_status=1
+                fi
+            else
+                debug_log "DEBUG" "Skipping 'apk search' due to previous errors (update_status=$update_status)."
             fi
 
         else
+            debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
             update_status=1
         fi
 
         # 成功判定
         if [ $update_status -eq 0 ]; then
-            break
+            debug_log "DEBUG" "Package list update attempt successful."
+            break # Exit retry loop
         else
             retry=$((retry + 1))
-            debug_log "DEBUG" "Update failed, retrying ($retry/${WGET_MAX_RETRIES:-5})"
-            sleep 1
+            debug_log "DEBUG" "Update failed on attempt, retrying ($retry/${WGET_MAX_RETRIES:-5}). Current update_status: $update_status"
+            if [ $retry -lt "${WGET_MAX_RETRIES:-5}" ]; then
+                sleep 1
+            fi
         fi
     done
 
@@ -200,14 +246,20 @@ update_package_list() {
         [ "$silent_mode" != "yes" ] && stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
         touch "$update_cache" 2>/dev/null
         debug_log "DEBUG" "Cache timestamp updated: $update_cache"
-        [ -f "$package_cache" ] && [ -s "$package_cache" ] && debug_log "DEBUG" "Package list cache successfully created: $package_cache"
+        if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
+            debug_log "DEBUG" "Package list cache successfully created: $package_cache"
+        else
+            # This case might be an error if apk search failed silently or opkg list produced empty
+            debug_log "WARN" "Package list cache ($package_cache) is missing or empty despite update_status being 0."
+            # Consider if this should set update_status=1 here for a final check
+        fi
     else
         if [ "$silent_mode" != "yes" ]; then
             stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         else
             printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         fi
-        debug_log "DEBUG" "Failed to update package lists after retries"
+        debug_log "ERROR" "Failed to update package lists after all retries. Final update_status: $update_status"
         rm -f "$update_cache" 2>/dev/null
     fi
 
