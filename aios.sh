@@ -2218,7 +2218,7 @@ setup_password_hostname() {
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
         printf "\n%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
-        printf "\n"
+        # printf "\n"
         if [ -z "$new_hostname" ]; then
             :
         else
@@ -2227,8 +2227,10 @@ setup_password_hostname() {
             echo "$new_hostname" > /etc/hostname 2>/dev/null
             if [ $? -eq 0 ]; then
                 printf "%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
+                printf "\n"
             else
                 printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
+                printf "\n"
             fi
         fi
     fi
