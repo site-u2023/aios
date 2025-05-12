@@ -1461,6 +1461,30 @@ NG_mape_config() {
     return 0
 }
 
+# prompt_wan6_prefix_configuration_method (仮の関数名)
+#
+# Prompts the user to determine how the wan6 IPv6 prefix should be configured,
+# specifically whether 'network.wan6.ip6prefix' should be manually set by this script.
+# This decision is based on the user's ISP contract type (speed, presence of Hikari Denwa),
+# as these factors typically influence whether IPv6 prefixes are delegated via DHCPv6-PD
+# or if a static /64 prefix is provided via RA.
+#
+# The general guideline provided to the user for selection is summarized as follows:
+#
+# | No. | ISP Speed (Approx) | Hikari Denwa Contract | WAN6 IPv6 Prefix Acquisition (Typical Assumption)      | Manual 'network.wan6.ip6prefix' Setting by Script?     |
+# |:---:|:-------------------|:----------------------|:-------------------------------------------------------|:-------------------------------------------------------|
+# |  1  | 1Gbps              | No                    | ISP provides /64 via RA (No or limited DHCPv6-PD).     | YES (Script will set '${CE_NETWORK_PREFIX_FOR_WAN6}::/64'). |
+# |  2  | 1Gbps              | Yes                   | ISP delegates /56 (or similar) via DHCPv6-PD.          | NO (Script expects prefix to be acquired via DHCPv6-PD). |
+# |  3  | 10Gbps             | No                    | ISP delegates /56 (or similar) via DHCPv6-PD.          | NO (Script expects prefix to be acquired via DHCPv6-PD). |
+# |  4  | 10Gbps             | Yes                   | ISP delegates /56 (or similar) via DHCPv6-PD.          | NO (Script expects prefix to be acquired via DHCPv6-PD). |
+#
+# The user will be asked if their situation corresponds to No.1.
+# Based on their 'y' or 'n' response, a global variable (e.g., USER_REQUESTS_MANUAL_WAN6_PREFIX)
+# will be set. The mape_config() function will then use this variable to conditionally
+# execute 'uci set network.wan6.ip6prefix...' or 'uci delete network.wan6.ip6prefix'.
+#
+# This function takes no arguments.
+# It sets a global variable reflecting the user's choice.
 mape_config() {
 
     local WANMAP='wanmap' # 設定セクション名
