@@ -1,7 +1,7 @@
 #!/bin/sh
 # this script based https://github.com/missing233/map-e
 
-SCRIPT_VERSION="2025.05.12-01-01"
+SCRIPT_VERSION="2025.05.12-02-00"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
@@ -745,6 +745,8 @@ OK_mape_mold() {
         return 1
     fi
 
+    debug_log "DEBUG" "IPv6 prefix obtained: $NEW_IP6_PREFIX"
+    
     # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant, space output) ---
     local ipv6_addr="$NEW_IP6_PREFIX"
     local h0_str h1_str h2_str h3_str # Shell variables to hold hex strings
