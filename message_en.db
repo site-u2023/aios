@@ -118,6 +118,8 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 # aios.sh
 en|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters{;}
 en|MSG_ENTER_PASSWORD=Enter new password{;}
+en|MSG_CONFIRM_PASSWORD=Confirm new password{;}
+
 en|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice
 en|MSG_PASSWORD_SET_OK=Password set successfully
 
