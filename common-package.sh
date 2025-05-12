@@ -152,16 +152,105 @@ update_package_list() {
             fi
 
         elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-            # --- apk: 並列処理を止め、単一の apk update コマンドに変更 ---
-            debug_log "DEBUG" "Running apk update (single command for all repositories)"
+            # --- apk: リポジトリごとに並列処理 (改善版) ---
+            local apk_repos repo_url
+            local pids="" # 実行中のバックグラウンドPIDのリスト (スペース区切り)
+            local failed_pids="" # 失敗したPIDのリスト (スペース区切り)
+            local parallel_count=0
+
             # Ensure the log directory exists
             mkdir -p "$LOG_DIR"
-            apk update > "${LOG_DIR}/apk_update_all.log" 2>&1
-            if [ $? -ne 0 ]; then
-                debug_log "ERROR" "apk update (all repositories) failed."
-                update_status=1
+            # この試行で使われるリポジトリ別ログを事前に削除 (前回の実行分など)
+            # ファイル名パターンを具体的に指定して誤削除を防ぐ
+            find "$LOG_DIR" -name "apk_update_repo_*.log" -type f -delete 2>/dev/null
+
+            apk_repos=$(grep -v '^[[:space:]]*#' /etc/apk/repositories 2>/dev/null | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+            apk_repos=$(echo $apk_repos) # 余分なスペースをトリム
+
+            if [ -z "$apk_repos" ]; then
+                debug_log "DEBUG" "No repositories found or /etc/apk/repositories is empty. Skipping apk update specific steps."
+                # リポジトリがなければ更新は成功とも失敗とも言えないが、リストは空になる可能性がある
+                # update_status は 0 のままにして、apk search が空のリストを作るか確認する
+                # もし package_cache が必須なら、ここで update_status=1 にすることも検討
             else
-                debug_log "DEBUG" "apk update (all repositories) succeeded. Generating package list cache."
+                debug_log "DEBUG" "Attempting parallel apk update for repositories: $apk_repos"
+            fi
+
+            for repo_url in $apk_repos; do
+                # リポジトリURLからログファイル名に適したハッシュを生成
+                # URLに特殊文字が含まれる可能性を考慮し、より安全なファイル名にする
+                local repo_hash=$(echo "$repo_url" | md5sum | awk '{print $1}')
+                local repo_log_file="${LOG_DIR}/apk_update_repo_${repo_hash}.log"
+                
+                (
+                    # サブシェル内でのデバッグログは親シェルには直接見えないが、ファイルには記録される
+                    echo "DEBUG Subshell: Starting apk update --repository \"$repo_url\" > $repo_log_file" >> "$repo_log_file" # ログファイルにも記録
+                    apk update --repository "$repo_url" >> "$repo_log_file" 2>&1
+                ) &
+                local current_pid=$!
+                pids="$pids $current_pid" # PIDをリストに追加 (先頭にスペースが入る可能性あり)
+                pids=$(echo $pids) # スペースを正規化
+                debug_log "DEBUG" "Launched PID $current_pid for repo: $repo_url. Log: $repo_log_file"
+                parallel_count=$((parallel_count + 1))
+
+                if [ "$parallel_count" -ge "${MAX_PARALLEL_TASKS:-2}" ]; then
+                    # pidsリストの先頭のPIDを取得して待つ
+                    local pid_to_wait=$(echo "$pids" | awk '{print $1}')
+                    if [ -n "$pid_to_wait" ]; then
+                        debug_log "DEBUG" "Max parallel tasks (${MAX_PARALLEL_TASKS:-2}) reached. Waiting for oldest PID: $pid_to_wait from list [$pids]"
+                        
+                        if wait "$pid_to_wait"; then
+                            debug_log "DEBUG" "PID $pid_to_wait (repo update) completed successfully."
+                        else
+                            debug_log "ERROR" "PID $pid_to_wait (repo update) failed. Review its log (file name hashed from repo URL)."
+                            failed_pids="$failed_pids $pid_to_wait" # 失敗リストに追加
+                            failed_pids=$(echo $failed_pids) # スペース正規化
+                        fi
+                        # 処理したPIDをリストから削除 (先頭を削除)
+                        pids=$(echo "$pids" | sed "s~^ *${pid_to_wait}[^0-9]*~~") # PIDに続く非数字も削除して次のPIDを処理
+                        pids=$(echo $pids) # スペース正規化
+                        parallel_count=$((parallel_count - 1))
+                    else
+                        debug_log "WARN" "Max parallel tasks reached, but no PID found to wait for in list: [$pids]. Decrementing count."
+                        # この状況は通常起こらないはずだが、安全のためカウントを減らす
+                        parallel_count=$((parallel_count - 1))
+                        if [ $parallel_count -lt 0 ]; then parallel_count=0; fi
+                    fi
+                fi
+            done
+
+            # 残りのプロセスを待つ
+            debug_log "DEBUG" "Waiting for remaining PIDs: [$pids]"
+            for pid_to_wait in $pids; do
+                # ループ前にpidsが空ならこのループは実行されない
+                # awkで処理しているため、pid_to_waitが空になることは基本ないはず
+                if wait "$pid_to_wait"; then
+                    debug_log "DEBUG" "Remaining PID $pid_to_wait (repo update) completed successfully."
+                else
+                    debug_log "ERROR" "Remaining PID $pid_to_wait (repo update) failed. Review its log (file name hashed from repo URL)."
+                    failed_pids="$failed_pids $pid_to_wait" # 失敗リストに追加
+                    failed_pids=$(echo $failed_pids) # スペース正規化
+                fi
+            done
+
+            # 失敗したPIDがあるか確認
+            if [ -n "$failed_pids" ]; then
+                debug_log "ERROR" "One or more 'apk update --repository' commands failed (PIDs:$failed_pids). Skipping 'apk search'."
+                update_status=1
+            elif [ -z "$apk_repos" ]; then
+                 # リポジトリが元々空だった場合、apk search は実行するが、結果は空になるはず
+                 debug_log "DEBUG" "No repositories were configured. 'apk search' will likely produce an empty list."
+                 apk search > "$package_cache" 2>/dev/null
+                 if [ $? -ne 0 ]; then # apk search 自体の失敗はエラー
+                    debug_log "ERROR" "'apk search' command failed even with no repositories."
+                    update_status=1
+                 elif [ -s "$package_cache" ]; then # 空のはずが、何か入っていたら警告
+                    debug_log "WARN" "'apk search' produced a non-empty package list, but no repositories were defined."
+                 else
+                    debug_log "DEBUG" "Package list cache is empty as expected (no repositories)."
+                 fi
+            else
+                debug_log "DEBUG" "All parallel 'apk update --repository' commands completed successfully. Generating package list cache."
                 apk search > "$package_cache" 2>/dev/null
                 if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
                     debug_log "ERROR" "Failed to generate package list cache using 'apk search' or cache is empty."
@@ -170,6 +259,7 @@ update_package_list() {
                     debug_log "DEBUG" "Package list cache generated successfully by 'apk search'."
                 fi
             fi
+
         else
             debug_log "ERROR" "Unknown package manager: $PACKAGE_MANAGER"
             update_status=1
@@ -177,7 +267,7 @@ update_package_list() {
 
         # 成功判定
         if [ $update_status -eq 0 ]; then
-            debug_log "DEBUG" "Package list update attempt successful."
+            debug_log "DEBUG" "Package list update attempt successful this round."
             break # Exit retry loop
         else
             retry=$((retry + 1))
@@ -194,9 +284,16 @@ update_package_list() {
         touch "$update_cache" 2>/dev/null
         debug_log "DEBUG" "Cache timestamp updated: $update_cache"
         if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
-            debug_log "DEBUG" "Package list cache successfully created: $package_cache"
-        else
-            debug_log "WARN" "Package list cache ($package_cache) is missing or empty despite update_status being 0."
+            debug_log "DEBUG" "Package list cache successfully created/updated: $package_cache"
+        elif [ -f "$package_cache" ]; then # ファイルはあるが空の場合
+             if [ -n "$apk_repos" ]; then # リポジトリがあったのに空なら警告
+                debug_log "WARN" "Package list cache ($package_cache) is empty, though update was marked successful. This might be an issue if repositories were expected."
+             else # リポジトリがなかったなら空で正常
+                debug_log "DEBUG" "Package list cache ($package_cache) is empty, as expected (no repositories)."
+             fi
+        else # ファイル自体がない
+            debug_log "ERROR" "Package list cache ($package_cache) was NOT created, though update was marked successful. This is an issue."
+            # この場合、update_status を 1 にすべきかもしれないが、ループは抜けている
         fi
     else
         if [ "$silent_mode" != "yes" ]; then
