@@ -1589,10 +1589,9 @@ mape_config() {
 }
 
 check_pd() {
-    local max_wait_seconds=60
-    local interval_seconds=5
+    local max_wait_seconds=45
+    local interval_seconds=3
     local elapsed_seconds=0
-    # local pd_status="not_acquired" # この変数は使用されていないためコメントアウトまたは削除を検討
     local current_delegated_prefix=""
 
     # NET_IF6 の存在チェック
@@ -1615,9 +1614,7 @@ check_pd() {
 
     while [ "$elapsed_seconds" -lt "$max_wait_seconds" ]; do
         network_get_prefix6 current_delegated_prefix "${NET_IF6}"
-
         if [ -n "$current_delegated_prefix" ]; then
-            # pd_status="acquired_auto" # この変数は使用されていないためコメントアウトまたは削除を検討
             debug_log "DEBUG" "check_pd: PD acquired automatically on '${NET_IF6}': ${current_delegated_prefix}"
             stop_spinner "$(get_message "MSG_PD_ACQUIRED")" "success" # 自動PD成功時のスピナー停止
             return 0
@@ -1660,19 +1657,6 @@ check_pd() {
         fi
         return 3
     fi
-}
-
-OK_check_pd() {
-
-    network_get_prefix6 NET_PFX6 "${NET_IF6}"
-    echo "${NET_PFX6}"
- 
-    # Persistent static configuration
-    uci get network.wan6.ip6prefix
-
-    uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
-    uci commit network
-
 }
 
 replace_map_sh() {
@@ -1752,46 +1736,6 @@ replace_map_sh() {
     fi
 
     printf "\n"
-}
-
-OK_replace_map_sh() {
-    local proto_script_path="/lib/netifd/proto/map.sh"
-    local backup_script_path="${proto_script_path}.bak"
-    local osversion_file="${CACHE_DIR}/osversion.ch"
-    local osversion=""
-    local source_url=""
-
-    # 1. OSバージョン取得
-    if [ -f "$osversion_file" ]; then
-        osversion=$(cat "$osversion_file")
-        debug_log "DEBUG" "OS Version read from cache: $osversion"
-    fi
-
-    # 2. ソースURL決定
-    # osversion の内容が "19" で始まるか確認 (例: "19.07.7")
-    if echo "$osversion" | grep -q "^19"; then
-        source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.19"
-    else
-        # osversionが空(ファイル無し)の場合や、"19"で始まらない場合はこちら
-        source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.new"
-    fi
-
-    # 3. バックアップ作成 (失敗しても処理は続行、メッセージなし)
-    if [ -f "$proto_script_path" ]; then
-        cp "$proto_script_path" "$backup_script_path" 2>/dev/null # エラー出力抑制
-    fi
-
-    # 4. 新しいスクリプトをダウンロードして配置
-    if wget --no-check-certificate -q -O "$proto_script_path" "$source_url"; then
-        # 5. 実行権限を付与
-        if chmod +x "$proto_script_path"; then
-            return 0 # 成功
-        else
-            return 1 # 権限付与失敗
-        fi
-    else
-        return 1 # ダウンロード失敗
-    fi
 }
 
 # MAP-E設定情報を表示する関数
