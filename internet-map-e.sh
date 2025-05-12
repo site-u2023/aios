@@ -1678,51 +1678,67 @@ replace_map_sh() {
     local source_url=""
     local wget_rc
     local chmod_rc
+    local ip_type_file="${CACHE_DIR}/ip_type.ch" # ip_type.ch のパス
+    local wget_ip_opt="" # wget に渡すIPオプション用変数
 
     debug_log "DEBUG" "replace_map_sh: Function started."
 
-    # 1. OSバージョン取得
+    # 1. OSバージョン取得 (既存のまま)
     if [ -f "$osversion_file" ]; then
         osversion=$(cat "$osversion_file")
         debug_log "DEBUG" "replace_map_sh: OS Version read from cache: $osversion"
     else
         debug_log "DEBUG" "replace_map_sh: OS version cache file not found: $osversion_file. Proceeding with default."
-        osversion="" # 明示的に空にしておく
+        osversion=""
     fi
 
-    # 2. ソースURL決定
-    # osversion の内容が "19" で始まるか確認 (例: "19.07.7")
+    # 2. ソースURL決定 (既存のまま)
     if echo "$osversion" | grep -q "^19"; then
         source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.19"
     else
-        # osversionが空(ファイル無し)の場合や、"19"で始まらない場合はこちら
         source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.new"
     fi
     debug_log "DEBUG" "replace_map_sh: Determined source URL for download: $source_url"
 
-    # 3. バックアップ作成 (失敗しても処理は続行、メッセージなし)
+    # 3. バックアップ作成 (既存のまま)
     if [ -f "$proto_script_path" ]; then
         debug_log "DEBUG" "replace_map_sh: Attempting to back up '$proto_script_path' to '$backup_script_path'."
-        cp "$proto_script_path" "$backup_script_path" 2>/dev/null # エラー出力抑制は維持
+        cp "$proto_script_path" "$backup_script_path" 2>/dev/null
         if [ $? -eq 0 ]; then
             debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' successful."
         else
-            # cpが失敗するケースは稀だが、念のためログ
-            debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' failed. This might be okay if permissions are restrictive but script continues."
+            debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' failed."
         fi
     else
-        debug_log "DEBUG" "replace_map_sh: Original script '$proto_script_path' not found, skipping backup (first run or script removed)."
+        debug_log "DEBUG" "replace_map_sh: Original script '$proto_script_path' not found, skipping backup."
     fi
 
+    # ▼▼▼【改善案】aios.sh の download_fetch_file に倣い、ip_type.ch から wget オプションを取得 ▼▼▼
+    if [ ! -f "$ip_type_file" ]; then
+        debug_log "DEBUG" "replace_map_sh: Network check file '$ip_type_file' not found. Cannot determine wget IP option." >&2
+        return 1 # ip_type.ch がなければ失敗
+    fi
+    wget_ip_opt=$(cat "$ip_type_file" 2>/dev/null)
+    if [ -z "$wget_ip_opt" ] || [ "$wget_ip_opt" = "unknown" ]; then
+        debug_log "DEBUG" "replace_map_sh: Network connectivity for wget is unknown or not established (read from '$ip_type_file'). Using no IP-specific option." >&2
+        wget_ip_opt="" # 不明な場合はIPオプションなしで試行 (またはエラーにする場合は return 1)
+    else
+        debug_log "DEBUG" "replace_map_sh: Using wget IP option '$wget_ip_opt' (read from '$ip_type_file')."
+    fi
+    # ▲▲▲【改善案】ここまで ▲▲▲
+
     # 4. 新しいスクリプトをダウンロードして配置
-    debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to '$proto_script_path'."
-    wget --no-check-certificate -q -O "$proto_script_path" "$source_url"
+    debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to '$proto_script_path' with IP option: '${wget_ip_opt:-[none]}'."
+    # wget コマンドに $wget_ip_opt を追加 (空の場合は何も追加されない)
+    # WGET_TIMEOUT と WGET_MAX_RETRIES も aios.sh のグローバル変数から取得して使用することを検討 (download_fetch_file 参照)
+    # ここではシンプルにIPオプションのみ追加
+    wget --no-check-certificate ${wget_ip_opt} -O "$proto_script_path" "$source_url"
     wget_rc=$?
     debug_log "DEBUG" "replace_map_sh: wget command finished. Exit code: $wget_rc"
 
     if [ "$wget_rc" -eq 0 ]; then
         debug_log "DEBUG" "replace_map_sh: Download successful: '$proto_script_path' has been updated/created."
-        # 5. 実行権限を付与
+        # 5. 実行権限を付与 (既存のまま)
         debug_log "DEBUG" "replace_map_sh: Attempting to set execute permission on '$proto_script_path'."
         chmod +x "$proto_script_path"
         chmod_rc=$?
@@ -1737,7 +1753,7 @@ replace_map_sh() {
             return 1 # 権限付与失敗
         fi
     else
-        debug_log "DEBUG" "replace_map_sh: Download failed from '$source_url'."
+        debug_log "DEBUG" "replace_map_sh: Download failed from '$source_url'. wget exit code: $wget_rc"
         debug_log "DEBUG" "replace_map_sh: Function finished with error (wget failed)."
         return 1 # ダウンロード失敗
     fi
