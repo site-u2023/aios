@@ -1727,10 +1727,9 @@ replace_map_sh() {
                 debug_log "DEBUG" "replace_map_sh: Execute permission set successfully for '$proto_script_path'."
                 debug_log "DEBUG" "replace_map_sh: Function finished successfully."
                 
-                # 5. 成功メッセージを英語で表示 (get_message を使用)
                 # ユーザーは事前に MSG_MAP_SH_UPDATE_SUCCESS キーとその英語の値を message_en.db 等に定義する必要があります。
                 if type get_message > /dev/null 2>&1; then
-                    echo "$(get_message "MSG_MAP_SH_UPDATE_SUCCESS")"
+                    printf "%s\n" "$(color green "$(get_message "MSG_MAP_SH_UPDATE_SUCCESS")")"
                 fi
                 return 0 # 全て成功
             else
