@@ -1556,27 +1556,19 @@ identify_isp() {
     local prefix31="$1"
     local prefix38="$2"
     
-    # 引数チェック
+    # 引数チェック - 引数がない場合はグローバル変数を使用
     if [ -z "$prefix31" ] || [ -z "$prefix38" ]; then
-        # グローバル変数から取得を試みる
-        if [ -n "$PREFIX31" ] && [ -n "$PREFIX38" ]; then
-            debug_log "DEBUG" "identify_isp: Using global PREFIX31=$PREFIX31 and PREFIX38=$PREFIX38"
-            prefix31="$PREFIX31"
-            prefix38="$PREFIX38"
-        else
-            debug_log "ERROR" "identify_isp: No valid prefix values available"
-            echo "Unknown ISP"
-            return 1
-        fi
+        debug_log "DEBUG" "identify_isp: No arguments provided, using global PREFIX31 and PREFIX38"
+        prefix31="${PREFIX31:-0}"
+        prefix38="${PREFIX38:-0}"
     fi
     
-    # 数値チェック
-    if ! [ "$prefix31" -eq "$prefix31" ] 2>/dev/null || ! [ "$prefix38" -eq "$prefix38" ] 2>/dev/null; then
-        debug_log "ERROR" "identify_isp: Invalid number in prefix31=$prefix31 or prefix38=$prefix38"
-        echo "Unknown ISP"
-        return 1
+    # ゼロ値チェック - デバッグ用
+    if [ "$prefix31" = "0" ] && [ "$prefix38" = "0" ]; then
+        debug_log "WARNING" "identify_isp: Both prefix31 and prefix38 are zero - possible parsing error"
     fi
     
+    # プロバイダー識別ロジック
     if [ "$prefix31" -ge 604240512 ] && [ "$prefix31" -lt 604240520 ]; then
         echo "OCN"
     elif [ "$prefix31" -ge 604512272 ] && [ "$prefix31" -lt 604512276 ]; then
