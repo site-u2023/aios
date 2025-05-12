@@ -1240,7 +1240,7 @@ mape_display() {
     echo ""
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
+    echo "  CE: $CE" # "  CE IPv6アドレス: $CE"
     echo "  IPv4 Address: $IPV4" # "  IPv4アドレス: $IPV4"
     echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
 
