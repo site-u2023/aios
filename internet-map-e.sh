@@ -1602,7 +1602,6 @@ check_pd() {
     fi
 
     # NEW_IP6_PREFIX (現在のWAN側IPv6アドレス) の表示準備
-    # 値が空の場合はスピナーメッセージ内で表示されないように調整
     local display_wan_ip=""
     if [ -n "$NEW_IP6_PREFIX" ]; then
         display_wan_ip="$NEW_IP6_PREFIX"
@@ -1610,9 +1609,10 @@ check_pd() {
         display_wan_ip="N/A" # もしNEW_IP6_PREFIXが空の場合の表示
     fi
 
-    start_spinner "$(get_message "MSG_PD_CHECKING" "if_name=$NET_IF6" "wan_ip=$display_wan_ip")"
+    # MSG_PD_CHECKING を使用し、{p} に現在のWAN IP ($display_wan_ip) を渡す
+    start_spinner "$(get_message "MSG_PD_CHECKING" "p=$display_wan_ip")"
 
-    debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Current WAN IP: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
+    debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Current WAN IP for MSG_PD_CHECKING: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
 
     while [ "$elapsed_seconds" -lt "$max_wait_seconds" ]; do
         # DHCPv6-PDで委譲されたプレフィックスを取得試行
@@ -1621,9 +1621,7 @@ check_pd() {
         if [ -n "$current_delegated_prefix" ]; then
             pd_status="acquired"
             debug_log "DEBUG" "check_pd: PD acquired on '${NET_IF6}': ${current_delegated_prefix}"
-            stop_spinner "$(get_message "MSG_PD_ACQUIRED" "p=$current_delegated_prefix")" "success"
-            # ユーザー指示により、取得したプレフィックスを標準出力
-            echo "${current_delegated_prefix}"
+            stop_spinner "$(get_message "MSG_PD_ACQUIRED")" "success"
             break
         fi
 
@@ -1637,9 +1635,8 @@ check_pd() {
     else
         # PD取得タイムアウト
         debug_log "DEBUG" "check_pd: PD acquisition timed out on '${NET_IF6}' after ${max_wait_seconds} seconds."
-        # ループ内でスピナーが停止していなければ（つまりタイムアウトした場合）、ここで停止
-        if [ -n "$SPINNER_PID" ]; then # SPINNER_PID は aios.sh の start_spinner で設定されるグローバル変数と仮定
-            stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "failure"
+        if [ -n "$SPINNER_PID" ]; then
+            stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "success"
         fi
 
         debug_log "DEBUG" "check_pd: Attempting to set manual prefix using IPV6PREFIX."
