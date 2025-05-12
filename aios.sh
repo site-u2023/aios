@@ -276,6 +276,13 @@ into_memory_message() {
     MSG_MEMORY=""
 
     # 基本メッセージの設定
+
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_CONFIRM_PASSWORDM=Confirm new password{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
+    
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_START=Downloading essential files"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully in {s} seconds"$'\n'
@@ -285,11 +292,6 @@ into_memory_message() {
     MSG_MEMORY="${MSG_MEMORY}${lang}|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared"$'\n'
-
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters{;}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
 
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_HOSTNAME_SET=Set hostname{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_HOSTNAME=Enter new hostname{;}"$'\n'
