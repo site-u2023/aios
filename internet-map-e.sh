@@ -1458,7 +1458,7 @@ NG_mape_config() {
     return 0
 }
 
-map_config() {
+mape_config() {
 
     local WANMAP='wanmap' # 設定セクション名
     local wan_firewall_zone_name='wan'
