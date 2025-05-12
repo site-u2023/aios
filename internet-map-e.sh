@@ -1,5 +1,5 @@
-#!/bin/sh
-# this script based https://github.com/missing233/map-e
+#!/bin/ash
+# this script based http://ipv4.web.fc2.com/map-e.html
 
 SCRIPT_VERSION="2025.05.12-02-02"
 
@@ -1540,16 +1540,19 @@ OK_mape_display() {
 
 # MAP-E設定情報を表示する関数
 mape_display() {
+    
+    printf "\n"
+    printf "%s\n" "$(color cyan "config-softwire: Powered by missing233")"
 
     printf "\n"
-    printf "%s\n" "$(color green "Prefix Information:")" # "プレフィックス情報:"
+    printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
     printf "  IPv6 Prefix: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     printf "  CE IPv6 Address: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
     printf "  IPv4 Address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
     printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
 
     printf "\n"
-    printf "%s\n" "$(color green "OpenWrt Configuration Values:")" # "OpenWrt設定値:"
+    printf "%s\n" "$(color blue "OpenWrt Configuration Values:")" # "OpenWrt設定値:"
     printf "  option peeraddr '%s'\n" "$BR" # BRが空の場合もあるためクォート
     printf "  option ipaddr %s\n" "$IPV4"
     printf "  option ip4prefixlen '%s'\n" "$IP4PREFIXLEN"
@@ -1570,12 +1573,12 @@ mape_display() {
     debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start_A1=$port_start_for_A1" 
 
     printf "\n"
-    printf "%s\n" "$(color green "Port Information:")" # "ポート情報:"
+    printf "%s\n" "$(color blue "Port Information:")" # "ポート情報:"
     printf "  Available Ports: %s\n" "$total_ports" # "  利用可能なポート数: $total_ports"
 
     # ポート範囲を表示（PORTSをバッファリングして最適化）
     printf "\n"
-    printf "%s\n" "$(color green "Port Ranges:")" # "ポート範囲:"
+    printf "%s\n" "$(color blue "Port Ranges:")" # "ポート範囲:"
     
     # PORTSが既にmape_mold()で計算済みかつ正常な場合は、それを表示
     if [ -n "$PORTS" ]; then
