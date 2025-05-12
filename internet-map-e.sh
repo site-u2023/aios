@@ -1592,12 +1592,13 @@ check_pd() {
     local max_wait_seconds=60
     local interval_seconds=5
     local elapsed_seconds=0
-    local pd_status="not_acquired" # acquired_auto, not_acquired
+    # local pd_status="not_acquired" # この変数は使用されていないためコメントアウトまたは削除を検討
     local current_delegated_prefix=""
 
     # NET_IF6 の存在チェック
     if [ -z "$NET_IF6" ]; then
         debug_log "DEBUG" "check_pd: NET_IF6 (WAN IPv6 interface name for PD) is not set."
+        # スピナー開始前なので、ここではスピナー停止は不要
         return 4
     fi
 
@@ -1616,9 +1617,9 @@ check_pd() {
         network_get_prefix6 current_delegated_prefix "${NET_IF6}"
 
         if [ -n "$current_delegated_prefix" ]; then
-            pd_status="acquired_auto"
+            # pd_status="acquired_auto" # この変数は使用されていないためコメントアウトまたは削除を検討
             debug_log "DEBUG" "check_pd: PD acquired automatically on '${NET_IF6}': ${current_delegated_prefix}"
-            stop_spinner "$(get_message "MSG_PD_ACQUIRED")" "success"
+            stop_spinner "$(get_message "MSG_PD_ACQUIRED")" "success" # 自動PD成功時のスピナー停止
             return 0
         fi
 
@@ -1629,15 +1630,14 @@ check_pd() {
 
     # PD自動取得タイムアウト
     debug_log "DEBUG" "check_pd: PD auto-acquisition timed out on '${NET_IF6}' after ${max_wait_seconds} seconds."
-    if [ -n "$SPINNER_PID" ]; then
-        # PD未取得: MSG_PD_NOT_ACQUIRED を緑色で表示 (ユーザー指示による)
-        stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "success"
-    fi
-
     debug_log "DEBUG" "check_pd: Attempting to set manual prefix using IPV6PREFIX."
 
     if [ -z "$IPV6PREFIX" ]; then
         debug_log "DEBUG" "check_pd: IPV6PREFIX is not set. Cannot apply manual prefix."
+        # 提案: IPV6PREFIX未設定の場合もスピナーを停止
+        if [ -n "$SPINNER_PID" ]; then # スピナーが起動している場合のみ停止を試みる
+            stop_spinner "$(get_message "MSG_PD_MANUAL_FAIL_NO_PREFIX")" "failure"
+        fi
         return 2
     fi
 
@@ -1647,12 +1647,17 @@ check_pd() {
     debug_log "DEBUG" "check_pd: Committing network configuration."
     if uci -q commit network; then
         debug_log "DEBUG" "check_pd: Manual prefix set and network configuration committed successfully."
-        if type color >/dev/null 2>&1; then
-            echo "$(color green "$(get_message "MSG_PD_MANUAL_CONFIG_SUCCESS")")"
+        # 変更点: echoでのメッセージ表示を、手動PD成功時のスピナー停止に置き換え
+        if [ -n "$SPINNER_PID" ]; then
+            stop_spinner "$(get_message "MSG_PD_MANUAL_CONFIG_SUCCESS")" "success"
         fi
         return 1
     else
         debug_log "DEBUG" "check_pd: Failed to commit network configuration after setting manual prefix."
+        # 提案: uci commit失敗の場合もスピナーを停止
+        if [ -n "$SPINNER_PID" ]; then
+            stop_spinner "$(get_message "MSG_PD_MANUAL_FAIL_COMMIT")" "failure"
+        fi
         return 3
     fi
 }
