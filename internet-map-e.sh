@@ -1,7 +1,7 @@
 #!/bin/ash
 # this script based http://ipv4.web.fc2.com/map-e.html
 
-SCRIPT_VERSION="2025.05.12-04-00"
+SCRIPT_VERSION="2025.05.12-05-00"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
