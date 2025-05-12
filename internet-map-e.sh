@@ -1713,7 +1713,7 @@ replace_map_sh() {
     # 3. 新しいスクリプトをダウンロードして直接上書き (wget -O、IPタイプ -6 固定)
     debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to '$proto_script_path' using wget with -6 option."
     
-    command wget -6 --no-check-certificate -O "$proto_script_path" "$source_url"
+    command wget -q -6 --no-check-certificate -O "$proto_script_path" "$source_url"
     wget_rc=$?
     debug_log "DEBUG" "replace_map_sh: wget command finished. Exit code: $wget_rc."
 
