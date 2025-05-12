@@ -247,6 +247,75 @@ color() {
     esac
 }
 
+# 端末の表示能力を検出する関数
+detect_terminal_capability() {
+    # 環境変数による明示的指定を最優先
+    if [ -n "$AIOS_BANNER_STYLE" ]; then
+        debug_log "DEBUG" "Using environment override: AIOS_BANNER_STYLE=$AIOS_BANNER_STYLE"
+        echo "$AIOS_BANNER_STYLE"
+        return 0
+    fi
+    
+    # キャッシュが存在する場合はそれを使用
+    if [ -f "$CACHE_DIR/banner_style.ch" ]; then
+        CACHED_STYLE=$(cat "$CACHE_DIR/banner_style.ch")
+        debug_log "DEBUG" "Using cached banner style: $CACHED_STYLE"
+        echo "$CACHED_STYLE"
+        return 0
+    fi
+    
+    # デフォルトスタイル（安全なASCII）
+    STYLE="ascii"
+    
+    # ロケールの確認
+    LOCALE_CHECK=""
+    if [ -n "$LC_ALL" ]; then
+        LOCALE_CHECK="$LC_ALL"
+    elif [ -n "$LANG" ]; then
+        LOCALE_CHECK="$LANG"
+    fi
+    
+    debug_log "DEBUG" "Checking locale: $LOCALE_CHECK"
+    
+    # UTF-8検出
+    if echo "$LOCALE_CHECK" | grep -i "utf-\?8" >/dev/null 2>&1; then
+        debug_log "DEBUG" "UTF-8 locale detected"
+        STYLE="unicode"
+    else
+        debug_log "DEBUG" "Non-UTF-8 locale or unset locale"
+    fi
+    
+    # ターミナル種別の確認
+    if [ -n "$TERM" ]; then
+        debug_log "DEBUG" "Checking terminal type: $TERM"
+        case "$TERM" in
+            *-256color|xterm*|rxvt*|screen*)
+                STYLE="unicode"
+                debug_log "DEBUG" "Advanced terminal detected"
+                ;;
+            dumb|vt100|linux)
+                STYLE="ascii"
+                debug_log "DEBUG" "Basic terminal detected"
+                ;;
+        esac
+    fi
+    
+    # OpenWrt固有の検出
+    if [ -f "/etc/openwrt_release" ]; then
+        debug_log "DEBUG" "OpenWrt environment detected"
+        # OpenWrtでの追加チェック（必要に応じて）
+    fi
+    
+    # スタイルをキャッシュに保存（ディレクトリが存在する場合）
+    if [ -d "$CACHE_DIR" ]; then
+        echo "$STYLE" > "$CACHE_DIR/banner_style.ch"
+        debug_log "DEBUG" "Banner style saved to cache: $STYLE"
+    fi
+    
+    debug_log "DEBUG" "Selected banner style: $STYLE"
+    echo "$STYLE"
+}
+
 # 🔴　カラー系　ここまで　🔴-------------------------------------------------------------------------------------------------------------------------------------------
 
 # 🔵　メッセージ系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
