@@ -1657,7 +1657,7 @@ check_pd() {
     fi
 }
 
-check_pd() {
+OK_check_pd() {
 
     network_get_prefix6 NET_PFX6 "${NET_IF6}"
     echo "${NET_PFX6}"
