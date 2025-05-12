@@ -1968,11 +1968,11 @@ internet_map_main() {
         return 1
     fi
 
+    replace_map_sh
+    
     mape_config
 
     check_pd
-    
-    replace_map_sh
     
     mape_display
     
