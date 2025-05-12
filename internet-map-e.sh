@@ -1122,7 +1122,8 @@ EOF
     IP6PFX=""
     BR=""
     CE=""
-
+    IPV6PREFIX=""
+    
     # プレフィックス値に対応するデータを取得
     local prefix31_hex
     prefix31_hex=$(printf 0x%x "$PREFIX31")
@@ -1277,7 +1278,9 @@ EOF
     CE6=$(printf %04x "$CE_HEXTET6")
     CE7=$(printf %04x "$CE_HEXTET7")
     CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
+    IPV6PREFIX="${CE0}:${CE1}:${CE2}:${CE3}::"
     debug_log "DEBUG" "Generated CE address (CE): $CE"
+    debug_log "DEBUG" "Generated CE Network Prefix for wan6 (IPV6PREFIX): $IPV6PREFIX"
 
     # EALENとプレフィックス長の計算
     EALEN=$(( 56 - IP6PREFIXLEN ))
@@ -1462,6 +1465,7 @@ mape_config() {
 
     local WANMAP='wanmap' # 設定セクション名
     local ZONE_NO='1'
+    local wan_firewall_zone_name='wan'
     local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
     
@@ -1476,11 +1480,17 @@ mape_config() {
     # 既存のwanインターフェースの自動起動を停止
     uci set network.wan.auto='0'
 
-    # DHCP LAN
-    uci set dhcp.lan.ra='relay'
-    uci set dhcp.lan.dhcpv6='relay'
-    uci set dhcp.lan.ndp='relay'
+    # --- DHCP LAN 設定 ---
+    uci set dhcp.lan.dhcpv6='server'
+    uci set dhcp.lan.ra='server'
+    uci set dhcp.lan.ndp='disabled'
     uci set dhcp.lan.force='1'
+    uci set dhcp.lan.ra_slaac='1'
+    uci delete dhcp.lan.ra_flags
+    uci add_list dhcp.lan.ra_flags='managed-config'
+    uci add_list dhcp.lan.ra_flags='other-config'
+    uci -q delete dhcp.lan.ra_management
+    uci -q delete dhcp.lan.ra_default
 
     # --- DHCP WAN6 設定 ---
     uci set dhcp.wan6=dhcp
@@ -1493,7 +1503,7 @@ mape_config() {
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    uci set network.wan6.ip6prefix="${CE}::/64"
+    uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
     
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
@@ -1502,7 +1512,7 @@ mape_config() {
     uci set network.${WANMAP}.peeraddr="${BR}"
     uci set network.${WANMAP}.ipaddr="${IPV4}"
     uci set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci set network.${WANMAP}.ip6prefix="${IP6PFX}"
     uci set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
     uci set network.${WANMAP}.ealen="${EALEN}"
     uci set network.${WANMAP}.psidlen="${PSIDLEN}"
@@ -1525,9 +1535,12 @@ mape_config() {
         uci set network.${WANMAP}.tunlink='wan6' 
     fi
 
+    # --- ファイアウォール設定 ---
     uci del_list firewall.@zone[${ZOON_NO}].network='wan'
     uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
-    
+    uci set "${wan_zone_uci_path}.masq='1'"
+    uci set "${wan_zone_uci_path}.mtu_fix='1'"
+        
     # 設定の保存
     debug_log "DEBUG" "Committing UCI changes..."
     local commit_ok=1
