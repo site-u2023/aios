@@ -203,9 +203,9 @@ update_package_list() {
         [ -f "$package_cache" ] && [ -s "$package_cache" ] && debug_log "DEBUG" "Package list cache successfully created: $package_cache"
     else
         if [ "$silent_mode" != "yes" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         else
-            printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         fi
         debug_log "DEBUG" "Failed to update package lists after retries"
         rm -f "$update_cache" 2>/dev/null
@@ -268,10 +268,10 @@ OK_update_package_list() {
         opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             else
                 # エラー時はsilentモードでもエラーメッセージを表示
-                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
             debug_log "DEBUG" "Failed to update package lists with opkg"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
@@ -283,10 +283,10 @@ OK_update_package_list() {
         opkg list > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             else
                 # エラー時はsilentモードでもエラーメッセージを表示
-                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
             debug_log "DEBUG" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
@@ -298,10 +298,10 @@ OK_update_package_list() {
         apk update > "${LOG_DIR}/apk_update.log" 2>&1
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             else
                 # エラー時はsilentモードでもエラーメッセージを表示
-                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
             debug_log "DEBUG" "Failed to update package lists with apk"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
@@ -313,10 +313,10 @@ OK_update_package_list() {
         apk search > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             else
                 # エラー時はsilentモードでもエラーメッセージを表示
-                printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
             debug_log "DEBUG" "Failed to save package list to $package_cache"
             # タイムスタンプファイルを削除して、次回も更新を試みるようにする
@@ -325,10 +325,10 @@ OK_update_package_list() {
         fi
     else
         if [ "$silent_mode" != "yes" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         else
             # エラー時はsilentモードでもエラーメッセージを表示
-            printf "%s\n" "$(color red "$(get_message "MSG_UPDATE_FAILED")")"
+            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         fi
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
         # タイムスタンプファイルを削除して、次回も更新を試みるようにする
