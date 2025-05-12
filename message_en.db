@@ -20,6 +20,7 @@ en|MSG_PD_CHECKING=Checking PD{:} {p}
 en|MSG_PD_ACQUIRED=PD acquired successfully
 en|MSG_PD_NOT_ACQUIRED=PD not acquired
 en|MSG_PD_MANUAL_CONFIG_SUCCESS=Manual PD configuration completed successfully
+en|MSG_MAP_SH_UPDATE_SUCCESS=map.sh has been updated successfully
 
 # internet-ds-lite.sh
 en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {sp}
