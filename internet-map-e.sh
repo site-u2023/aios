@@ -1714,7 +1714,7 @@ restore_mape() {
 internet_map_main() {
 
     # mapパッケージのインストール確認
-    # install_package map hidden
+    install_package map hidden
     
     # 実行
     if ! mape_mold; then
