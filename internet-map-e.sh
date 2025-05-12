@@ -1703,7 +1703,7 @@ restore_mape() {
         return 0 # reboot が呼ばれるので、ここには到達しないはずだが念のため
     elif [ "$overall_restore_status" -eq 1 ]; then
         # バックアップファイルが見つからなかった場合
-        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_NO_BACKUP_FOUND")")"
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_NO_BACKUP_FOUND")")"
         return 1 # 失敗として返す
     fi
     
