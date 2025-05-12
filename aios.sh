@@ -2119,25 +2119,22 @@ setup_password_hostname() {
     passwd_field=$(awk -F: '/^root:/ {print $2}' /etc/shadow 2>/dev/null)
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
-            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")"
-            # stty -echo # 変更点: stty -echo を削除
-            read -s new_password # 変更点: read に -s オプションを追加
-            # stty echo # 変更点: stty echo を削除
+            printf "\n%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
+            read -s new_password
             printf "\n"
             [ -z "$new_password" ] && break
-            [ ${#new_password} -lt 8 ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
-            printf "%s" "$(get_message "MSG_ENTER_PASSWORD")" # メッセージキー確認: MSG_CONFIRM_PASSWORD の方が適切かもしれません
-            # stty -echo # 変更点: stty -echo を削除
-            read -s confirm_password # 変更点: read に -s オプションを追加
-            # stty echo # 変更点: stty echo を削除
+            [ ${#new_password} -lt 8 ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
+            printf "%s\n" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
+            read -s confirm_password
             printf "\n"
-            [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")" && continue
+            [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(get_message "MSG_PASSWORD_SET_OK")"
+                printf "%s\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
                 break
             else
-                printf "%s\n" "$(get_message "MSG_PASSWORD_ERROR")"
+                printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
             fi
         done
     fi
@@ -2146,7 +2143,7 @@ setup_password_hostname() {
     local current_hostname new_hostname
     current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "%s" "$(get_message "MSG_ENTER_HOSTNAME")"
+        printf "\n%s\n" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
         if [ -z "$new_hostname" ]; then
             :
@@ -2155,9 +2152,9 @@ setup_password_hostname() {
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")"
+                printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
             else
-                printf "%s\n" "$(get_message "MSG_HOSTNAME_ERROR")"
+                printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
             fi
         fi
     fi
@@ -2170,9 +2167,9 @@ setup_password_hostname() {
         uci commit dropbear
         /etc/init.d/dropbear restart 1>/dev/null 2>&1
         if [ $? -eq 0 ]; then
-            printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_OK")"
+            printf "\n%s\n" "$(color white "$(get_message "MSG_SSH_LAN_SET_OK")")"
         else
-            printf "%s\n" "$(get_message "MSG_SSH_LAN_SET_FAIL")"
+            printf "%s\n" "$(color red "$(get_message "MSG_SSH_LAN_SET_FAIL")")"
         fi
     fi
 }
