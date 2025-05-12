@@ -2127,7 +2127,7 @@ setup_password_hostname() {
             # printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
-            printf "%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
+            printf "\n%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
             read -s confirm_password
             printf "\n"
             [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
@@ -2147,6 +2147,7 @@ setup_password_hostname() {
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
         printf "\n%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
+        printf "\n"
         if [ -z "$new_hostname" ]; then
             :
         else
