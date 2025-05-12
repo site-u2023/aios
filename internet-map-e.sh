@@ -1554,11 +1554,25 @@ identify_isp() {
     local prefix31="$1"
     local prefix38="$2"
     
-    # 引数が空の場合、グローバル変数から取得
+    # 引数チェック
     if [ -z "$prefix31" ] || [ -z "$prefix38" ]; then
-        debug_log "DEBUG" "identify_isp: Using global PREFIX31 and PREFIX38 variables"
-        prefix31="${PREFIX31:-0}"
-        prefix38="${PREFIX38:-0}"
+        # グローバル変数から取得を試みる
+        if [ -n "$PREFIX31" ] && [ -n "$PREFIX38" ]; then
+            debug_log "DEBUG" "identify_isp: Using global PREFIX31=$PREFIX31 and PREFIX38=$PREFIX38"
+            prefix31="$PREFIX31"
+            prefix38="$PREFIX38"
+        else
+            debug_log "ERROR" "identify_isp: No valid prefix values available"
+            echo "Unknown ISP"
+            return 1
+        fi
+    fi
+    
+    # 数値チェック
+    if ! [ "$prefix31" -eq "$prefix31" ] 2>/dev/null || ! [ "$prefix38" -eq "$prefix38" ] 2>/dev/null; then
+        debug_log "ERROR" "identify_isp: Invalid number in prefix31=$prefix31 or prefix38=$prefix38"
+        echo "Unknown ISP"
+        return 1
     fi
     
     if [ "$prefix31" -ge 604240512 ] && [ "$prefix31" -lt 604240520 ]; then
