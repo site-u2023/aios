@@ -1113,15 +1113,15 @@ EOF
     
     # --- END IPv6 HEXTET Parsing Enhancement ---
 
-    # プレフィックス計算（prefix31/prefix38）
-    PREFIX31=0 PREFIX38=0 
-    local h0_mul=$(( hextet0 * 65536 ))    # 0x10000
-    local h1_masked=$(( hextet1 & 65534 )) # 0xfffe
+    # 各種計算 (複雑なネスト計算を分割) 
+    local PREFIX31 PREFIX38
+    local h0_mul=$(( HEXTET0 * 65536 ))    # 0x10000
+    local h1_masked=$(( HEXTET1 & 65534 )) # 0xfffe
     PREFIX31=$(( h0_mul + h1_masked ))
 
-    local h0_mul2=$(( hextet0 * 16777216 )) # 0x1000000
-    local h1_mul=$(( hextet1 * 256 ))      # 0x100
-    local h2_masked=$(( hextet2 & 64512 )) # 0xfc00
+    local h0_mul2=$(( HEXTET0 * 16777216 )) # 0x1000000
+    local h1_mul=$(( HEXTET1 * 256 ))      # 0x100
+    local h2_masked=$(( HEXTET2 & 64512 )) # 0xfc00
     local h2_shift=$(( h2_masked >> 8 ))
     PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
 
@@ -1551,39 +1551,6 @@ OK_mape_display() {
     return 0
 }
 
-# Provider identification function
-identify_isp() {
-    local prefix31="$1"
-    local prefix38="$2"
-    
-    # 引数チェック - 引数がない場合はグローバル変数を使用
-    if [ -z "$prefix31" ] || [ -z "$prefix38" ]; then
-        debug_log "DEBUG" "identify_isp: No arguments provided, using global PREFIX31 and PREFIX38"
-        prefix31="${PREFIX31:-0}"
-        prefix38="${PREFIX38:-0}"
-    fi
-    
-    # ゼロ値チェック - デバッグ用
-    if [ "$prefix31" = "0" ] && [ "$prefix38" = "0" ]; then
-        debug_log "WARNING" "identify_isp: Both prefix31 and prefix38 are zero - possible parsing error"
-    fi
-    
-    # プロバイダー識別ロジック
-    if [ "$prefix31" -ge 604240512 ] && [ "$prefix31" -lt 604240520 ]; then
-        echo "OCN"
-    elif [ "$prefix31" -ge 604512272 ] && [ "$prefix31" -lt 604512276 ]; then
-        echo "Plala v6plus"
-    elif [ "$prefix31" -ge 604512848 ] && [ "$prefix31" -lt 604512852 ]; then
-        echo "Plala v6plus"
-    elif [ -n "$(get_ruleprefix38_20_value "$(printf 0x%x "$prefix38")")" ]; then
-        echo "IPoE+IPv4 over IPv6 (transix/v6plus)"
-    elif [ -n "$(get_ruleprefix38_value "$(printf 0x%x "$prefix38")")" ]; then
-        echo "JPNE/v6plus"
-    else
-        echo "Unknown ISP"
-    fi
-}
-
 # MAP-E設定情報を表示する関数
 mape_display() {
     # 引数チェックは不要 (グローバル変数を使用するため)
@@ -1768,10 +1735,6 @@ internet_map_main() {
     # mape_config
 
     # replace_map_sh
-
-    local isp_name
-    isp_name=$(identify_isp)
-    printf "\n%s: %s\n" "$(color green "Detected ISP" "$isp_name")"
     
     mape_display
 
