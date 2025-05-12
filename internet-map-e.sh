@@ -1278,7 +1278,7 @@ EOF
     CE6=$(printf %04x "$CE_HEXTET6")
     CE7=$(printf %04x "$CE_HEXTET7")
     CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
-    IPV6PREFIX="${CE0}:${CE1}:${CE2}:${CE3}::"
+    IPV6PREFIX="${h0_str}:${h1_str}:${h2_str}:${h3_str}::"
     debug_log "DEBUG" "Generated CE address (CE): $CE"
     debug_log "DEBUG" "Generated CE Network Prefix for wan6 (IPV6PREFIX): $IPV6PREFIX"
 
@@ -1503,7 +1503,6 @@ mape_config() {
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
     
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
@@ -1519,6 +1518,15 @@ mape_config() {
     uci set network.${WANMAP}.offset="${OFFSET}"
     uci set network.${WANMAP}.mtu='1460'
     uci set network.${WANMAP}.encaplimit='ignore'
+
+    # The following line sets a static IPv6 prefix for the wan6 interface.
+    # In environments where a prefix is delegated via DHCPv6-PD (e.g., /56 from Plala 10G),
+    # manually setting ip6prefix might be unnecessary or could cause conflicts.
+    # If your ISP provides a prefix via PD and wan6 gets it automatically,
+    # you should KEEP THIS LINE COMMENTED OUT.
+    # If you have a static /64 prefix assignment or if PD is not working as expected,
+    # you might need to uncomment and use this line.
+    # uci set network.wan6.ip6prefix="${CE_NETWORK_PREFIX_FOR_WAN6}::/64"
     
     # --- バージョン固有設定 ---
     if echo "$osversion" | grep -q "^19"; then
@@ -1534,7 +1542,7 @@ mape_config() {
         uci set network.${WANMAP}.legacymap='1'
         uci set network.${WANMAP}.tunlink='wan6' 
     fi
-
+    
     # --- ファイアウォール設定 ---
     uci del_list firewall.@zone[${ZOON_NO}].network='wan'
     uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
