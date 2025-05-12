@@ -2124,7 +2124,7 @@ setup_password_hostname() {
             printf "\n%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
             printf "%s" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
-            # printf "\n"
+            printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
             printf "\n%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
