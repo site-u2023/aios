@@ -2226,7 +2226,7 @@ setup_password_hostname() {
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
             else
                 printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
             fi
