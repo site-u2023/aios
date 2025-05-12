@@ -1274,8 +1274,8 @@ mape_display() {
     
     # PORTSが既にmape_mold()で計算済みかつ正常な場合は、それを表示
     if [ -n "$PORTS" ]; then
-        # ポート範囲の各行の先頭にスペースを追加
-        echo "$PORTS" | sed 's/^/  /'
+        # ポート範囲の各行の先頭にスペースを追加し、エスケープシーケンスを解釈
+        printf "  %b\n" "$(echo "$PORTS" | sed 's/\\n/\\n  /g')"
     else
         # PORTSが空の場合のフォールバック処理（再計算）
         local shift_bits=$(( 16 - OFFSET ))
