@@ -1461,7 +1461,7 @@ NG_mape_config() {
 mape_config() {
 
     local WANMAP='wanmap' # 設定セクション名
-    local wan_firewall_zone_name='wan'
+    local ZONE_NO='1'
     local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
     
@@ -1524,20 +1524,9 @@ mape_config() {
         uci set network.${WANMAP}.legacymap='1'
         uci set network.${WANMAP}.tunlink='wan6' 
     fi
-    
-    if [ -n "$wan_zone_uci_path" ]; then
-        debug_log "DEBUG" "Found firewall zone '${wan_firewall_zone_name}' at UCI path ${wan_zone_uci_path}"
-        uci del_list "${wan_zone_uci_path}.network=wan"
-        debug_log "DEBUG" "Attempted to remove 'wan' from ${wan_zone_uci_path}.network"
-        uci add_list "${wan_zone_uci_path}.network=${WANMAP}"
-        debug_log "DEBUG" "Attempted to add '${WANMAP}' to ${wan_zone_uci_path}.network"
-        # masq='1', mtu_fix='1' を設定
-        # uci set "${wan_zone_uci_path}.masq='1'"
-        # uci set "${wan_zone_uci_path}.mtu_fix='1'"
-        # debug_log "DEBUG" "Set masq=1 and mtu_fix=1 for zone ${wan_zone_uci_path}"
-    else
-        debug_log "DEBUG" "Firewall zone named '${wan_firewall_zone_name}' not found. Firewall rule for MAP-E may need manual configuration."
-    fi
+
+    uci del_list firewall.@zone[${ZOON_NO}].network='wan'
+    uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
     
     # 設定の保存
     debug_log "DEBUG" "Committing UCI changes..."
