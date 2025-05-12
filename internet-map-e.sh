@@ -1550,7 +1550,7 @@ mape_config() {
     # you should KEEP THIS LINE COMMENTED OUT.
     # If you have a static /64 prefix assignment or if PD is not working as expected,
     # you might need to uncomment and use this line.
-    uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
+    # uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
     
     # --- バージョン固有設定 ---
     if echo "$osversion" | grep -q "^19"; then
@@ -1568,9 +1568,9 @@ mape_config() {
     fi
     
     # --- ファイアウォール設定 ---
-    uci del_list firewall.@zone[${ZOON_NO}].network='wan'
-    uci del_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
-    uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
+    uci del_list firewall.@zone[${ZONE_NO}].network='wan'
+    uci del_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
+    uci add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
         
     # 設定の保存
     debug_log "DEBUG" "Committing UCI changes..."
