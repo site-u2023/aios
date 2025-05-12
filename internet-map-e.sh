@@ -1,7 +1,7 @@
 #!/bin/ash
 # this script based http://ipv4.web.fc2.com/map-e.html
 
-SCRIPT_VERSION="2025.05.12-03-00"
+SCRIPT_VERSION="2025.05.12-04-00"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
@@ -1540,10 +1540,19 @@ mape_config() {
     fi
     
     # 設定の保存
-    uci commit
+    debug_log "DEBUG" "Committing UCI changes..."
+    local commit_ok=1
+    if ! uci commit network; then debug_log "ERROR" "Failed to commit network."; commit_ok=0; fi
+    if ! uci commit dhcp; then debug_log "ERROR" "Failed to commit dhcp."; commit_ok=0; fi
+    if ! uci commit firewall; then debug_log "ERROR" "Failed to commit firewall."; commit_ok=0; fi
+
+    if [ "$commit_ok" -eq 1 ]; then
+        debug_log "DEBUG" "All UCI sections committed successfully."
+    else
+        debug_log "ERROR" "One or more UCI sections failed to commit."
+    fi
 
     return 0
-
 }
 
 replace_map_sh() {
