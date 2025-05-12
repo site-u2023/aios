@@ -1542,7 +1542,7 @@ OK_mape_display() {
 mape_display() {
     
     printf "\n"
-    printf "%s\n" "$(color cyan "config-softwire: Powered by missing233")"
+    printf "%s\n" "$(color magenta "(config-softwire)# missing233")"
 
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
