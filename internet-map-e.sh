@@ -1674,9 +1674,11 @@ OK_check_pd() {
 # 関数名: replace_map_sh
 # 説明: /lib/netifd/proto/map.sh をリポジトリの最新版に置き換えます。
 #       ユーザーの指示に基づき、最もシンプルな処理を行います。
-#       1. 既存の map.sh があれば、map.sh.bak にコピーします。
-#       2. 新しい map.sh をダウンロードし、直接 /lib/netifd/proto/map.sh に上書きします。
-#       3. 新しい map.sh に実行権限を付与します。
+#       1. OSバージョンに基づいてソースURLを決定します。
+#       2. 既存の map.sh があれば、map.sh.bak にコピーします。(★先にCP★)
+#       3. wgetのIPオプションを取得します。
+#       4. 新しい map.sh をダウンロードし、直接 /lib/netifd/proto/map.sh に上書きします。(★wgetで直接上書き★)
+#       5. 新しい map.sh に実行権限を付与します。
 # グローバル変数:
 #   CACHE_DIR: キャッシュディレクトリのパス (osversion.ch, ip_type.ch が格納される)
 #   WGET_TIMEOUT: wget のタイムアウト値 (秒単位、aios.sh で定義されている想定)
@@ -1701,9 +1703,9 @@ replace_map_sh() {
     # aios.sh の WGET_TIMEOUT グローバル変数を参照。未設定ならデフォルト8秒。
     local wget_timeout="${WGET_TIMEOUT:-8}"
 
-    debug_log "DEBUG" "replace_map_sh: Function started. Method: STRICTLY Simple backup (cp) and direct wget overwrite. Timeout: ${wget_timeout}s. NO MV, NO TEMP FILES."
+    debug_log "DEBUG" "replace_map_sh: Function started. Method: STRICTLY Simple backup (cp FIRST) and direct wget overwrite (THEN). Timeout: ${wget_timeout}s. NO MV, NO TEMP FILES."
 
-    # 1. OSバージョンに基づいてソースURLを決定
+    # 手順1: OSバージョンに基づいてソースURLを決定
     if [ -f "$osversion_file" ]; then
         osversion=$(cat "$osversion_file")
         debug_log "DEBUG" "replace_map_sh: OS Version from '$osversion_file': $osversion"
@@ -1719,7 +1721,7 @@ replace_map_sh() {
     fi
     debug_log "DEBUG" "replace_map_sh: Determined source URL: $source_url"
 
-    # 2. 既存のスクリプトをバックアップ (cp)
+    # 手順2: 既存のスクリプトをバックアップ (cp) <--- ★★★【先にCP】★★★
     # /lib/netifd/proto/map.sh が存在する場合のみバックアップを実行
     if [ -f "$proto_script_path" ]; then
         debug_log "INFO" "replace_map_sh: Attempting to back up '$proto_script_path' to '$backup_script_path'."
@@ -1734,7 +1736,7 @@ replace_map_sh() {
         debug_log "INFO" "replace_map_sh: Original script '$proto_script_path' not found. Skipping backup."
     fi
 
-    # 3. wgetのIPオプションを取得
+    # 手順3: wgetのIPオプションを取得
     if [ -f "$ip_type_file" ]; then
         wget_ip_opt=$(cat "$ip_type_file" 2>/dev/null)
         if [ -z "$wget_ip_opt" ] || [ "$wget_ip_opt" = "unknown" ]; then
@@ -1748,7 +1750,7 @@ replace_map_sh() {
         wget_ip_opt=""
     fi
 
-    # 4. 新しいスクリプトをダウンロードして直接上書き (wget -O)
+    # 手順4: 新しいスクリプトをダウンロードして直接上書き (wget -O) <--- ★★★【次にWGETで直接上書き】★★★
     # ユーザーログで見られる "Downloading 'URL'" メッセージと同様の形式で出力
     if type get_message > /dev/null 2>&1 && MSG_DOWNLOADING_KEY=$(get_message_key "MSG_DOWNLOADING"); then
         printf "%s '%s'\n" "$(get_message "$MSG_DOWNLOADING_KEY")" "$source_url"
@@ -1756,9 +1758,6 @@ replace_map_sh() {
         echo "Downloading '$source_url'" # get_message がない場合のフォールバック
     fi
     
-    # `command wget` で外部コマンドを明示的に呼び出し
-    # オプション: IP選択、SSL証明書無視、タイムアウト、出力先指定（上書き）
-    # wget の標準エラー出力はコンソールに直接表示される（-qオプションなし）
     command wget ${wget_ip_opt} --no-check-certificate -T "$wget_timeout" -O "$proto_script_path" "$source_url"
     wget_rc=$?
     debug_log "DEBUG" "replace_map_sh: wget command (direct overwrite) finished. Exit code: $wget_rc."
@@ -1768,7 +1767,7 @@ replace_map_sh() {
         if [ -s "$proto_script_path" ]; then
             debug_log "INFO" "replace_map_sh: Download successful. '$proto_script_path' has been updated and is not empty."
             
-            # 5. 実行権限を付与
+            # 手順5: 実行権限を付与
             debug_log "INFO" "replace_map_sh: Setting execute permission on '$proto_script_path'."
             if command chmod +x "$proto_script_path"; then
                 debug_log "INFO" "replace_map_sh: Execute permission set successfully for '$proto_script_path'."
@@ -1785,7 +1784,6 @@ replace_map_sh() {
         fi
     else
         debug_log "ERROR" "replace_map_sh: wget download FAILED. Exit code: $wget_rc."
-        # wget の標準エラー出力にエラー詳細が表示されるはず
         return 1 # wget失敗
     fi
 }
