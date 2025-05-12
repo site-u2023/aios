@@ -1015,7 +1015,6 @@ EOF
     # (IP6PREFIXLEN=38, PSIDLEN=6, OFFSET=6 は ruleprefix38_20 の特徴)
     if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
         # この条件は ruleprefix38_20 にマッチしたことを示す。
-        # JavaScriptでは ruleprefix38_20[prefix38] が真であれば BR を設定するため、
         # get_ruleprefix38_20_value の結果が空でないことを確認する。
         if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
              BR="2001:380:a120::9"
@@ -1114,8 +1113,8 @@ EOF
     RFC=false # デフォルト値
     IP6PREFIXLEN=""
     PSIDLEN=""
-    IPADDR="" # フルIPv4アドレス用 (JavaScript版の ipaddr 相当)
-    IPV4=""   # 設定用IPv4アドレス (*.*.0.0形式) (JavaScript版の ipv4 相当)
+    IPADDR="" # フルIPv4アドレス用
+    IPV4=""   # 設定用IPv4アドレス (*.*.0.0形式)
     PSID=0
     PORTS=""
     EALEN=""
@@ -1244,12 +1243,9 @@ EOF
     CE_HEXTET3=$(( HEXTET3 & 65280 )) # 上位バイトのみ保持 (0xff00)
 
     # CEアドレス計算ロジック (RFCフラグはfalse固定)
-    # JavaScript版では octet1, octet2, octet3, octet4 は IPADDR (フルアドレス) のオクテットを指す
-    # そのため、ここで再度 IPADDR からオクテットをパースする必要がある
     local ce_octet1 ce_octet2 ce_octet3 ce_octet4
     # IPADDR は既に計算済みなので、ここからパースする
     # 注意: この octet変数は、上記のIPv4アドレス決定ロジックのローカル変数とは別物として扱う
-    # JavaScript版のロジックに合わせて、IPADDR（フルアドレス）のオクテットを使用する
     ce_octet1=$(echo "$IPADDR" | cut -d. -f1)
     ce_octet2=$(echo "$IPADDR" | cut -d. -f2)
     ce_octet3=$(echo "$IPADDR" | cut -d. -f3)
@@ -1545,44 +1541,41 @@ OK_mape_display() {
 # MAP-E設定情報を表示する関数
 mape_display() {
 
-    echo ""
-    echo "Prefix Information:" # "プレフィックス情報:"
-    echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
-    echo "  IPv4 Address: $IPADDR" # "  IPv4アドレス: $IPADDR"
-    echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
+    printf "\n"
+    printf "%s\n" "$(color green "Prefix Information:")" # "プレフィックス情報:"
+    printf "  IPv6 Prefix: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
+    printf "  CE IPv6 Address: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
+    printf "  IPv4 Address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
+    printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
 
-    echo ""
-    echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
-    echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
-    echo "  option ipaddr $IPV4"
-    echo "  option ip4prefixlen '$IP4PREFIXLEN'"
-    echo "  option ip6prefix '${IP6PFX}::'" # IP6PFXが空の場合もあるためクォート
-    echo "  option ip6prefixlen '$IP6PREFIXLEN'"
-    echo "  option ealen '$EALEN'"
-    echo "  option psidlen '$PSIDLEN'"
-    echo "  option offset '$OFFSET'"
-    echo "" # JavaScript版に合わせて空白行を追加
-    echo "  export LEGACY=1"
+    printf "\n"
+    printf "%s\n" "$(color green "OpenWrt Configuration Values:")" # "OpenWrt設定値:"
+    printf "  option peeraddr '%s'\n" "$BR" # BRが空の場合もあるためクォート
+    printf "  option ipaddr %s\n" "$IPV4"
+    printf "  option ip4prefixlen '%s'\n" "$IP4PREFIXLEN"
+    printf "  option ip6prefix '%s::'\n" "$IP6PFX" # IP6PFXが空の場合もあるためクォート
+    printf "  option ip6prefixlen '%s'\n" "$IP6PREFIXLEN"
+    printf "  option ealen '%s'\n" "$EALEN"
+    printf "  option psidlen '%s'\n" "$PSIDLEN"
+    printf "  option offset '%s'\n" "$OFFSET"
+    printf "\n"
+    printf "  export LEGACY=1\n"
 
     # ポート情報の計算を最適化
     local max_port_blocks=$(( (1 << OFFSET) ))
     local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    # AMAX は (1 << OFFSET) - 1 なので、A=0 のブロックは存在しない。
-    # JavaScript版では A=0..AMAX-1 でループし、ポート0のブロックを除外している。
-    # こちらは A=1..AMAX でループするので、AMAX (つまり (1 << OFFSET) - 1) が正しいブロック数。
     local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) 
     local port_start_for_A1=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) 
 
     debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start_A1=$port_start_for_A1" 
 
-    echo ""
-    echo "Port Information:" # "ポート情報:"
-    echo "  Available Ports: $total_ports" # "  利用可能なポート数: $total_ports"
+    printf "\n"
+    printf "%s\n" "$(color green "Port Information:")" # "ポート情報:"
+    printf "  Available Ports: %s\n" "$total_ports" # "  利用可能なポート数: $total_ports"
 
     # ポート範囲を表示（PORTSをバッファリングして最適化）
-    echo ""
-    echo "Port Ranges:" # "ポート範囲:"
+    printf "\n"
+    printf "%s\n" "$(color green "Port Ranges:")" # "ポート範囲:"
     
     # PORTSが既にmape_mold()で計算済みかつ正常な場合は、それを表示
     if [ -n "$PORTS" ]; then
@@ -1590,8 +1583,6 @@ mape_display() {
         printf "  %b\n" "$(echo "$PORTS" | sed 's/\\n/\\n  /g')"
     else
         # PORTSが空の場合のフォールバック処理（再計算）
-        # この部分はJavaScript版の表示ロジックと完全に一致させるか確認が必要
-        # 現在のPORTS生成ロジックは3つごとに改行だが、JavaScript版は動的に調整している可能性がある
         local shift_bits=$(( 16 - OFFSET ))
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         if [ "$psid_shift" -lt 0 ]; then
@@ -1620,7 +1611,7 @@ mape_display() {
             
             # 行ごとに出力（最大表示項目数に達したか、最後の項目の場合）
             if [ "$items_in_line" -ge "$max_items_per_line" ] || [ "$A" -eq "$port_max_index" ]; then
-                echo "  $line_buffer"
+                printf "  %s\n" "$line_buffer" # echo を printf に変更
                 line_buffer=""
                 items_in_line=0
             fi
