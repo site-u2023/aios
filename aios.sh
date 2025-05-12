@@ -279,7 +279,7 @@ into_memory_message() {
 
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Set a new password with 8 or more characters{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_CONFIRM_PASSWORDM=Confirm new password{;}"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_CONFIRM_PASSWORD=Confirm new password{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
     
@@ -2124,7 +2124,7 @@ setup_password_hostname() {
             printf "\n%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
             printf "%s\n" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
-            printf "\n"
+            # printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
             printf "%s\n" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
