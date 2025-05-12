@@ -1274,7 +1274,8 @@ mape_display() {
     
     # PORTSが既にmape_mold()で計算済みかつ正常な場合は、それを表示
     if [ -n "$PORTS" ]; then
-        printf "%b\n" "$PORTS" # %bでバックスラッシュエスケープ(\n)を解釈
+        # ポート範囲の各行の先頭にスペースを追加
+        echo "$PORTS" | sed 's/^/  /'
     else
         # PORTSが空の場合のフォールバック処理（再計算）
         local shift_bits=$(( 16 - OFFSET ))
@@ -1305,7 +1306,7 @@ mape_display() {
             
             # 行ごとに出力（最大表示項目数に達したか、最後の項目の場合）
             if [ "$items_in_line" -ge "$max_items_per_line" ] || [ "$A" -eq "$port_max_index" ]; then
-                echo "$line_buffer"
+                echo "  $line_buffer"
                 line_buffer=""
                 items_in_line=0
             fi
