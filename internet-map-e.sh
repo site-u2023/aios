@@ -1244,7 +1244,7 @@ mape_display() {
     echo "  CE: $CE" # "  CE IPv6アドレス: $CE"
     echo "  IPv4 Address: $IPADDR" # "  IPv4アドレス: $IPADDR"
     echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
-
+    
     echo ""
     echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
     echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
