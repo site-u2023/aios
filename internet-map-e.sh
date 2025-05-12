@@ -1997,6 +1997,8 @@ restore_mape() {
 
 internet_map_main() {
 
+    replace_map_sh
+    
     # mapパッケージのインストール確認
     install_package map hidden
     
@@ -2007,7 +2009,6 @@ internet_map_main() {
         return 1
     fi
 
-    replace_map_sh
     
     mape_config
 
