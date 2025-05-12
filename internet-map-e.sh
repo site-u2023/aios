@@ -1504,13 +1504,12 @@ replace_map_sh() {
 
 # MAP-E設定情報を表示する関数
 OK_mape_display() {
-    # 引数チェックは不要 (グローバル変数を使用するため)
 
     echo ""
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
-    echo "  IPv4 Address
+    echo "  IPv4 Address: $IPADDR" # "  IPv4アドレス: $IPADDR"
     echo ""
     echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
     echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
