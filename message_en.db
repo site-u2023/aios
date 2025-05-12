@@ -17,7 +17,7 @@ en|MSG_MAPE_PARAMS_CALC_SUCCESS=MAP-E parameters calculated successfully
 en|MSG_MAPE_RESTORE_COMPLETE=MAP-E settings have been successfully restored
 en|MSG_NO_BACKUP_FOUND=No backup file found
 en|MSG_PD_CHECKING=Checking PD{:} {p}
-en|MSG_PD_ACQUIRED=PD acquired successfully{
+en|MSG_PD_ACQUIRED=PD acquired successfully
 en|MSG_PD_NOT_ACQUIRED=PD not acquired
 
 # internet-ds-lite.sh
