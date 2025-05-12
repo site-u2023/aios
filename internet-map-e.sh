@@ -1609,7 +1609,7 @@ check_pd() {
     fi
 
     # スピナー開始 (MSG_PD_CHECKING を使用)
-    start_spinner "$(get_message "MSG_PD_CHECKING" "p=$display_wan_ip")"
+    start_spinner "$(color blue "$(get_message "MSG_PD_CHECKING" "p=$display_wan_ip")")"
     debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Displaying WAN IP: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
 
     while [ "$elapsed_seconds" -lt "$max_wait_seconds" ]; do
