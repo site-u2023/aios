@@ -1723,9 +1723,9 @@ internet_map_main() {
         return 1
     fi
 
-    # mape_config
+    mape_config
 
-    # replace_map_sh
+    replace_map_sh
     
     mape_display
 
@@ -1733,9 +1733,9 @@ internet_map_main() {
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
     
-    # reboot
+    reboot
 
-    exit 0 # Explicitly exit with success status
+    return 0 # Explicitly exit with success status
 }
 
 # internet_map_main
