@@ -2122,12 +2122,12 @@ setup_password_hostname() {
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
             printf "\n%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
-            printf "%s " "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
+            printf "%s" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
             # printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
-            printf "%s " "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
+            printf "%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
             read -s confirm_password
             printf "\n"
             [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
@@ -2145,7 +2145,7 @@ setup_password_hostname() {
     local current_hostname new_hostname
     current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "\n%s " "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
+        printf "\n%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
         if [ -z "$new_hostname" ]; then
             :
