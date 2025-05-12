@@ -1871,6 +1871,10 @@ mape_display() {
         done
     fi
 
+    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+    read -r -n 1 -s
+    
     return 0
 }
 
@@ -1965,25 +1969,18 @@ internet_map_main() {
     
     # mapパッケージのインストール確認
     install_package map hidden
-
+    
+    # map.shダウンロード
     replace_map_sh
         
     # 実行
-    if ! mape_mold; then
-        # mape_mold failed, error message already printed inside the function.
-        debug_log "DEBUG" "mape_mold function failed. Exiting script."
-        return 1
-    fi
+    mape_mold
 
     mape_config
 
     check_pd
     
     mape_display
-    
-    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
-    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
-    read -r -n 1 -s
     
     reboot
 
