@@ -845,7 +845,8 @@ EOF
         octet3=$(( octet3 | temp2 ))
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4_FULL="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=38
         PSIDLEN=8
         OFFSET=4
@@ -860,7 +861,8 @@ EOF
         octet3=$(( temp1 >> 8 ))
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4_FULL="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
@@ -879,7 +881,8 @@ EOF
         local temp6=$(( temp5 >> 14 ))
         octet4=$(( temp4 | temp6 ))
 
-        IPV4="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4_FULL="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=38
         PSIDLEN=6
         OFFSET=6 # ruleprefix38_20では offset=6 を使用
@@ -1198,9 +1201,7 @@ OK_mape_display() {
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
-    echo "  IPv4 Address: $IPV4" # "  IPv4アドレス: $IPV4"
-    echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
-
+    echo "  IPv4 Address
     echo ""
     echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
     echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
@@ -1241,7 +1242,7 @@ mape_display() {
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     echo "  CE: $CE" # "  CE IPv6アドレス: $CE"
-    echo "  IPv4 Address: $IPV4" # "  IPv4アドレス: $IPV4"
+    echo "  IPv4 Address: $IPV4_FULL" # "  IPv4アドレス: $IPV4_FULL"
     echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
 
     echo ""
