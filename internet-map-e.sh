@@ -1673,17 +1673,18 @@ OK_check_pd() {
 replace_map_sh() {
     local proto_script_path="/lib/netifd/proto/map.sh"
     local backup_script_path="${proto_script_path}.bak"
-    local osversion_file="${CACHE_DIR}/osversion.ch"
+    local osversion_file="${CACHE_DIR}/osversion.ch" # CACHE_DIR は aios.sh で定義されている想定
     local osversion=""
     local source_url=""
     local wget_rc
     local chmod_rc
     local ip_type_file="${CACHE_DIR}/ip_type.ch" # ip_type.ch のパス
     local wget_ip_opt="" # wget に渡すIPオプション用変数
+    local temp_download_path="${DL_DIR}/map.sh.download.$$" # DL_DIR は aios.sh で定義されている想定、プロセスIDでユニーク化
 
     debug_log "DEBUG" "replace_map_sh: Function started."
 
-    # 1. OSバージョン取得 (既存のまま)
+    # 1. OSバージョン取得
     if [ -f "$osversion_file" ]; then
         osversion=$(cat "$osversion_file")
         debug_log "DEBUG" "replace_map_sh: OS Version read from cache: $osversion"
@@ -1692,7 +1693,7 @@ replace_map_sh() {
         osversion=""
     fi
 
-    # 2. ソースURL決定 (既存のまま)
+    # 2. ソースURL決定
     if echo "$osversion" | grep -q "^19"; then
         source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.19"
     else
@@ -1700,45 +1701,65 @@ replace_map_sh() {
     fi
     debug_log "DEBUG" "replace_map_sh: Determined source URL for download: $source_url"
 
-    # 3. バックアップ作成 (既存のまま)
+    # 3. バックアップ作成
     if [ -f "$proto_script_path" ]; then
         debug_log "DEBUG" "replace_map_sh: Attempting to back up '$proto_script_path' to '$backup_script_path'."
-        cp "$proto_script_path" "$backup_script_path" 2>/dev/null
-        if [ $? -eq 0 ]; then
+        # バックアップは cp で行う
+        if cp "$proto_script_path" "$backup_script_path"; then # 2>/dev/null はユーザー様の元のコードに合わせて削除
             debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' successful."
         else
-            debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' failed."
+            debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' failed. Proceeding with caution."
         fi
     else
         debug_log "DEBUG" "replace_map_sh: Original script '$proto_script_path' not found, skipping backup."
     fi
 
-    # ▼▼▼【改善案】aios.sh の download_fetch_file に倣い、ip_type.ch から wget オプションを取得 ▼▼▼
+    # 4. ip_type.ch から wget オプションを取得
     if [ ! -f "$ip_type_file" ]; then
         debug_log "DEBUG" "replace_map_sh: Network check file '$ip_type_file' not found. Cannot determine wget IP option." >&2
+        # この関数の呼び出し元で check_network_connectivity が実行されている前提
+        # もしファイルがない場合は、ネットワークチェックが未実行か失敗している可能性がある
         return 1 # ip_type.ch がなければ失敗
     fi
     wget_ip_opt=$(cat "$ip_type_file" 2>/dev/null)
     if [ -z "$wget_ip_opt" ] || [ "$wget_ip_opt" = "unknown" ]; then
         debug_log "DEBUG" "replace_map_sh: Network connectivity for wget is unknown or not established (read from '$ip_type_file'). Using no IP-specific option." >&2
-        wget_ip_opt="" # 不明な場合はIPオプションなしで試行 (またはエラーにする場合は return 1)
+        wget_ip_opt="" # 不明な場合はIPオプションなしで試行
     else
         debug_log "DEBUG" "replace_map_sh: Using wget IP option '$wget_ip_opt' (read from '$ip_type_file')."
     fi
-    # ▲▲▲【改善案】ここまで ▲▲▲
 
-    # 4. 新しいスクリプトをダウンロードして配置
-    debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to '$proto_script_path' with IP option: '${wget_ip_opt:-[none]}'."
-    # wget コマンドに $wget_ip_opt を追加 (空の場合は何も追加されない)
-    # WGET_TIMEOUT と WGET_MAX_RETRIES も aios.sh のグローバル変数から取得して使用することを検討 (download_fetch_file 参照)
-    # ここではシンプルにIPオプションのみ追加
-    wget --no-check-certificate ${wget_ip_opt} -O "$proto_script_path" "$source_url"
+    # 5. 新しいスクリプトを一時ファイルにダウンロード
+    debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to temporary path '$temp_download_path' with IP option: '${wget_ip_opt:-[none]}'."
+    # wget コマンドに $wget_ip_opt を追加。-q オプションはデバッグのため削除されている想定。
+    # aios.sh の WGET_TIMEOUT, WGET_MAX_RETRIES を利用する場合は、aios.sh の download_fetch_file のようなリトライロジックをここに組み込むか、
+    # またはこの replace_map_sh 自体を download_fetch_file に似た構造にする必要があります。
+    # ここでは、ユーザー提示の構造を維持し、リトライなしの単発wgetとします。
+    wget --no-check-certificate ${wget_ip_opt} -O "$temp_download_path" "$source_url"
     wget_rc=$?
-    debug_log "DEBUG" "replace_map_sh: wget command finished. Exit code: $wget_rc"
+    debug_log "DEBUG" "replace_map_sh: wget command (to temp file) finished. Exit code: $wget_rc"
 
-    if [ "$wget_rc" -eq 0 ]; then
-        debug_log "DEBUG" "replace_map_sh: Download successful: '$proto_script_path' has been updated/created."
-        # 5. 実行権限を付与 (既存のまま)
+    if [ "$wget_rc" -ne 0 ]; then
+        debug_log "DEBUG" "replace_map_sh: Download to temporary file failed from '$source_url'. wget exit code: $wget_rc"
+        rm -f "$temp_download_path" 2>/dev/null # 失敗した一時ファイルを削除
+        debug_log "DEBUG" "replace_map_sh: Function finished with error (wget to temp failed)."
+        return 1 # ダウンロード失敗
+    fi
+
+    # ダウンロードされた一時ファイルが空でないか確認
+    if [ ! -s "$temp_download_path" ]; then
+        debug_log "DEBUG" "replace_map_sh: Downloaded temporary file '$temp_download_path' is empty or does not exist."
+        rm -f "$temp_download_path" 2>/dev/null
+        debug_log "DEBUG" "replace_map_sh: Function finished with error (empty temp file)."
+        return 1
+    fi
+
+    # 6. 一時ファイルを目的のパスに mv でアトミックに移動（上書き）
+    debug_log "DEBUG" "replace_map_sh: Attempting to move '$temp_download_path' to '$proto_script_path'."
+    if mv "$temp_download_path" "$proto_script_path"; then
+        debug_log "DEBUG" "replace_map_sh: Successfully moved temporary file to '$proto_script_path'."
+        
+        # 7. 実行権限を付与
         debug_log "DEBUG" "replace_map_sh: Attempting to set execute permission on '$proto_script_path'."
         chmod +x "$proto_script_path"
         chmod_rc=$?
@@ -1749,13 +1770,15 @@ replace_map_sh() {
             return 0 # 成功
         else
             debug_log "DEBUG" "replace_map_sh: Failed to set execute permission on '$proto_script_path'."
-            debug_log "DEBUG" "replace_map_sh: Function finished with error (chmod failed)."
-            return 1 # 権限付与失敗
+            # 権限付与に失敗してもファイルは置き換わっているので、エラーコードは chmod の失敗を示すものを返す
+            debug_log "DEBUG" "replace_map_sh: Function finished with error (chmod failed, but file was replaced)."
+            return 2 # chmod失敗を示す独自のエラーコード (例)
         fi
     else
-        debug_log "DEBUG" "replace_map_sh: Download failed from '$source_url'. wget exit code: $wget_rc"
-        debug_log "DEBUG" "replace_map_sh: Function finished with error (wget failed)."
-        return 1 # ダウンロード失敗
+        debug_log "DEBUG" "replace_map_sh: Failed to move temporary file '$temp_download_path' to '$proto_script_path'."
+        rm -f "$temp_download_path" 2>/dev/null # 移動に失敗した一時ファイルを削除
+        debug_log "DEBUG" "replace_map_sh: Function finished with error (mv failed)."
+        return 1 # mv失敗 (ダウンロード関連のエラーコードと共通)
     fi
 }
 
