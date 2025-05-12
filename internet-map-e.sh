@@ -845,7 +845,7 @@ EOF
         octet3=$(( octet3 | temp2 ))
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPV4_FULL="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=38
         PSIDLEN=8
@@ -861,7 +861,7 @@ EOF
         octet3=$(( temp1 >> 8 ))
         octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPV4_FULL="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=31
         PSIDLEN=8
@@ -881,7 +881,7 @@ EOF
         local temp6=$(( temp5 >> 14 ))
         octet4=$(( temp4 | temp6 ))
 
-        IPV4_FULL="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=38
         PSIDLEN=6
@@ -1242,7 +1242,7 @@ mape_display() {
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     echo "  CE: $CE" # "  CE IPv6アドレス: $CE"
-    echo "  IPv4 Address: $IPV4_FULL" # "  IPv4アドレス: $IPV4_FULL"
+    echo "  IPv4 Address: $IPADDR" # "  IPv4アドレス: $IPADDR"
     echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
 
     echo ""
@@ -1255,6 +1255,7 @@ mape_display() {
     echo "  option ealen '$EALEN'"
     echo "  option psidlen '$PSIDLEN'"
     echo "  option offset '$OFFSET'"
+    echo "" 
     echo "  export LEGACY=1"
 
     # ポート情報の計算を最適化（より効率的に）
