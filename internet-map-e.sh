@@ -1608,7 +1608,7 @@ check_pd() {
         display_wan_ip="N/A"
     fi
 
-    # スピナー開始 (MSG_PD_CHECKING を使用)
+    # スピナー開始
     start_spinner "$(color blue "$(get_message "MSG_PD_CHECKING" "p=$display_wan_ip")")"
     debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Displaying WAN IP: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
 
@@ -1629,7 +1629,7 @@ check_pd() {
 
     # PD自動取得タイムアウト
     debug_log "DEBUG" "check_pd: PD auto-acquisition timed out on '${NET_IF6}' after ${max_wait_seconds} seconds."
-    if [ -n "$SPINNER_PID" ]; then # SPINNER_PIDはaios.shのstart_spinnerで設定されると仮定
+    if [ -n "$SPINNER_PID" ]; then
         # PD未取得: MSG_PD_NOT_ACQUIRED を緑色で表示 (ユーザー指示による)
         stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "success"
     fi
@@ -1671,6 +1671,79 @@ OK_check_pd() {
 }
 
 replace_map_sh() {
+    local proto_script_path="/lib/netifd/proto/map.sh"
+    local backup_script_path="${proto_script_path}.bak"
+    local osversion_file="${CACHE_DIR}/osversion.ch"
+    local osversion=""
+    local source_url=""
+    local wget_rc
+    local chmod_rc
+
+    debug_log "DEBUG" "replace_map_sh: Function started."
+
+    # 1. OSバージョン取得
+    if [ -f "$osversion_file" ]; then
+        osversion=$(cat "$osversion_file")
+        debug_log "DEBUG" "replace_map_sh: OS Version read from cache: $osversion"
+    else
+        debug_log "DEBUG" "replace_map_sh: OS version cache file not found: $osversion_file. Proceeding with default."
+        osversion="" # 明示的に空にしておく
+    fi
+
+    # 2. ソースURL決定
+    # osversion の内容が "19" で始まるか確認 (例: "19.07.7")
+    if echo "$osversion" | grep -q "^19"; then
+        source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.19"
+    else
+        # osversionが空(ファイル無し)の場合や、"19"で始まらない場合はこちら
+        source_url="https://github.com/site-u2023/map-e/raw/main/map.sh.new"
+    fi
+    debug_log "DEBUG" "replace_map_sh: Determined source URL for download: $source_url"
+
+    # 3. バックアップ作成 (失敗しても処理は続行、メッセージなし)
+    if [ -f "$proto_script_path" ]; then
+        debug_log "DEBUG" "replace_map_sh: Attempting to back up '$proto_script_path' to '$backup_script_path'."
+        cp "$proto_script_path" "$backup_script_path" 2>/dev/null # エラー出力抑制は維持
+        if [ $? -eq 0 ]; then
+            debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' successful."
+        else
+            # cpが失敗するケースは稀だが、念のためログ
+            debug_log "DEBUG" "replace_map_sh: Backup of '$proto_script_path' failed. This might be okay if permissions are restrictive but script continues."
+        fi
+    else
+        debug_log "DEBUG" "replace_map_sh: Original script '$proto_script_path' not found, skipping backup (first run or script removed)."
+    fi
+
+    # 4. 新しいスクリプトをダウンロードして配置
+    debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to '$proto_script_path'."
+    wget --no-check-certificate -q -O "$proto_script_path" "$source_url"
+    wget_rc=$?
+    debug_log "DEBUG" "replace_map_sh: wget command finished. Exit code: $wget_rc"
+
+    if [ "$wget_rc" -eq 0 ]; then
+        debug_log "DEBUG" "replace_map_sh: Download successful: '$proto_script_path' has been updated/created."
+        # 5. 実行権限を付与
+        debug_log "DEBUG" "replace_map_sh: Attempting to set execute permission on '$proto_script_path'."
+        chmod +x "$proto_script_path"
+        chmod_rc=$?
+        debug_log "DEBUG" "replace_map_sh: chmod command finished. Exit code: $chmod_rc"
+        if [ "$chmod_rc" -eq 0 ]; then
+            debug_log "DEBUG" "replace_map_sh: Execute permission set successfully for '$proto_script_path'."
+            debug_log "DEBUG" "replace_map_sh: Function finished successfully."
+            return 0 # 成功
+        else
+            debug_log "DEBUG" "replace_map_sh: Failed to set execute permission on '$proto_script_path'."
+            debug_log "DEBUG" "replace_map_sh: Function finished with error (chmod failed)."
+            return 1 # 権限付与失敗
+        fi
+    else
+        debug_log "DEBUG" "replace_map_sh: Download failed from '$source_url'."
+        debug_log "DEBUG" "replace_map_sh: Function finished with error (wget failed)."
+        return 1 # ダウンロード失敗
+    fi
+}
+
+OK_replace_map_sh() {
     local proto_script_path="/lib/netifd/proto/map.sh"
     local backup_script_path="${proto_script_path}.bak"
     local osversion_file="${CACHE_DIR}/osversion.ch"
