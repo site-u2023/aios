@@ -731,7 +731,7 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-OK_mape_mold() {
+mape_mold() {
 
     # IPv6プレフィックス取得 (追加: 取得失敗チェック)
     network_flush_cache
@@ -1024,7 +1024,7 @@ EOF
     return 0
 }
 
-mape_mold() {
+OK_mape_mold() {
     # IPv6プレフィックス取得とキャッシュ
     local ipv6_prefix=""
     network_flush_cache
