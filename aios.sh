@@ -277,6 +277,10 @@ into_memory_message() {
 
     # 基本メッセージの設定
 
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWRT"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_BANNER_NAME=All-in-One Scripts"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_BANNER_DISCLAIMER=WARNING{:} This script is used at your own risk"$'\n'
+    
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Notice: Set a new password with 8 or more characters (Press Enter to skip)"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_CONFIRM_PASSWORD=Confirm new password{;}"$'\n'
@@ -2038,7 +2042,6 @@ check_common() {
             download "message_${DEFAULT_LANGUAGE}.db" "hidden"
             download "local-package.db" "hidden"
             download "custom-package.db" "hidden"
-            print_banner
             print_information
             information_main
             country_main "$lang_code"
@@ -2049,7 +2052,6 @@ check_common() {
             ;;
         full)
             download_parallel
-            print_banner
             print_information
             information_main
             country_main "$lang_code"
@@ -2180,6 +2182,8 @@ setup_password_hostname() {
 # 初期化処理のメイン
 main() {
 
+    print_banner
+    
     setup_password_hostname
     
     resolve_path "$0"
