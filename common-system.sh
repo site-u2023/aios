@@ -486,7 +486,7 @@ detect_wget_capabilities() {
     echo "$capability"
 }
 
-# 📌 デバッグヘルパー関数
+# デバッグヘルパー関数
 debug_info() {
     if [ "$DEBUG_MODE" = "true" ]; then
         echo "===== SYSTEM DEBUG INFO ====="
