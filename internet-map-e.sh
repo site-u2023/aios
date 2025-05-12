@@ -1112,16 +1112,16 @@ EOF
     # --- END IPv6 HEXTET Parsing Enhancement ---
 
     # プレフィックス計算（prefix31/prefix38）
-    local prefix31 prefix38
+    PREFIX31=0 PREFIX38=0 
     local h0_mul=$(( hextet0 * 65536 ))    # 0x10000
     local h1_masked=$(( hextet1 & 65534 )) # 0xfffe
-    prefix31=$(( h0_mul + h1_masked ))
+    PREFIX31=$(( h0_mul + h1_masked ))
 
     local h0_mul2=$(( hextet0 * 16777216 )) # 0x1000000
     local h1_mul=$(( hextet1 * 256 ))      # 0x100
     local h2_masked=$(( hextet2 & 64512 )) # 0xfc00
     local h2_shift=$(( h2_masked >> 8 ))
-    prefix38=$(( h0_mul2 + h1_mul + h2_shift ))
+    PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
 
     # MAP-E出力パラメータ（グローバル変数）の初期化
     OFFSET=6  # デフォルト値
@@ -1554,6 +1554,13 @@ identify_isp() {
     local prefix31="$1"
     local prefix38="$2"
     
+    # 引数が空の場合、グローバル変数から取得
+    if [ -z "$prefix31" ] || [ -z "$prefix38" ]; then
+        debug_log "DEBUG" "identify_isp: Using global PREFIX31 and PREFIX38 variables"
+        prefix31="${PREFIX31:-0}"
+        prefix38="${PREFIX38:-0}"
+    fi
+    
     if [ "$prefix31" -ge 604240512 ] && [ "$prefix31" -lt 604240520 ]; then
         echo "OCN"
     elif [ "$prefix31" -ge 604512272 ] && [ "$prefix31" -lt 604512276 ]; then
@@ -1754,7 +1761,9 @@ internet_map_main() {
 
     # replace_map_sh
 
-    identify_isp
+    local isp_name
+    isp_name=$(identify_isp)
+    printf "\n%s: %s\n" "$(color green "Detected ISP" "$isp_name")"
     
     mape_display
 
