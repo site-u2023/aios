@@ -731,7 +731,7 @@ get_ruleprefix38_20_value() {
     esac
 }
 
-mape_mold() {
+OK_mape_mold() {
 
     # IPv6プレフィックス取得 (追加: 取得失敗チェック)
     network_flush_cache
@@ -1027,6 +1027,315 @@ EOF
     return 0
 }
 
+mape_mold() {
+    # グローバル変数としてNEW_IP6_PREFIXをここで定義
+    local NET_IF6 NET_ADDR6
+    network_flush_cache
+    network_find_wan6 NET_IF6
+    network_get_ipaddr6 NET_ADDR6 "${NET_IF6}"
+    NEW_IP6_PREFIX=${NET_ADDR6}
+
+
+    # Check if IPv6 prefix was obtained
+    if [ -z "$NEW_IP6_PREFIX" ]; then
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED")")" # Assuming color/get_message exist
+        return 1
+    fi
+
+    debug_log "DEBUG" "IPv6 prefix obtained: $NEW_IP6_PREFIX"
+    
+    # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant, space output) ---
+    local ipv6_addr="$NEW_IP6_PREFIX"
+    local h0_str h1_str h2_str h3_str # Shell variables to hold hex strings
+
+    # Use awk for robust :: expansion and extraction of first 4 hextets (POSIX compliant)
+    local awk_output
+    awk_output=$(echo "$ipv6_addr" | awk '
+    BEGIN { FS=":"; OFS=":" } # Keep OFS=":" for sub(), but print explicitly spaced
+    {
+        num_fields = NF
+        if ($0 ~ /::/) {
+            zero_fields = 8 - num_fields + 1
+            zeros = ""
+            for (i = 1; i <= zero_fields; i++) {
+                zeros = zeros "0" (i < zero_fields ? ":" : "")
+            }
+            sub(/::/, zeros)
+            if ($1 == "") $1 = "0"
+            # Need to recalculate NF after sub for trailing :: check
+            if ($NF == "" && NF == 8) $NF = "0"
+            if (NF == 1 && $1 == "") $1 = "0"
+        }
+
+        # Extract first 4 fields, defaulting to "0" if empty (POSIX awk compliant)
+        h0 = $1; if (h0 == "") h0 = "0"
+        h1 = $2; if (h1 == "") h1 = "0"
+        h2 = $3; if (h2 == "") h2 = "0"
+        h3 = $4; if (h3 == "") h3 = "0"
+
+        # Print the first 4 hex strings, explicitly space-separated
+        print h0 " " h1 " " h2 " " h3
+    }')
+
+    # Read the space-separated hex strings output by awk into shell variables
+    read -r h0_str h1_str h2_str h3_str <<EOF
+$awk_output
+EOF
+
+    # Check if awk produced valid output (at least one value)
+    if [ -z "$h0_str" ]; then
+        printf "%s\n" "$(color red "Error: Failed to parse IPv6 prefix using awk.")" # Assuming color exists
+        return 1
+    fi
+
+    # Convert hex strings to decimal numbers (HEXTET0-HEXTET3)
+    local HEXTET0 HEXTET1 HEXTET2 HEXTET3
+    HEXTET0=$(printf %d "0x${h0_str:-0}")
+    HEXTET1=$(printf %d "0x${h1_str:-0}")
+    HEXTET2=$(printf %d "0x${h2_str:-0}")
+    HEXTET3=$(printf %d "0x${h3_str:-0}")
+    
+    # --- END IPv6 HEXTET Parsing Correction ---
+
+    # 各種計算 (複雑なネスト計算を分割) 
+    local PREFIX31 PREFIX38
+    local h0_mul=$(( HEXTET0 * 65536 ))    # 0x10000
+    local h1_masked=$(( HEXTET1 & 65534 )) # 0xfffe
+    PREFIX31=$(( h0_mul + h1_masked ))
+
+    local h0_mul2=$(( HEXTET0 * 16777216 )) # 0x1000000
+    local h1_mul=$(( HEXTET1 * 256 ))      # 0x100
+    local h2_masked=$(( HEXTET2 & 64512 )) # 0xfc00
+    local h2_shift=$(( h2_masked >> 8 ))
+    PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
+
+    # グローバル変数として設定するパラメータの初期化
+    OFFSET=6  # デフォルト値
+    RFC=false # デフォルト値
+    IP6PREFIXLEN=""
+    PSIDLEN=""
+    IPADDR="" # フルIPv4アドレス用 (JavaScript版の ipaddr 相当)
+    IPV4=""   # 設定用IPv4アドレス (*.*.0.0形式) (JavaScript版の ipv4 相当)
+    PSID=0
+    PORTS=""
+    EALEN=""
+    IP4PREFIXLEN=""
+    IP6PFX=""
+    BR=""
+    CE=""
+
+    # プレフィックス値に対応するデータを取得
+    local prefix31_hex
+    prefix31_hex=$(printf 0x%x "$PREFIX31")
+    local prefix38_hex
+    prefix38_hex=$(printf 0x%x "$PREFIX38")
+
+    # IPv4アドレスと各種パラメータの決定
+    local octet1 octet2 octet3 octet4 octet
+    if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
+        octet="$(get_ruleprefix38_value "$prefix38_hex")"
+        debug_log "DEBUG" "Matched ruleprefix38: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        local temp1=$(( HEXTET2 & 768 ))    # 0x0300
+        local temp2=$(( temp1 >> 8 ))
+        octet3=$(( octet3 | temp2 ))
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}" # フルアドレス
+        IPV4="${octet1}.${octet2}.0.0"                 # 設定用アドレス (*.*.0.0)
+        IP6PREFIXLEN=38
+        PSIDLEN=8
+        OFFSET=4
+    elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
+        octet="$(get_ruleprefix31_value "$prefix31_hex")"
+        debug_log "DEBUG" "Matched ruleprefix31: $octet"
+        IFS=',' read -r octet1 octet2 <<EOF
+$octet
+EOF
+        octet2=$(( octet2 | (HEXTET1 & 1) )) # 0x0001
+        local temp1=$(( HEXTET2 & 65280 ))  # 0xff00
+        octet3=$(( temp1 >> 8 ))
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}" # フルアドレス
+        IPV4="${octet1}.${octet2}.0.0"                 # 設定用アドレス (*.*.0.0)
+        IP6PREFIXLEN=31
+        PSIDLEN=8
+        OFFSET=4
+    elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        debug_log "DEBUG" "Matched ruleprefix38_20: $octet"
+        IFS=',' read -r octet1 octet2 octet3 <<EOF
+$octet
+EOF
+        local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
+        local temp2=$(( temp1 >> 6 ))
+        octet3=$(( octet3 | temp2 ))
+        local temp3=$(( HEXTET2 & 63 ))     # 0x003f
+        local temp4=$(( temp3 << 2 ))
+        local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
+        local temp6=$(( temp5 >> 14 ))
+        octet4=$(( temp4 | temp6 ))
+
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}" # フルアドレス
+        IPV4="${octet1}.${octet2}.0.0"                 # 設定用アドレス (*.*.0.0)
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+        OFFSET=6 # ruleprefix38_20では offset=6 を使用
+    else
+        printf "%s\n" "$(color red "Error: Unsupported IPv6 prefix.")" # Assuming color exists
+        debug_log "DEBUG" "No matching ruleprefix found for prefix31=$prefix31_hex or prefix38=$prefix38_hex in mape_mold()"
+        return 1
+    fi
+
+    # PSID計算
+    if [ "$PSIDLEN" -eq 8 ]; then
+        PSID=$(( (HEXTET3 & 65280) >> 8 )) # 0xff00
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=8: $PSID"
+    elif [ "$PSIDLEN" -eq 6 ]; then
+        PSID=$(( (HEXTET3 & 16128) >> 8 )) # 0x3f00
+        debug_log "DEBUG" "PSID calculation for PSIDLEN=6: $PSID"
+    else
+        PSID=0 # フォールバック
+        debug_log "DEBUG" "PSIDLEN ($PSIDLEN) is not 8 or 6, PSID set to 0"
+    fi
+
+    # ポート範囲の計算
+    PORTS=""
+    local AMAX=$(( (1 << OFFSET) - 1 ))
+    debug_log "DEBUG" "Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
+
+    local A
+    for A in $(seq 1 "$AMAX"); do
+        local shift_bits=$(( 16 - OFFSET ))
+        local port_base=$(( A << shift_bits ))
+        local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
+        if [ "$psid_shift" -lt 0 ]; then
+            debug_log "DEBUG" "Invalid calculation: psid_shift is negative ($psid_shift). Check OFFSET and PSIDLEN."
+            psid_shift=0
+        fi
+        local psid_part=$(( PSID << psid_shift ))
+        local port=$(( port_base | psid_part ))
+        local port_range_size=$(( 1 << psid_shift ))
+        if [ "$port_range_size" -le 0 ]; then
+             debug_log "DEBUG" "Invalid calculation: port_range_size is not positive ($port_range_size)."
+             port_range_size=1
+        fi
+        local port_end=$(( port + port_range_size - 1 ))
+
+        PORTS="${PORTS}${port}-${port_end}"
+
+        if [ "$A" -lt "$AMAX" ]; then
+            if [ $(( A % 3 )) -eq 0 ]; then
+                PORTS="${PORTS}\\n"
+            else
+                PORTS="${PORTS} "
+            fi
+        fi
+    done
+
+    # CEアドレス計算用のHEXTETを準備
+    local CE_HEXTET0 CE_HEXTET1 CE_HEXTET2 CE_HEXTET3 CE_HEXTET4 CE_HEXTET5 CE_HEXTET6 CE_HEXTET7
+    CE_HEXTET0=$HEXTET0
+    CE_HEXTET1=$HEXTET1
+    CE_HEXTET2=$HEXTET2
+    CE_HEXTET3=$(( HEXTET3 & 65280 )) # 上位バイトのみ保持 (0xff00)
+
+    # CEアドレス計算ロジック (RFCフラグはfalse固定)
+    # JavaScript版では octet1, octet2, octet3, octet4 は IPADDR (フルアドレス) のオクテットを指す
+    # そのため、ここで再度 IPADDR からオクテットをパースする必要がある
+    local ce_octet1 ce_octet2 ce_octet3 ce_octet4
+    # IPADDR は既に計算済みなので、ここからパースする
+    # 注意: この octet変数は、上記のIPv4アドレス決定ロジックのローカル変数とは別物として扱う
+    # JavaScript版のロジックに合わせて、IPADDR（フルアドレス）のオクテットを使用する
+    ce_octet1=$(echo "$IPADDR" | cut -d. -f1)
+    ce_octet2=$(echo "$IPADDR" | cut -d. -f2)
+    ce_octet3=$(echo "$IPADDR" | cut -d. -f3)
+    ce_octet4=$(echo "$IPADDR" | cut -d. -f4)
+    
+    if [ "$RFC" = "true" ]; then
+        # このブロックはRFC=falseのため通常実行されない
+        debug_log "DEBUG" "Calculating CE Address (RFC mode - unexpected)"
+        CE_HEXTET4=0
+        CE_HEXTET5=$(( (ce_octet1 << 8) | ce_octet2 ))
+        CE_HEXTET6=$(( (ce_octet3 << 8) | ce_octet4 ))
+        CE_HEXTET7=$PSID
+    else
+        debug_log "DEBUG" "Calculating CE Address (Non-RFC mode)"
+        CE_HEXTET4=$ce_octet1
+        CE_HEXTET5=$(( (ce_octet2 << 8) | ce_octet3 ))
+        CE_HEXTET6=$(( ce_octet4 << 8 ))
+        CE_HEXTET7=$(( PSID << 8 ))
+    fi
+
+    # CEアドレス文字列の生成
+    local CE0 CE1 CE2 CE3 CE4 CE5 CE6 CE7
+    CE0=$(printf %04x "$CE_HEXTET0")
+    CE1=$(printf %04x "$CE_HEXTET1")
+    CE2=$(printf %04x "$CE_HEXTET2")
+    CE3=$(printf %04x "$CE_HEXTET3")
+    CE4=$(printf %04x "$CE_HEXTET4")
+    CE5=$(printf %04x "$CE_HEXTET5")
+    CE6=$(printf %04x "$CE_HEXTET6")
+    CE7=$(printf %04x "$CE_HEXTET7")
+    CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
+    debug_log "DEBUG" "Generated CE address (CE): $CE"
+
+    # EALENとプレフィックス長の計算
+    EALEN=$(( 56 - IP6PREFIXLEN ))
+    IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
+    debug_log "DEBUG" "EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
+
+    # IPv6プレフィックスの計算
+    local IP6PFX0 IP6PFX1 IP6PFX2
+    if [ "$IP6PREFIXLEN" -eq 38 ]; then
+        local hextet2_2=$(( HEXTET2 & 64512 ))  # 0xfc00
+        IP6PFX0=$(printf %x "$HEXTET0")
+        IP6PFX1=$(printf %x "$HEXTET1")
+        IP6PFX2=$(printf %x "$hextet2_2")
+        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
+    elif [ "$IP6PREFIXLEN" -eq 31 ]; then
+        local hextet2_1=$(( HEXTET1 & 65534 ))  # 0xfffe
+        IP6PFX0=$(printf %x "$HEXTET0")
+        IP6PFX1=$(printf %x "$hextet2_1")
+        IP6PFX="${IP6PFX0}:${IP6PFX1}"
+    else
+        IP6PFX="" # フォールバック
+        debug_log "WARNING" "Could not determine IP6PFX for IP6PREFIXLEN=$IP6PREFIXLEN"
+    fi
+    debug_log "DEBUG" "Generated IPv6 prefix (IP6PFX): $IP6PFX"
+
+    # ブロードバンドルーターアドレス(BR/Peer)の判定
+    BR=""
+    # ruleprefix31 にマッチした場合のBR判定 (IP6PREFIXLENが31であることを確認)
+    if [ "$IP6PREFIXLEN" -eq 31 ]; then
+        if [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then # 0x24047a80 - 0x24047a83
+            BR="2001:260:700:1::1:275"
+        elif [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then # 0x24047a84 - 0x24047a87
+            BR="2001:260:700:1::1:276"
+        elif { [ "$PREFIX31" -ge 604512272 ] && [ "$PREFIX31" -lt 604512276 ]; } || \
+             { [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; }; then # 0x240b0010-0x240b0013 or 0x240b0250-0x240b0253
+            BR="2404:9200:225:100::64"
+        fi
+    fi
+    # 上記でBRが設定されなかった場合、ruleprefix38_20 にマッチした場合のBRを設定
+    # (IP6PREFIXLEN=38, PSIDLEN=6, OFFSET=6 は ruleprefix38_20 の特徴)
+    if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
+        # この条件は ruleprefix38_20 にマッチしたことを示す。
+        # JavaScriptでは ruleprefix38_20[prefix38] が真であれば BR を設定するため、
+        # get_ruleprefix38_20_value の結果が空でないことを確認する。
+        if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+             BR="2001:380:a120::9"
+        fi
+    fi
+    debug_log "DEBUG" "Selected peer address (BR): $BR"
+
+    debug_log "DEBUG" "Exiting mape_mold() function successfully"
+    return 0
+}
+
 # MAP-E設定を適用する関数
 mape_config() {
     local WANMAP='wanmap' # 設定セクション名
@@ -1236,35 +1545,37 @@ OK_mape_display() {
 
 # MAP-E設定情報を表示する関数
 mape_display() {
-    # 引数チェックは不要 (グローバル変数を使用するため)
 
     echo ""
     echo "Prefix Information:" # "プレフィックス情報:"
     echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE: $CE" # "  CE IPv6アドレス: $CE"
+    echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
     echo "  IPv4 Address: $IPADDR" # "  IPv4アドレス: $IPADDR"
     echo "  PSID (Decimal): $PSID" # "  PSID値(10進数): $PSID"
-    
+
     echo ""
     echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
     echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
-    echo "  option ipaddr '$IPV4'"
+    echo "  option ipaddr $IPV4"
     echo "  option ip4prefixlen '$IP4PREFIXLEN'"
     echo "  option ip6prefix '${IP6PFX}::'" # IP6PFXが空の場合もあるためクォート
     echo "  option ip6prefixlen '$IP6PREFIXLEN'"
     echo "  option ealen '$EALEN'"
     echo "  option psidlen '$PSIDLEN'"
     echo "  option offset '$OFFSET'"
-    echo "" 
+    echo "" # JavaScript版に合わせて空白行を追加
     echo "  export LEGACY=1"
 
-    # ポート情報の計算を最適化（より効率的に）
+    # ポート情報の計算を最適化
     local max_port_blocks=$(( (1 << OFFSET) ))
     local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) # A=1..AMax の合計ポート数
-    local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
+    # AMAX は (1 << OFFSET) - 1 なので、A=0 のブロックは存在しない。
+    # JavaScript版では A=0..AMAX-1 でループし、ポート0のブロックを除外している。
+    # こちらは A=1..AMAX でループするので、AMAX (つまり (1 << OFFSET) - 1) が正しいブロック数。
+    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) 
+    local port_start_for_A1=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) 
 
-    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start=$port_start" 
+    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start_A1=$port_start_for_A1" 
 
     echo ""
     echo "Port Information:" # "ポート情報:"
@@ -1280,28 +1591,30 @@ mape_display() {
         printf "  %b\n" "$(echo "$PORTS" | sed 's/\\n/\\n  /g')"
     else
         # PORTSが空の場合のフォールバック処理（再計算）
+        # この部分はJavaScript版の表示ロジックと完全に一致させるか確認が必要
+        # 現在のPORTS生成ロジックは3つごとに改行だが、JavaScript版は動的に調整している可能性がある
         local shift_bits=$(( 16 - OFFSET ))
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         if [ "$psid_shift" -lt 0 ]; then
             psid_shift=0
         fi
         local port_range_size=$(( 1 << psid_shift ))
-        local port_max_index=$(( (1 << OFFSET) - 1 ))
+        local port_max_index=$(( (1 << OFFSET) - 1 )) # A=1 から AMAX まで
         local line_buffer=""
         local items_in_line=0
-        local max_items_per_line=3
+        local max_items_per_line=3 # 現在のロジックに合わせる
         
         for A in $(seq 1 "$port_max_index"); do
             local port_base=$(( A << shift_bits ))
             local psid_part=$(( PSID << psid_shift ))
-            local port_start=$(( port_base | psid_part ))
-            local port_end=$(( port_start + port_range_size - 1 ))
+            local port_start_val=$(( port_base | psid_part )) # 変数名を変更
+            local port_end_val=$(( port_start_val + port_range_size - 1 )) # 変数名を変更
             
             # バッファに追加
             if [ "$items_in_line" -eq 0 ]; then
-                line_buffer="${port_start}-${port_end}"
+                line_buffer="${port_start_val}-${port_end_val}"
             else
-                line_buffer="${line_buffer} ${port_start}-${port_end}"
+                line_buffer="${line_buffer} ${port_start_val}-${port_end_val}"
             fi
             
             items_in_line=$((items_in_line + 1))
