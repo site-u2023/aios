@@ -974,10 +974,10 @@ setup_location() {
 
     # 設定のバックアップ作成
     debug_log "DEBUG" "Backing up system configuration..."
-    if cp /etc/config/system /etc/config/system.location.old; then
-        debug_log "DEBUG" "System configuration successfully backed up to /etc/config/system.location.old"
+    if cp /etc/config/system /etc/config/system.location.bak; then
+        debug_log "DEBUG" "System configuration successfully backed up to /etc/config/system.location.bak"
     else
-        debug_log "DEBUG" "Failed to backup system configuration to /etc/config/system.location.old"
+        debug_log "DEBUG" "Failed to backup system configuration to /etc/config/system.location.bak"
         backup_failed_flag=1
     fi
 
