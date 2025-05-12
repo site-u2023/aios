@@ -1590,39 +1590,36 @@ mape_config() {
 
 check_pd() {
     local max_wait_seconds=60
-    local interval_seconds=5  # How often to check for PD, in seconds
+    local interval_seconds=5
     local elapsed_seconds=0
-    local pd_status="not_acquired" # "acquired" or "not_acquired"
+    local pd_status="not_acquired" # acquired_auto, not_acquired
     local current_delegated_prefix=""
 
-    # NET_IF6 (PDを試みるインターフェース名) の存在チェック
+    # NET_IF6 の存在チェック
     if [ -z "$NET_IF6" ]; then
         debug_log "DEBUG" "check_pd: NET_IF6 (WAN IPv6 interface name for PD) is not set."
         return 4
     fi
 
-    # NEW_IP6_PREFIX (現在のWAN側IPv6アドレス) の表示準備
     local display_wan_ip=""
     if [ -n "$NEW_IP6_PREFIX" ]; then
         display_wan_ip="$NEW_IP6_PREFIX"
     else
-        display_wan_ip="N/A" # もしNEW_IP6_PREFIXが空の場合の表示
+        display_wan_ip="N/A"
     fi
 
-    # MSG_PD_CHECKING を使用し、{p} に現在のWAN IP ($display_wan_ip) を渡す
+    # スピナー開始 (MSG_PD_CHECKING を使用)
     start_spinner "$(get_message "MSG_PD_CHECKING" "p=$display_wan_ip")"
-
-    debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Current WAN IP for MSG_PD_CHECKING: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
+    debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Displaying WAN IP: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
 
     while [ "$elapsed_seconds" -lt "$max_wait_seconds" ]; do
-        # DHCPv6-PDで委譲されたプレフィックスを取得試行
         network_get_prefix6 current_delegated_prefix "${NET_IF6}"
 
         if [ -n "$current_delegated_prefix" ]; then
-            pd_status="acquired"
-            debug_log "DEBUG" "check_pd: PD acquired on '${NET_IF6}': ${current_delegated_prefix}"
+            pd_status="acquired_auto"
+            debug_log "DEBUG" "check_pd: PD acquired automatically on '${NET_IF6}': ${current_delegated_prefix}"
             stop_spinner "$(get_message "MSG_PD_ACQUIRED")" "success"
-            break
+            return 0
         fi
 
         debug_log "DEBUG" "check_pd: PD not yet acquired on '${NET_IF6}'. Time elapsed: ${elapsed_seconds}s. Waiting for ${interval_seconds}s."
@@ -1630,33 +1627,33 @@ check_pd() {
         elapsed_seconds=$((elapsed_seconds + interval_seconds))
     done
 
-    if [ "$pd_status" = "acquired" ]; then
-        return 0
+    # PD自動取得タイムアウト
+    debug_log "DEBUG" "check_pd: PD auto-acquisition timed out on '${NET_IF6}' after ${max_wait_seconds} seconds."
+    if [ -n "$SPINNER_PID" ]; then # SPINNER_PIDはaios.shのstart_spinnerで設定されると仮定
+        # PD未取得: MSG_PD_NOT_ACQUIRED を緑色で表示 (ユーザー指示による)
+        stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "success"
+    fi
+
+    debug_log "DEBUG" "check_pd: Attempting to set manual prefix using IPV6PREFIX."
+
+    if [ -z "$IPV6PREFIX" ]; then
+        debug_log "DEBUG" "check_pd: IPV6PREFIX is not set. Cannot apply manual prefix."
+        return 2
+    fi
+
+    debug_log "DEBUG" "check_pd: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64'."
+    uci -q set network.wan6.ip6prefix="${IPV6PREFIX}/64"
+
+    debug_log "DEBUG" "check_pd: Committing network configuration."
+    if uci -q commit network; then
+        debug_log "DEBUG" "check_pd: Manual prefix set and network configuration committed successfully."
+        if type color >/dev/null 2>&1; then
+            echo "$(color green "$(get_message "MSG_PD_MANUAL_CONFIG_SUCCESS")")"
+        fi
+        return 1
     else
-        # PD取得タイムアウト
-        debug_log "DEBUG" "check_pd: PD acquisition timed out on '${NET_IF6}' after ${max_wait_seconds} seconds."
-        if [ -n "$SPINNER_PID" ]; then
-            stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "success"
-        fi
-
-        debug_log "DEBUG" "check_pd: Attempting to set manual prefix using IPV6PREFIX."
-
-        if [ -z "$IPV6PREFIX" ]; then
-            debug_log "DEBUG" "check_pd: IPV6PREFIX is not set. Cannot apply manual prefix."
-            return 2
-        fi
-
-        debug_log "DEBUG" "check_pd: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64'."
-        uci -q set network.wan6.ip6prefix="${IPV6PREFIX}/64"
-
-        debug_log "DEBUG" "check_pd: Committing network configuration."
-        if uci -q commit network; then
-            debug_log "DEBUG" "check_pd: Manual prefix set and network configuration committed successfully."
-            return 1
-        else
-            debug_log "DEBUG" "check_pd: Failed to commit network configuration after setting manual prefix."
-            return 3
-        fi
+        debug_log "DEBUG" "check_pd: Failed to commit network configuration after setting manual prefix."
+        return 3
     fi
 }
 
