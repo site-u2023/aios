@@ -1750,6 +1750,8 @@ replace_map_sh() {
         debug_log "DEBUG" "replace_map_sh: wget download FAILED. Exit code: $wget_rc."
         return 1 # wget失敗
     fi
+
+    printf "\n"
 }
 
 OK_replace_map_sh() {
