@@ -1472,8 +1472,8 @@ map_config() {
     cp /etc/config/firewall /etc/config/firewall.map-e.bak && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config."
 
     debug_log "DEBUG" "Applying MAP-E configuration using UCI (strictly adhering to user-defined versioning rules)"
-    
-    # WAN
+
+    # 既存のwanインターフェースの自動起動を停止
     uci set network.wan.auto='0'
 
     # DHCP LAN
@@ -1482,19 +1482,19 @@ map_config() {
     uci set dhcp.lan.ndp='relay'
     uci set dhcp.lan.force='1'
 
-    # DHCP WAN6        
+    # --- DHCP WAN6 設定 ---
     uci set dhcp.wan6=dhcp
     uci set dhcp.wan6.master='1'
     uci set dhcp.wan6.ra='relay'
     uci set dhcp.wan6.dhcpv6='relay'
     uci set dhcp.wan6.ndp='relay'
 
-    # WAN6
+    # --- WAN6 インターフェース設定 ---
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    uci set network.wan6.ip6prefix=${CE}::/64
-
+    uci set network.wan6.ip6prefix="${CE}::/64"
+    
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
     uci set network.${WANMAP}.proto='map'
@@ -1540,17 +1540,7 @@ map_config() {
     fi
     
     # 設定の保存
-    debug_log "DEBUG" "Committing UCI changes..."
-    local commit_ok=1
-    if ! uci commit network; then debug_log "ERROR" "Failed to commit network."; commit_ok=0; fi
-    if ! uci commit dhcp; then debug_log "ERROR" "Failed to commit dhcp."; commit_ok=0; fi
-    if ! uci commit firewall; then debug_log "ERROR" "Failed to commit firewall."; commit_ok=0; fi
-
-    if [ "$commit_ok" -eq 1 ]; then
-        debug_log "DEBUG" "All UCI sections committed successfully."
-    else
-        debug_log "ERROR" "One or more UCI sections failed to commit."
-    fi
+    uci commit
 
     return 0
 
