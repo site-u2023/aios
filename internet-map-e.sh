@@ -1584,10 +1584,96 @@ mape_config() {
     else
         debug_log "ERROR" "One or more UCI sections failed to commit."
     fi
-
-    uci commit
     
     return 0
+}
+
+check_pd() {
+    local max_wait_seconds=60
+    local interval_seconds=5  # How often to check for PD, in seconds
+    local elapsed_seconds=0
+    local pd_status="not_acquired" # "acquired" or "not_acquired"
+    local current_delegated_prefix=""
+
+    # NET_IF6 (PDを試みるインターフェース名) の存在チェック
+    if [ -z "$NET_IF6" ]; then
+        debug_log "DEBUG" "check_pd: NET_IF6 (WAN IPv6 interface name for PD) is not set."
+        return 4
+    fi
+
+    # NEW_IP6_PREFIX (現在のWAN側IPv6アドレス) の表示準備
+    # 値が空の場合はスピナーメッセージ内で表示されないように調整
+    local display_wan_ip=""
+    if [ -n "$NEW_IP6_PREFIX" ]; then
+        display_wan_ip="$NEW_IP6_PREFIX"
+    else
+        display_wan_ip="N/A" # もしNEW_IP6_PREFIXが空の場合の表示
+    fi
+
+    start_spinner "$(get_message "MSG_PD_CHECKING" "if_name=$NET_IF6" "wan_ip=$display_wan_ip")"
+
+    debug_log "DEBUG" "check_pd: Starting PD check on interface '${NET_IF6}'. Current WAN IP: '${display_wan_ip}'. Max wait: ${max_wait_seconds}s, Interval: ${interval_seconds}s."
+
+    while [ "$elapsed_seconds" -lt "$max_wait_seconds" ]; do
+        # DHCPv6-PDで委譲されたプレフィックスを取得試行
+        network_get_prefix6 current_delegated_prefix "${NET_IF6}"
+
+        if [ -n "$current_delegated_prefix" ]; then
+            pd_status="acquired"
+            debug_log "DEBUG" "check_pd: PD acquired on '${NET_IF6}': ${current_delegated_prefix}"
+            stop_spinner "$(get_message "MSG_PD_ACQUIRED" "p=$current_delegated_prefix")" "success"
+            # ユーザー指示により、取得したプレフィックスを標準出力
+            echo "${current_delegated_prefix}"
+            break
+        fi
+
+        debug_log "DEBUG" "check_pd: PD not yet acquired on '${NET_IF6}'. Time elapsed: ${elapsed_seconds}s. Waiting for ${interval_seconds}s."
+        sleep "$interval_seconds"
+        elapsed_seconds=$((elapsed_seconds + interval_seconds))
+    done
+
+    if [ "$pd_status" = "acquired" ]; then
+        return 0
+    else
+        # PD取得タイムアウト
+        debug_log "DEBUG" "check_pd: PD acquisition timed out on '${NET_IF6}' after ${max_wait_seconds} seconds."
+        # ループ内でスピナーが停止していなければ（つまりタイムアウトした場合）、ここで停止
+        if [ -n "$SPINNER_PID" ]; then # SPINNER_PID は aios.sh の start_spinner で設定されるグローバル変数と仮定
+            stop_spinner "$(get_message "MSG_PD_NOT_ACQUIRED")" "failure"
+        fi
+
+        debug_log "DEBUG" "check_pd: Attempting to set manual prefix using IPV6PREFIX."
+
+        if [ -z "$IPV6PREFIX" ]; then
+            debug_log "DEBUG" "check_pd: IPV6PREFIX is not set. Cannot apply manual prefix."
+            return 2
+        fi
+
+        debug_log "DEBUG" "check_pd: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64'."
+        uci -q set network.wan6.ip6prefix="${IPV6PREFIX}/64"
+
+        debug_log "DEBUG" "check_pd: Committing network configuration."
+        if uci -q commit network; then
+            debug_log "DEBUG" "check_pd: Manual prefix set and network configuration committed successfully."
+            return 1
+        else
+            debug_log "DEBUG" "check_pd: Failed to commit network configuration after setting manual prefix."
+            return 3
+        fi
+    fi
+}
+
+check_pd() {
+
+    network_get_prefix6 NET_PFX6 "${NET_IF6}"
+    echo "${NET_PFX6}"
+ 
+    # Persistent static configuration
+    uci get network.wan6.ip6prefix
+
+    uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
+    uci commit network
+
 }
 
 replace_map_sh() {
@@ -1628,46 +1714,6 @@ replace_map_sh() {
     else
         return 1 # ダウンロード失敗
     fi
-}
-
-# MAP-E設定情報を表示する関数
-OK_mape_display() {
-
-    echo ""
-    echo "Prefix Information:" # "プレフィックス情報:"
-    echo "  IPv6 Prefix: $NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    echo "  CE IPv6 Address: $CE" # "  CE IPv6アドレス: $CE"
-    echo "  IPv4 Address: $IPADDR" # "  IPv4アドレス: $IPADDR"
-    echo ""
-    echo "OpenWrt Configuration Values:" # "OpenWrt設定値:"
-    echo "  option peeraddr '$BR'" # BRが空の場合もあるためクォート
-    echo "  option ipaddr '$IPV4'"
-    echo "  option ip4prefixlen '$IP4PREFIXLEN'"
-    echo "  option ip6prefix '${IP6PFX}::'" # IP6PFXが空の場合もあるためクォート
-    echo "  option ip6prefixlen '$IP6PREFIXLEN'"
-    echo "  option ealen '$EALEN'"
-    echo "  option psidlen '$PSIDLEN'"
-    echo "  option offset '$OFFSET'"
-    echo "  export LEGACY=1"
-
-    # 利用可能なポート範囲の計算 (表示用)
-    local max_port_blocks=$(( (1 << OFFSET) ))
-    local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) # A=1..AMax の合計ポート数
-    local port_start=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) # A=1 の時のポート開始値
-
-    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start=$port_start" 
-
-    echo ""
-    echo "Port Information:" # "ポート情報:"
-    echo "  Available Ports: $total_ports" # "  利用可能なポート数: $total_ports"
-
-    # ポート範囲を表示 (printfを使用)
-    echo ""
-    echo "Port Ranges:" # "ポート範囲:"
-    printf "%b\n" "$PORTS" # %bでバックスラッシュエスケープ(\n)を解釈
-
-    return 0
 }
 
 # MAP-E設定情報を表示する関数
@@ -1857,10 +1903,12 @@ internet_map_main() {
 
     mape_config
 
+    check_pd
+    
     replace_map_sh
     
     mape_display
-
+    
     printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
