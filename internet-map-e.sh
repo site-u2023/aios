@@ -1535,7 +1535,7 @@ mape_config() {
     uci set network.${WANMAP}.peeraddr="${BR}"
     uci set network.${WANMAP}.ipaddr="${IPV4}"
     uci set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci set network.${WANMAP}.ip6prefix="${IP6PFX}"
+    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::"
     uci set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
     uci set network.${WANMAP}.ealen="${EALEN}"
     uci set network.${WANMAP}.psidlen="${PSIDLEN}"
@@ -1586,6 +1586,8 @@ mape_config() {
         debug_log "ERROR" "One or more UCI sections failed to commit."
     fi
 
+    uci commit
+    
     return 0
 }
 
