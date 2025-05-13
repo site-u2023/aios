@@ -2254,9 +2254,9 @@ setup_password_hostname() {
             else
                 printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
             fi
+            printf "\n"
         fi
     fi
-    printf "\n"
 
     # SSH LAN設定（UCI値でInterfaceが未設定の場合のみ）
     local dropbear_interface
