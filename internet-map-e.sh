@@ -1737,9 +1737,6 @@ replace_map_sh() {
 
 # MAP-E設定情報を表示する関数
 mape_display() {
-    
-    printf "\n"
-    printf "%s\n" "$(color magenta "(config-softwire)# missing233")"
 
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
@@ -1818,6 +1815,8 @@ mape_display() {
         done
     fi
 
+    printf "%s\n" "$(color magenta "(config-softwire)# missing233")"
+    printf "\n"
     printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
