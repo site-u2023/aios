@@ -381,6 +381,15 @@ into_memory_message() {
     MSG_MEMORY_LANG="$lang"
 }
 
+# 表題部専用関数
+print_section_title() {
+    local msg_key="$1"
+    local color_name="${2:-blue}"   # デフォルトは青
+    local format_type="${3:-none}"  # デフォルトは変換なし
+
+    printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key" "$format_type")")"
+}
+
 # 翻訳システムを初期化する関数
 init_translation() {
     debug_log "DEBUG" "Initializing translation system"
