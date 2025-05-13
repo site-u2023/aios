@@ -1815,9 +1815,10 @@ mape_display() {
         done
     fi
 
+    printf "\n"
     printf "%s\n" "$(color magenta "(config-softwire)# missing233")"
     printf "\n"
-    printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
     
