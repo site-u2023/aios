@@ -372,15 +372,15 @@ confirm_package_lines() {
 
     # Display specific field of each line in lines_to_process based on the first field.
     echo "$lines_to_process" | awk '
-        {
-            if ($1 == "feed_package" || $1 == "feed_package1") {
-                print $3;
-            } else if ($1 == "install_package") {
-                print $2;
-            }
-            # For any other command in $1 (not feed_package, feed_package1, or install_package),
-            # nothing is printed by this awk script.
-        }
+{
+    if ($1 == "feed_package") {
+        print $5;
+    } else if ($1 == "feed_package1") {
+        print $3;
+    } else if ($1 == "install_package") {
+        print $2;
+    }
+}
     ';
 
     # Confirm execution. Pass an empty string as the prompt.
