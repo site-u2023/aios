@@ -2225,7 +2225,7 @@ setup_password_hostname() {
             }
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
+                printf "%s\n\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
                 break
             else
                 printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
@@ -2237,7 +2237,7 @@ setup_password_hostname() {
     local current_hostname new_hostname
     current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "\n%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
+        printf "%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
         printf "\n"
         if [ -z "$new_hostname" ]; then
