@@ -80,6 +80,7 @@ en|PKG_SECTION_UTILITY=Utility Tools
 en|PKG_SECTION_ADDITION=Additional Features
 en|PKG_SECTION_USB=USB Storage
 en|PKG_SECTION_SAMBA=File Sharing
+en|MSG_CONFIRM_PACKAGE_OPERATION=Do you want to process the package list above {yn}{;}
 
 # common-system.sh
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{:} {info}
