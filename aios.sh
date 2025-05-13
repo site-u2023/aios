@@ -2249,11 +2249,10 @@ setup_password_hostname() {
             uci set system.@system[0].hostname="$new_hostname"
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
-            printf "\n"
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
+                printf "\n%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
             else
-                printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
+                printf "\n%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
             fi
             printf "\n"
         fi
