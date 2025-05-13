@@ -275,103 +275,113 @@ install_packages_version() {
 }
 
 confirm_package_lines() {
-    local db_file="${BASE_DIR}/package.db"
-    local os_version_id=""
-    local usb_present="0" # 0 for no, 1 for yes
-    local lines_to_process=""
+    local db_file="${BASE_DIR}/package.db";
+    local os_version_id="";
+    local usb_present="0"; # 0 for no, 1 for yes
+    local lines_to_process="";
 
     # Check for package.db
     if [ ! -f "$db_file" ]; then
-        debug_log "ERROR" "confirm_package_lines: $db_file not found. Cannot proceed."
-        return 1
-    fi
+        debug_log "ERROR" "confirm_package_lines: $db_file not found. Cannot proceed.";
+        return 1;
+    fi;
 
     # Determine OS version for section name
     if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
-        debug_log "DEBUG" "confirm_package_lines: OS version cache not found, using DEFAULT."
-        os_version_id="DEFAULT"
+        debug_log "DEBUG" "confirm_package_lines: OS version cache not found, using DEFAULT.";
+        os_version_id="DEFAULT";
     else
-        local os_ver_val
-        os_ver_val=$(cat "${CACHE_DIR}/osversion.ch")
+        local os_ver_val;
+        os_ver_val=$(cat "${CACHE_DIR}/osversion.ch");
         case "$os_ver_val" in
             19.*) os_version_id="RELEASE19" ;;
             *[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt]*) os_version_id="SNAPSHOT" ;;
             *) os_version_id="DEFAULT" ;;
-        esac
-    fi
-    debug_log "DEBUG" "confirm_package_lines: Determined OS version identifier: $os_version_id"
+        esac;
+    fi;
+    debug_log "DEBUG" "confirm_package_lines: Determined OS version identifier: $os_version_id";
 
     # Check for USB device
     if [ -f "${CACHE_DIR}/usbdevice.ch" ] && [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
-        debug_log "DEBUG" "confirm_package_lines: USB device detected."
-        usb_present="1"
+        debug_log "DEBUG" "confirm_package_lines: USB device detected.";
+        usb_present="1";
     else
-        debug_log "DEBUG" "confirm_package_lines: No USB device detected."
-    fi
+        debug_log "DEBUG" "confirm_package_lines: No USB device detected.";
+    fi;
 
     # AWK script to extract lines in order and ensure uniqueness.
     # BOM and CR characters are removed by sed before awk processing.
-    lines_to_process=$(sed -e '1s/^\xEF\xBB\xBF//' -e 's/\r$//' "$db_file" | awk -v os_ver_id="$os_version_id" -v usb_is_present="$usb_present" '
+    lines_to_process=$(sed -e '1s/^\xEF\xBB\xBF//' -e 's/\r$//' "$db_file" | awk -v os_ver_id_awk="$os_version_id" -v usb_is_present_awk="$usb_present" '
         BEGIN {
             # Define target sections based on input variables
-            sec_base_common = "[BASE_SYSTEM.COMMON]"
-            sec_base_version = "[BASE_SYSTEM." os_ver_id "]"
-            sec_usb_common = "[USB.COMMON]"
+            section_base_common_target = "[BASE_SYSTEM.COMMON]";
+            section_base_version_target = "[BASE_SYSTEM." os_ver_id_awk "]";
+            section_usb_common_target = "[USB.COMMON]";
 
             # State flags for current section and counters for arrays
-            in_sbc = 0; count_sbc = 0
-            in_sbv = 0; count_sbv = 0
-            in_suc = 0; count_suc = 0
+            in_section_base_common = 0; count_base_common = 0;
+            in_section_base_version = 0; count_base_version = 0;
+            in_section_usb_common = 0; count_usb_common = 0;
         }
 
-        # Pre-process current line (trimming is complex in non-GNU awk, rely on patterns)
-        { current_line_val = $0 }
+        # Main processing loop for each line
+        {
+            current_line_content = $0;
 
-        # Skip lines: empty, comments, print_section_header
-        /^[[:space:]]*$/ {next}
-        /^[[:space:]]*#/ {next}
-        /^print_section_header/ {next}
+            # Skip lines: empty, comments, print_section_header
+            if (current_line_content ~ /^[[:space:]]*$/) { next; }
+            if (current_line_content ~ /^[[:space:]]*#/) { next; }
+            if (current_line_content ~ /^print_section_header/) { next; }
 
-        # Section detection and flag management
-        current_line_val == sec_base_common   { in_sbc=1; in_sbv=0; in_suc=0; next }
-        current_line_val == sec_base_version  { in_sbv=1; in_sbc=0; in_suc=0; next }
-        (usb_is_present == "1" && current_line_val == sec_usb_common) { in_suc=1; in_sbc=0; in_sbv=0; next }
-        
-        # If it is any other section line (starts with [), reset all flags and skip
-        /^[[:space:]]*\[.*\][[:space:]]*$/ { in_sbc=0; in_sbv=0; in_suc=0; next }
+            # Section detection and flag management
+            if (current_line_content == section_base_common_target) {
+                in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; next;
+            }
+            if (current_line_content == section_base_version_target) {
+                in_section_base_version = 1; in_section_base_common = 0; in_section_usb_common = 0; next;
+            }
+            if (usb_is_present_awk == "1" && current_line_content == section_usb_common_target) {
+                in_section_usb_common = 1; in_section_base_common = 0; in_section_base_version = 0; next;
+            }
+            
+            # If it is any other section line (starts with [), reset all flags and skip
+            if (current_line_content ~ /^[[:space:]]*\[.*\][[:space:]]*$/) {
+                in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next;
+            }
 
-        # Store lines from active sections into respective arrays
-        if (in_sbc)  { arr_sbc[count_sbc++] = current_line_val }
-        if (in_sbv)  { arr_sbv[count_sbv++] = current_line_val }
-        if (in_suc && usb_is_present == "1") { arr_suc[count_suc++] = current_line_val }
+            # Store lines from active sections into respective arrays
+            if (in_section_base_common == 1)  { array_base_common[count_base_common++] = current_line_content; }
+            if (in_section_base_version == 1)  { array_base_version[count_base_version++] = current_line_content; }
+            if (in_section_usb_common == 1 && usb_is_present_awk == "1") { array_usb_common[count_usb_common++] = current_line_content; }
+        }
 
         END {
             # Print stored lines in the specified order
-            for (i=0; i < count_sbc; i++) print arr_sbc[i]
-            for (i=0; i < count_sbv; i++) print arr_sbv[i]
-            if (usb_is_present == "1") {
-                for (i=0; i < count_suc; i++) print arr_suc[i]
+            for (idx = 0; idx < count_base_common; idx++) { print array_base_common[idx]; }
+            for (idx = 0; idx < count_base_version; idx++) { print array_base_version[idx]; }
+            if (usb_is_present_awk == "1") {
+                for (idx = 0; idx < count_usb_common; idx++) { print array_usb_common[idx]; }
             }
         }
-    ' | awk '!seen[$0]++') # Ensure unique lines overall, respecting the order from first awk script
+    ' | awk '!seen[$0]++'); # Ensure unique lines overall, respecting the order from first awk script
 
     if [ -z "$lines_to_process" ]; then
-        debug_log "INFO" "confirm_package_lines: No package-related commands are scheduled for execution."
-        return 1
-    fi
+        debug_log "INFO" "confirm_package_lines: No package-related commands are scheduled for execution.";
+        return 1;
+    fi;
 
     # Display lines exactly as extracted, without any surrounding titles or messages from this function.
-    printf "%s\n" "$lines_to_process"
+    printf "%s\n" "$lines_to_process";
 
     # Confirm execution using a minimal fixed English prompt.
     # `confirm` function is assumed to exist and handle Y/N input.
     if confirm "Execute?"; then # 最も短い英語固定文字列プロンプト
-        debug_log "DEBUG" "confirm_package_lines: User confirmed."
-        return 0 # User confirmed
+        debug_log "DEBUG" "confirm_package_lines: User confirmed.";
+        return 0; # User confirmed
     else
-        debug_log "INFO" "confirm_package_lines: User cancelled."
-        return 1 # User cancelled
-    fi
+        debug_log "INFO" "confirm_package_lines: User cancelled.";
+        return 1; # User cancelled
+    fi;
 }
 
 # メイン処理
