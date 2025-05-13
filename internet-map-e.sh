@@ -1136,7 +1136,9 @@ mape_config() {
     uci del_list firewall.@zone[${ZONE_NO}].network='wan'
     uci del_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
     uci add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
-    
+    uci set firewall.@zone[${ZONE_NO}].masq='1'
+    uci set firewall.@zone[${ZONE_NO}].mtu_fix='1'
+
     # 設定の保存
     debug_log "DEBUG" "Committing UCI changes..."
     local commit_ok=1
