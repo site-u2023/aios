@@ -1356,16 +1356,10 @@ NG_mape_config() {
     uci set network.wan.auto='0'
 
     # --- DHCP LAN 設定 ---
-    uci set dhcp.lan.dhcpv6='server'
-    uci set dhcp.lan.ra='server'
-    uci set dhcp.lan.ndp='disabled'
+    uci set dhcp.lan.dhcpv6='relay'
+    uci set dhcp.lan.ra='relay'
+    uci set dhcp.lan.ndp='relay'
     uci set dhcp.lan.force='1'
-    uci set dhcp.lan.ra_slaac='1'
-    uci delete dhcp.lan.ra_flags
-    uci add_list dhcp.lan.ra_flags='managed-config'
-    uci add_list dhcp.lan.ra_flags='other-config'
-    uci -q delete dhcp.lan.ra_management
-    uci -q delete dhcp.lan.ra_default
 
     # --- DHCP WAN6 設定 ---
     uci set dhcp.wan6=dhcp
