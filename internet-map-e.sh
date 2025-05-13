@@ -1067,7 +1067,7 @@ EOF
 mape_config() {
 
     local WANMAP='wanmap' # 設定セクション名
-    local ZONE_NAME='wan'
+    local ZONE_NO='1'
     local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
     
@@ -1100,7 +1100,8 @@ mape_config() {
     uci set network.wan6.proto='dhcpv6'
     uci set network.wan6.reqaddress='try'
     uci set network.wan6.reqprefix='auto'
-    
+    # uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
+        
     # --- WANMAP (MAP-E) インターフェース設定 ---
     uci set network.${WANMAP}=interface
     uci set network.${WANMAP}.proto='map'
@@ -1115,15 +1116,6 @@ mape_config() {
     uci set network.${WANMAP}.offset="${OFFSET}"
     uci set network.${WANMAP}.mtu='1460'
     uci set network.${WANMAP}.encaplimit='ignore'
-
-    # The following line sets a static IPv6 prefix for the wan6 interface.
-    # In environments where a prefix is delegated via DHCPv6-PD (e.g., /56 from Plala 10G),
-    # manually setting ip6prefix might be unnecessary or could cause conflicts.
-    # If your ISP provides a prefix via PD and wan6 gets it automatically,
-    # you should KEEP THIS LINE COMMENTED OUT.
-    # If you have a static /64 prefix assignment or if PD is not working as expected,
-    # you might need to uncomment and use this line.
-    # uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
     
     # --- バージョン固有設定 ---
     if echo "$osversion" | grep -q "^19"; then
@@ -1141,30 +1133,9 @@ mape_config() {
     fi
     
     # --- ファイアウォール設定 ---
-    #uci del_list firewall.@zone[${ZONE_NO}].network='wan'
-    #uci del_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
-    #uci add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
-
-    # --- ファイアウォール設定 (動的ゾーン検索) ---
-    local wan_zone_uci_path
-    wan_zone_uci_path=$(uci show firewall | awk -F'[.=]' -v z_name_val="${ZONE_NAME}" '
-        $1 == "firewall" && $3 == "name" && $4 == "\047"z_name_val"\047" {
-            print $1"."$2; # e.g., firewall.@zone[0] or firewall.cfgXXXX
-            exit;
-        }
-    ')
-    
-    if [ -n "$wan_zone_uci_path" ]; then
-        debug_log "DEBUG" "Found firewall zone '${ZONE_NAME}' at UCI path: ${wan_zone_uci_path}"
-        uci del_list "${wan_zone_uci_path}.network" 'wan'
-        uci del_list "${wan_zone_uci_path}.network" "${WANMAP}"
-        uci add_list "${wan_zone_uci_path}.network" "${WANMAP}"
-        uci set "${wan_zone_uci_path}.masq='1'"
-        uci set "${wan_zone_uci_path}.mtu_fix='1'"
-    else
-        debug_log "DEBUG" "Firewall zone named '${ZONE_NAME}' not found. Firewall rule for MAP-E may need manual configuration."
-        return 1
-    fi
+    uci del_list firewall.@zone[${ZONE_NO}].network='wan'
+    uci del_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
+    uci add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
     
     # 設定の保存
     debug_log "DEBUG" "Committing UCI changes..."
