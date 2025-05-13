@@ -2206,31 +2206,34 @@ setup_password_hostname() {
     local passwd_field new_password confirm_password
     passwd_field=$(awk -F: '/^root:/ {print $2}' /etc/shadow 2>/dev/null)
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
+    if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
             printf "%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
-            printf "%s" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
+            printf "%s"   "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
             printf "\n"
             [ -z "$new_password" ] && break
             [ ${#new_password} -lt 8 ] && {
-                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
                 continue
             }
             printf "%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
             read -s confirm_password
             printf "\n"
             [ "$new_password" != "$confirm_password" ] && {
-                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
                 continue
             }
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
-                printf "%s\n\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
                 break
             else
                 printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
             fi
         done
+        printf "\n"
+    fi
     fi
 
     # ホストネーム設定（UCI値のみ初期値時のみ）
@@ -2247,12 +2250,13 @@ setup_password_hostname() {
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
             if [ $? -eq 0 ]; then
-                printf "%s\n\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
             else
-                printf "%s\n\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
             fi
         fi
     fi
+    printf "\n"
 
     # SSH LAN設定（UCI値でInterfaceが未設定の場合のみ）
     local dropbear_interface
@@ -2262,11 +2266,12 @@ setup_password_hostname() {
         uci commit dropbear
         /etc/init.d/dropbear restart 1>/dev/null 2>&1
         if [ $? -eq 0 ]; then
-            printf "\n%s\n" "$(color white "$(get_message "MSG_SSH_LAN_SET_OK")")"
+            printf "%s\n" "$(color white "$(get_message "MSG_SSH_LAN_SET_OK")")"
         else
             printf "%s\n" "$(color red "$(get_message "MSG_SSH_LAN_SET_FAIL")")"
         fi
     fi
+    printf "\n"
 }
 
 # 初期化処理のメイン
