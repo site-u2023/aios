@@ -370,33 +370,33 @@ confirm_package_lines() {
 
         _command=$(echo "$line" | awk '{print $1}')
         
-        # MODIFIED: Extract arguments and remove surrounding quotes if present
         _arg2_raw=$(echo "$line" | awk '{print $2}')
         _arg2=$(echo "$_arg2_raw" | sed 's/^"//;s/"$//')
 
         if [ "$_command" = "print_section_header" ]; then
-            print_section_header "$_arg2" # Call the shell function with unquoted message key
+            print_section_header "$_arg2" 
         elif [ "$_command" = "install_package" ]; then
-            echo "$_arg2" # Display unquoted package name
+            echo "$_arg2" 
         elif [ "$_command" = "feed_package" ]; then
             _arg5_raw=$(echo "$line" | awk '{print $5}')
             _arg5=$(echo "$_arg5_raw" | sed 's/^"//;s/"$//')
-            echo "$_arg5" # Display unquoted package name
+            echo "$_arg5" 
         elif [ "$_command" = "feed_package1" ]; then
             _arg3_raw=$(echo "$line" | awk '{print $3}')
             _arg3=$(echo "$_arg3_raw" | sed 's/^"//;s/"$//')
-            echo "$_arg3" # Display unquoted package name
+            echo "$_arg3" 
         fi
     done
-
-    printf "\n" 
     
+    printf "\n" 
+
     # Confirm execution.
-    if confirm ""; then 
-        debug_log "DEBUG" "confirm_package_lines: User confirmed.";
+    # MODIFIED: Pass SELECTED_MENU_KEY to the confirm function
+    if confirm "$SELECTED_MENU_KEY"; then 
+        debug_log "DEBUG" "confirm_package_lines: User confirmed for menu key '$SELECTED_MENU_KEY'.";
         return 0;
     else
-        debug_log "DEBUG" "confirm_package_lines: User cancelled.";
+        debug_log "DEBUG" "confirm_package_lines: User cancelled for menu key '$SELECTED_MENU_KEY'.";
         return 1;
     fi;
 }
