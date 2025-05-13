@@ -373,9 +373,29 @@ confirm_package_lines() {
     # Display lines exactly as extracted, without any surrounding titles or messages from this function.
     printf "%s\n" "$lines_to_process";
 
-    # Confirm execution using a minimal fixed English prompt.
+    local prompt_text_for_confirm="";
+
+    # Attempt to extract the second field of the first line from lines_to_process
+    if [ -n "$lines_to_process" ]; then
+        local first_line_of_data;
+        # Extract the first line from the multi-line string lines_to_process
+        first_line_of_data=$(echo "$lines_to_process" | head -n 1);
+        
+        if [ -n "$first_line_of_data" ]; then
+            # Extract the second field ($2) from the first line
+            prompt_text_for_confirm=$(echo "$first_line_of_data" | awk '{print $2}');
+        fi;
+    fi;
+
+    # If the second field could not be extracted (e.g., it was empty or the line had no second field),
+    # fall back to the original default prompt "Execute?". Otherwise, use the extracted second field.
+    if [ -z "$prompt_text_for_confirm" ]; then
+        prompt_text_for_confirm="Execute?";
+    fi;
+
+    # Confirm execution using the generated prompt.
     # `confirm` function is assumed to exist and handle Y/N input.
-    if confirm "Execute?"; then # 最も短い英語固定文字列プロンプト
+    if confirm "$prompt_text_for_confirm"; then 
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
         return 0; # User confirmed
     else
