@@ -1734,8 +1734,6 @@ replace_map_sh() {
         debug_log "DEBUG" "replace_map_sh: wget download FAILED. Exit code: $wget_rc."
         return 1 # wget失敗
     fi
-
-    printf "\n"
 }
 
 # MAP-E設定情報を表示する関数
