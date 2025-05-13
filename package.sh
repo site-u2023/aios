@@ -391,12 +391,12 @@ confirm_package_lines() {
     printf "\n" 
 
     # Confirm execution.
-    # MODIFIED: Pass SELECTED_MENU_KEY to the confirm function
-    if confirm "$SELECTED_MENU_KEY"; then 
-        debug_log "DEBUG" "confirm_package_lines: User confirmed for menu key '$SELECTED_MENU_KEY'.";
+    # MODIFIED: Use the new dedicated message key for this confirmation
+    if confirm "MSG_CONFIRM_PACKAGE_OPERATION"; then 
+        debug_log "DEBUG" "confirm_package_lines: User confirmed package operation.";
         return 0;
     else
-        debug_log "DEBUG" "confirm_package_lines: User cancelled for menu key '$SELECTED_MENU_KEY'.";
+        debug_log "DEBUG" "confirm_package_lines: User cancelled package operation.";
         return 1;
     fi;
 }
