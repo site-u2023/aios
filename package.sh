@@ -49,7 +49,7 @@ package_samba() {
     print_section_header() {
         local section_key="$1"
         local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color gray_white "$header_text")"
+        printf "%s\n" "$(color gray_white "$header_text")"
     }
 
     # === ファイル共有 ===
@@ -87,7 +87,7 @@ check_install_list() {
     # 表示モード切り替え: 0=パッケージ名のみ, 1=worldファイルの内容そのまま
     local SHOW_APK_ENTRY_DETAIL="${SHOW_APK_ENTRY_DETAIL:-0}"
 
-    printf "\n%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
+    printf "%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
     
     # パッケージマネージャの種類を確認
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
