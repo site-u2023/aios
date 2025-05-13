@@ -1331,7 +1331,6 @@ mape_display() {
     local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) 
     
     # local port_start_for_A1=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) 
-
     local shift_val1
     local term1
     local shift_val2
@@ -1344,7 +1343,6 @@ mape_display() {
     term2=$((PSID << shift_val2))
     port_start_for_A1=$((term1 | term2))
 
-    
     debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start_A1=$port_start_for_A1" 
 
     printf "\n"
