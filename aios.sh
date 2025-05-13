@@ -2206,15 +2206,15 @@ setup_password_hostname() {
     local passwd_field new_password confirm_password
     passwd_field=$(awk -F: '/^root:/ {print $2}' /etc/shadow 2>/dev/null)
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
-    if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
             printf "%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
             printf "%s"   "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
             printf "\n"
-            [ -z "$new_password" ] && break
+            [ -z "$new_password" ] && { printf "\n"; break; }
             [ ${#new_password} -lt 8 ] && {
                 printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "\n"
                 continue
             }
             printf "%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
@@ -2222,18 +2222,19 @@ setup_password_hostname() {
             printf "\n"
             [ "$new_password" != "$confirm_password" ] && {
                 printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "\n"
                 continue
             }
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
                 printf "%s\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
+                printf "\n"
                 break
             else
                 printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "\n"
             fi
         done
-        printf "\n"
-    fi
     fi
 
     # ホストネーム設定（UCI値のみ初期値時のみ）
@@ -2244,7 +2245,7 @@ setup_password_hostname() {
         read new_hostname
         printf "\n"
         if [ -z "$new_hostname" ]; then
-            :
+            printf "\n"
         else
             uci set system.@system[0].hostname="$new_hostname"
             uci commit system
@@ -2270,10 +2271,9 @@ setup_password_hostname() {
         else
             printf "%s\n" "$(color red "$(get_message "MSG_SSH_LAN_SET_FAIL")")"
         fi
+        printf "\n"
     fi
-    printf "\n"
 }
-
 # 初期化処理のメイン
 main() {
 
