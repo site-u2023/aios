@@ -1702,7 +1702,7 @@ replace_map_sh() {
     # 3. 新しいスクリプトをダウンロードして直接上書き (wget -O、IPタイプ -6 固定)
     debug_log "DEBUG" "replace_map_sh: Attempting to download from '$source_url' to '$proto_script_path' using wget with -6 option."
     
-    command wget -q -6 --no-check-certificate -O "$proto_script_path" "$source_url"
+    command wget -q ${WGET_IPV_OPT} --no-check-certificate -O "$proto_script_path" "$source_url"
     wget_rc=$?
     debug_log "DEBUG" "replace_map_sh: wget command finished. Exit code: $wget_rc."
 
@@ -1716,10 +1716,10 @@ replace_map_sh() {
                 debug_log "DEBUG" "replace_map_sh: Execute permission set successfully for '$proto_script_path'."
                 debug_log "DEBUG" "replace_map_sh: Function finished successfully."
                 
-                # ユーザーは事前に MSG_MAP_SH_UPDATE_SUCCESS キーとその英語の値を message_en.db 等に定義する必要があります。
                 if type get_message > /dev/null 2>&1; then
                     printf "%s\n" "$(color green "$(get_message "MSG_MAP_SH_UPDATE_SUCCESS")")"
                 fi
+                printf "\n"
                 return 0 # 全て成功
             else
                 local chmod_rc=$?
