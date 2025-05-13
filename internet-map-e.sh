@@ -1067,8 +1067,7 @@ EOF
 mape_config() {
 
     local WANMAP='wanmap' # 設定セクション名
-    local ZONE_NO='1'
-    local wan_firewall_zone_name='wan'
+    local ZONE_NAME='wan'
     local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
     
@@ -1147,8 +1146,7 @@ mape_config() {
 
     # --- ファイアウォール設定 (動的ゾーン検索) ---
     local wan_zone_uci_path
-    # wan_firewall_zone_name は 'wan' が設定されていると仮定
-    wan_zone_uci_path=$(uci show firewall | awk -F'[.=]' -v z_name_val="${wan_firewall_zone_name}" '
+    wan_zone_uci_path=$(uci show firewall | awk -F'[.=]' -v z_name_val="${ZONE_NAME}" '
         $1 == "firewall" && $3 == "name" && $4 == "\047"z_name_val"\047" {
             print $1"."$2; # e.g., firewall.@zone[0] or firewall.cfgXXXX
             exit;
@@ -1156,32 +1154,15 @@ mape_config() {
     ')
     
     if [ -n "$wan_zone_uci_path" ]; then
-        debug_log "DEBUG" "Found firewall zone '${wan_firewall_zone_name}' at UCI path: ${wan_zone_uci_path}"
-        
-        # 'wan' インターフェースをゾーンの network リストから削除
-        # 修正点: uci del_list <path_to_option> <value_to_remove>
+        debug_log "DEBUG" "Found firewall zone '${ZONE_NAME}' at UCI path: ${wan_zone_uci_path}"
         uci del_list "${wan_zone_uci_path}.network" 'wan'
-        debug_log "DEBUG" "Attempted to remove 'wan' from list ${wan_zone_uci_path}.network"
-
-        # WANMAP ('wanmap') をゾーンの network リストから削除 (冪等性のため)
-        # 修正点: 動作しているバージョンに合わせて ${WANMAP} を直接使用
         uci del_list "${wan_zone_uci_path}.network" "${WANMAP}"
-        debug_log "DEBUG" "Attempted to remove '${WANMAP}' (if exists) from list ${wan_zone_uci_path}.network for idempotency"
-        
-        # WANMAP ('wanmap') をゾーンの network リストに追加
-        # 修正点: uci add_list <path_to_option> <value_to_add>
         uci add_list "${wan_zone_uci_path}.network" "${WANMAP}"
-        debug_log "DEBUG" "Attempted to add '${WANMAP}' to list ${wan_zone_uci_path}.network"
-
-        # masq='1', mtu_fix='1' を設定 (この部分は元々問題ないと想定される)
         uci set "${wan_zone_uci_path}.masq='1'"
         uci set "${wan_zone_uci_path}.mtu_fix='1'"
-        debug_log "DEBUG" "Set masq=1 and mtu_fix=1 for zone ${wan_zone_uci_path}"
-
     else
-        debug_log "DEBUG" "Firewall zone named '${wan_firewall_zone_name}' not found. Firewall rule for MAP-E may need manual configuration."
-        # ゾーンが見つからない場合、エラーとして扱うことも検討可能
-        # return 1 など
+        debug_log "DEBUG" "Firewall zone named '${ZONE_NAME}' not found. Firewall rule for MAP-E may need manual configuration."
+        return 1
     fi
     
     # 設定の保存
