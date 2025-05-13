@@ -370,15 +370,33 @@ confirm_package_lines() {
         return 1;
     fi;
 
-    # Display lines exactly as extracted, without any surrounding titles or messages from this function.
-    printf "%s\n" "$lines_to_process";
-
     # ---- ▼▼▼ 変更箇所 ▼▼▼ ----
+    # Display only the second field of the first "install_package" line, if any.
+    # The full list in lines_to_process is NOT displayed to the user here.
+    local item_to_display_before_confirm="";
+    local first_install_package_line_for_display="";
+
+    if [ -n "$lines_to_process" ]; then
+        # Find the first line in lines_to_process that starts with "install_package "
+        first_install_package_line_for_display=$(echo "$lines_to_process" | grep '^install_package ' | head -n 1);
+        
+        if [ -n "$first_install_package_line_for_display" ]; then
+            # Extract the second field ($2) from that line
+            item_to_display_before_confirm=$(echo "$first_install_package_line_for_display" | awk '{print $2}');
+        fi;
+    fi;
+
+    # Display only the extracted item (e.g., package name) if it was found.
+    # If no "install_package" line was found, or its $2 was empty, nothing specific is printed here.
+    if [ -n "$item_to_display_before_confirm" ]; then
+        printf "%s\n" "$item_to_display_before_confirm";
+    fi;
+    # ---- ▲▲▲ 変更箇所ここまで ▲▲▲ ----
+
     # Confirm execution. Pass an empty string as the prompt.
     # `confirm` function is assumed to exist and handle Y/N input,
-    # potentially with its own default prompt or no prompt.
+    # potentially with its own default prompt or no prompt (as seen in user log "確認(y/n) :").
     if confirm ""; then # confirm 関数に空文字列を渡す
-    # ---- ▲▲▲ 変更箇所ここまで ▲▲▲ ----
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
         return 0; # User confirmed
     else
