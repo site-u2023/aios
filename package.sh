@@ -389,6 +389,8 @@ confirm_package_lines() {
         fi
     done
 
+    printf "\n" 
+    
     # Confirm execution.
     if confirm ""; then 
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
@@ -408,6 +410,11 @@ package_main() {
     print_section_title
 
     confirm_package_lines
+    local confirm_status=$? # MODIFIED: Store the return status of confirm_package_lines
+    if [ "$confirm_status" -ne 0 ]; then # MODIFIED: Check if user cancelled in confirm_package_lines
+        debug_log "DEBUG" "Package list confirmation cancelled by user. Exiting package_main."
+        return 1 # MODIFIED: Exit package_main if confirmation was cancelled
+    fi
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
