@@ -1080,6 +1080,7 @@ mape_config() {
     debug_log "DEBUG" "Applying MAP-E configuration using UCI (strictly adhering to user-defined versioning rules)"
 
     # 既存のwanインターフェースの自動起動を停止
+    uci set network.wan.disabled='1'
     uci set network.wan.auto='0'
 
     # --- DHCP LAN 設定 ---
