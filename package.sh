@@ -370,19 +370,18 @@ confirm_package_lines() {
         return 1;
     fi;
 
-    # ---- ▼▼▼ 変更箇所 ▼▼▼ ----
     # Display specific field of each line in lines_to_process based on the first field.
-    # If $1 is "feed_package" or "feed_package1", print $3. Otherwise, print $2.
     echo "$lines_to_process" | awk '
         {
             if ($1 == "feed_package" || $1 == "feed_package1") {
                 print $3;
-            } else {
+            } else if ($1 == "install_package") {
                 print $2;
             }
+            # For any other command in $1 (not feed_package, feed_package1, or install_package),
+            # nothing is printed by this awk script.
         }
     ';
-    # ---- ▲▲▲ 変更箇所ここまで ▲▲▲ ----
 
     # Confirm execution. Pass an empty string as the prompt.
     # `confirm` function is assumed to exist and handle Y/N input,
