@@ -1719,7 +1719,6 @@ replace_map_sh() {
                 if type get_message > /dev/null 2>&1; then
                     printf "%s\n" "$(color green "$(get_message "MSG_MAP_SH_UPDATE_SUCCESS")")"
                 fi
-                printf "\n"
                 return 0 # 全て成功
             else
                 local chmod_rc=$?
