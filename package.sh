@@ -42,6 +42,9 @@ packages_usb() {
 }
 
 package_samba() {
+
+    print_section_title
+    
     # セクションヘッダーを表示する関数
     print_section_header() {
         local section_key="$1"
@@ -78,6 +81,9 @@ install_usb_packages() {
 
 # インストール後のパッケージリストを表示
 check_install_list() {
+
+    print_section_title
+    
     # 表示モード切り替え: 0=パッケージ名のみ, 1=worldファイルの内容そのまま
     local SHOW_APK_ENTRY_DETAIL="${SHOW_APK_ENTRY_DETAIL:-0}"
 
