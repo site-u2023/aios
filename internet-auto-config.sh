@@ -129,6 +129,8 @@ internet_auto_config_main() {
     # --- 1. Prerequisite Checks & Downloads ---
     debug_log "DEBUG" "Checking prerequisites..."
 
+    print_section_title
+    
     # Check for required cache files
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     if [ ! -f "$ip_type_file" ]; then
