@@ -296,9 +296,9 @@ install_packages_version() {
 package_main() {
     debug_log "DEBUG" "package_main called. PACKAGE_INSTALL_MODE is currently: '$PACKAGE_INSTALL_MODE'"
 
-    print_section_title
-    
     download "package.db"
+    
+    print_section_title
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         # common-country.sh の confirm 関数を使用する
