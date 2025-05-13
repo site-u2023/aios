@@ -307,13 +307,9 @@ package_main() {
     print_section_title
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
-        # common-country.sh の confirm 関数を使用する
-        # メッセージキーは適切なものを get_message で取得するか、直接指定
-        # 例: "MSG_CONFIRM_AUTO_INSTALL_ALL" のようなキーを messages.db に定義
-        # ここでは仮のメッセージキーを使用
         if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
             debug_log "DEBUG" "User cancelled automatic package installation."
-            printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")")"
+            # printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")")"
             return 1 # 中断して終了
         fi
         debug_log "DEBUG" "User confirmed automatic package installation."
