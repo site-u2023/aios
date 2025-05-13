@@ -353,7 +353,7 @@ into_memory_message() {
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_NOTICE=Notice: Set a new password with 8 or more characters (Press Enter to skip)"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_ENTER_PASSWORD=Enter new password{;}"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_CONFIRM_PASSWORD=Confirm new password{;}"$'\n'
-    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Enter a password with at least 8 characters and confirm by entering the same password twice"$'\n'
+    MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_ERROR=Invalid password. Minimum 8 characters. Enter the same password twice"$'\n'
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_PASSWORD_SET_OK=Password set successfully"$'\n'
     
     MSG_MEMORY="${MSG_MEMORY}${lang}|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}"$'\n'
