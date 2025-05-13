@@ -28,13 +28,13 @@ feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden "d
 feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled "desc=Internet-detector is an application for checking the availability of the Internet. Performs periodic connection checks and displays the result on the LED, in LuCI or runs user scripts."
 feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
 feed_package1 jerrykuku luci-theme-argon yn hidden disabled "desc=Argon is a clean and tidy OpenWrt LuCI theme that allows users to customize their login interface with images or videos. It also supports light and dark modes."
-feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid, btrfs-raid, btrfs-snapshot"
 
 [BASE_SYSTEM.RELEASE19]
 #install_package luci-app-sqm yn hidden
 feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
 feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
-feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid / btrfs-raid / btrfs-snapshot"
+feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid, btrfs-raid, btrfs-snapshot"
 
 [BASE_SYSTEM.SNAPSHOT]
 install_package luci yn hidden
