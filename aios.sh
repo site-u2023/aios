@@ -383,11 +383,17 @@ into_memory_message() {
 
 # 表題部専用関数
 print_section_title() {
-    local msg_key="$1"
-    local color_name="${2:-blue}"   # デフォルトは青
-    local format_type="${3:-none}"  # デフォルトは変換なし
+    # $1: メッセージキー（省略時はSELECTED_MENU_KEY）
+    # $2: 色（省略時はSELECTED_MENU_COLOR）
 
-    printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key" "$format_type")")"
+    local msg_key="${1:-$SELECTED_MENU_KEY}"
+    local color_name="${2:-$SELECTED_MENU_COLOR}"
+
+    # フォールバック対策
+    [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
+    [ -z "$color_name" ] && color_name="blue"
+
+    printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key")")"
 }
 
 # 翻訳システムを初期化する関数
