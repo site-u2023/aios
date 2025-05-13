@@ -50,5 +50,4 @@ MENU_SYSTEM printf "\n%s\n" "$(color yellow "Coming soon")"
 [MENU_PACKAGES]
 MENU_PACKAGES_AUTO_INSTALL export PACKAGE_INSTALL_MODE="auto"; download "package.sh" "chmod" "load"; package_main
 MENU_PACKAGES_MANUAL_INSTALL export PACKAGE_INSTALL_MODE="manual"; download "package.sh" "chmod" "load"; package_main
-MENU_PACKAGES_SAMBA export PACKAGE_INSTALL_MODE="manual"; download "package.sh" "chmod" "load"; package_samba
 MENU_PACKAGES_LIST download "package.sh" "chmod" "load"; check_install_list
