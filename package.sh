@@ -18,48 +18,6 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-packages_usb() {
-    # セクションヘッダーを表示する関数
-    print_section_header() {
-        local section_key="$1"
-        local header_text=$(get_message "$section_key")
-        printf "\n%s\n" "$(color gray_white "$header_text")"
-    }
-
-    # === USBストレージ ===
-    print_section_header "PKG_SECTION_USB"
-    install_package kmod-usb-storage yn hidden
-    install_package dosfstools yn hidden
-    install_package e2fsprogs yn hidden
-    install_package f2fs-tools yn hidden
-    install_package exfat-fsck yn hidden
-    install_package ntfs-3g yn hidden
-    install_package hfsfsck yn hidden
-    install_package hdparm yn hidden
-    
-    debug_log "DEBUG" "USB and storage related packages installation process completed"
-    return 0
-}
-
-package_samba() {
-
-    print_section_title
-    
-    # セクションヘッダーを表示する関数
-    print_section_header() {
-        local section_key="$1"
-        local header_text=$(get_message "$section_key")
-        printf "%s\n" "$(color gray_white "$header_text")"
-    }
-
-    # === ファイル共有 ===
-    print_section_header "PKG_SECTION_SAMBA"
-    install_package luci-app-samba4 yn hidden
-    
-    debug_log "DEBUG" "Samba file sharing packages installation process completed"
-    return 0
-}
-
 # USBデバイスを検出し、必要なパッケージをインストールする関数
 install_usb_packages() {
     # USBデバイスのキャッシュファイルを確認
