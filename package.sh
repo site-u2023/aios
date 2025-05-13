@@ -165,12 +165,15 @@ parse_package_db_switch() {
 
     # 一時ファイルでバッファ
     local tmpfile="${CACHE_DIR}/parse_package_db_switch_$$.tmp"
-    > "$tmpfile"
+    # shellcheck disable=SC2015 # POSIX shでは `>` は常に成功するので `|| exit` は不要
+    > "$tmpfile" # POSIX shでは `>` は常に成功するので `|| exit` は不要
 
     for section in $sections; do
         in_section=0
+        # shellcheck disable=SC2162 # Ashでは read -r line が標準的
         while IFS= read -r line; do
-            line="${line%"${line##*[!$'\r']}" }"
+            line="${line%"${line##*[!$'\r']}" }" # Trim trailing CR if present
+            line="${line%"${line##*[! ]}" }" # Trim trailing space
             [ -z "$line" ] && continue
             case "$line" in
                 \#*) continue ;;
@@ -182,24 +185,25 @@ parse_package_db_switch() {
                     [ $in_section -eq 1 ] || continue
 
                     if [ "$PARSE_DB_SKIP_MODE" = "FULL" ]; then
-                        case " $seen_cmds " in
-                            *" $line "*) continue ;;
-                            *)
-                                seen_cmds="$seen_cmds $line"
-                                printf "%s\n" "$line" >> "$tmpfile"
-                                ;;
-                        esac
+                        # shellcheck disable=SC2076 # POSIX shでは文字列比較に "" を使う
+                        if echo " $seen_cmds " | grep -q " $line "; then
+                             continue
+                        else
+                            seen_cmds="$seen_cmds $line"
+                            printf "%s\n" "$line" >> "$tmpfile"
+                        fi
                     elif [ "$PARSE_DB_SKIP_MODE" = "PACKAGE" ]; then
-                        set -- $line
+                        # shellcheck disable=SC2086 # $line を意図的に分割
+                        set -- $line # $line を意図的に分割
                         pkg="$2"
                         [ -z "$pkg" ] && continue
-                        case " $seen_pkgs " in
-                            *" $pkg "*) continue ;;
-                            *)
-                                seen_pkgs="$seen_pkgs $pkg"
-                                printf "%s\n" "$line" >> "$tmpfile"
-                                ;;
-                        esac
+                        # shellcheck disable=SC2076 # POSIX shでは文字列比較に "" を使う
+                        if echo " $seen_pkgs " | grep -q " $pkg "; then
+                            continue
+                        else
+                            seen_pkgs="$seen_pkgs $pkg"
+                            printf "%s\n" "$line" >> "$tmpfile"
+                        fi
                     else
                         echo "Unknown skip mode: $PARSE_DB_SKIP_MODE" >&2
                         rm -f "$tmpfile"
@@ -211,18 +215,32 @@ parse_package_db_switch() {
     done
 
     # 行ごとにコマンド＋引数で実行（stdinを/dev/nullにして副作用防止）
+    # shellcheck disable=SC2162
     while IFS= read -r exec_line; do
         [ -z "$exec_line" ] && continue
-        set -- $exec_line
-        cmd="$1"; shift
-        if type "$cmd" >/dev/null 2>&1; then
-            "$cmd" "$@" < /dev/null
+        debug_log "DEBUG_PARSE_DB" "Raw line from tmpfile: [$exec_line]"
+
+        # 引数を正しく分割するために eval を使用する
+        # cmd と args に分離する
+        local cmd_to_exec
+        local args_to_exec
+        cmd_to_exec=$(echo "$exec_line" | awk '{print $1}')
+        args_to_exec=$(echo "$exec_line" | awk '{$1=""; printf "%s", $0}' | sed 's/^[[:space:]]*//') # コマンド部分を除去し、残りを引数とする
+
+        if type "$cmd_to_exec" >/dev/null 2>&1; then
+            debug_log "DEBUG_PARSE_DB" "Attempting to call: [$cmd_to_exec] with raw args string: [$args_to_exec]"
+            # eval を使って、シェルに引数の解釈（引用符の処理など）を任せる
+            # これにより "desc=some thing" が1つの引数として扱われることを期待
+            eval "$cmd_to_exec $args_to_exec" < /dev/null
+            local exit_status=$?
+            debug_log "DEBUG_PARSE_DB" "Command [$cmd_to_exec] with args [$args_to_exec] exited with status: [$exit_status]"
         else
-            echo "Unknown command: $cmd (line: $exec_line)" >&2
+            echo "Unknown command: $cmd_to_exec (line: $exec_line)" >&2
         fi
     done < "$tmpfile"
     rm -f "$tmpfile"
 }
+
 # OSバージョンに基づいて適切なパッケージ関数を実行する
 install_packages_version() {
     # OSバージョンファイルの確認
