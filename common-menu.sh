@@ -37,7 +37,7 @@ print_section_header() {
 
     local msg_key="${1:-$SELECTED_MENU_KEY}"
     # local color_name="${2:-$SELECTED_MENU_COLOR}"
-    local color_name="gray_white"
+    local color_name="blue"
 
     # フォールバック対策
     [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
