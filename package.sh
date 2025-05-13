@@ -373,33 +373,16 @@ confirm_package_lines() {
     # Display lines exactly as extracted, without any surrounding titles or messages from this function.
     printf "%s\n" "$lines_to_process";
 
-    local prompt_text_for_confirm="";
-
-    # Attempt to extract the second field of the first line from lines_to_process
-    if [ -n "$lines_to_process" ]; then
-        local first_line_of_data;
-        # Extract the first line from the multi-line string lines_to_process
-        first_line_of_data=$(echo "$lines_to_process" | head -n 1);
-        
-        if [ -n "$first_line_of_data" ]; then
-            # Extract the second field ($2) from the first line
-            prompt_text_for_confirm=$(echo "$first_line_of_data" | awk '{print $2}');
-        fi;
-    fi;
-
-    # If the second field could not be extracted (e.g., it was empty or the line had no second field),
-    # fall back to the original default prompt "Execute?". Otherwise, use the extracted second field.
-    if [ -z "$prompt_text_for_confirm" ]; then
-        prompt_text_for_confirm="Execute?";
-    fi;
-
-    # Confirm execution using the generated prompt.
-    # `confirm` function is assumed to exist and handle Y/N input.
-    if confirm "$prompt_text_for_confirm"; then 
+    # ---- ▼▼▼ 変更箇所 ▼▼▼ ----
+    # Confirm execution. Pass an empty string as the prompt.
+    # `confirm` function is assumed to exist and handle Y/N input,
+    # potentially with its own default prompt or no prompt.
+    if confirm ""; then # confirm 関数に空文字列を渡す
+    # ---- ▲▲▲ 変更箇所ここまで ▲▲▲ ----
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
         return 0; # User confirmed
     else
-        debug_log "DEBUG" "confirm_package_lines: User cancelled.";
+        debug_log "DEBUG" "confirm_package_lines: User cancelled."; # 元のログメッセージとレベルを維持
         return 1; # User cancelled
     fi;
 }
