@@ -2220,15 +2220,15 @@ setup_password_hostname() {
             read -s confirm_password
             printf "\n"
             [ "$new_password" != "$confirm_password" ] && {
-                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
                 continue
             }
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
-                printf "%s\n\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
+                printf "%s\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
                 break
             else
-                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
             fi
         done
     fi
