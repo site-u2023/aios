@@ -379,7 +379,7 @@ confirm_package_lines() {
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
         return 0; # User confirmed
     else
-        debug_log "INFO" "confirm_package_lines: User cancelled.";
+        debug_log "DEBUG" "confirm_package_lines: User cancelled.";
         return 1; # User cancelled
     fi;
 }
@@ -391,7 +391,7 @@ package_main() {
     download "package.db"
 
     confirm_package_lines
-    
+     
     print_section_title
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
