@@ -29,7 +29,7 @@ install_usb_packages() {
     # USBデバイスが検出されているか確認
     if [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
         debug_log "DEBUG" "USB device detected, installing USB packages"
-        packages_usb
+        parse_package_db_switch "USB" "COMMON"
     else
         debug_log "DEBUG" "No USB device detected, skipping USB packages"
     fi
