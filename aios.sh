@@ -2274,7 +2274,7 @@ setup_password_hostname() {
         printf "\n"
     fi
 }
-
+ 
 # 初期化処理のメイン
 main() {
 
