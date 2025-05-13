@@ -390,9 +390,9 @@ package_main() {
 
     download "package.db"
 
-    confirm_package_lines
-     
     print_section_title
+
+    confirm_package_lines
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
