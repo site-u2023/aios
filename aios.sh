@@ -2210,19 +2210,25 @@ setup_password_hostname() {
             printf "\n%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
             printf "%s" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
-            # printf "\n"
+            printf "\n"
             [ -z "$new_password" ] && break
-            [ ${#new_password} -lt 8 ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
-            printf "\n%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
+            [ ${#new_password} -lt 8 ] && {
+                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                continue
+            }
+            printf "%s" "$(color magenta "$(get_message "MSG_CONFIRM_PASSWORD")")"
             read -s confirm_password
             printf "\n"
-            [ "$new_password" != "$confirm_password" ] && printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")" && continue
+            [ "$new_password" != "$confirm_password" ] && {
+                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                continue
+            }
             (echo "$new_password"; echo "$new_password") | passwd root 1>/dev/null 2>&1
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
+                printf "%s\n\n" "$(color green "$(get_message "MSG_PASSWORD_SET_OK")")"
                 break
             else
-                printf "%s\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
+                printf "%s\n\n" "$(color red "$(get_message "MSG_PASSWORD_ERROR")")"
             fi
         done
     fi
@@ -2231,9 +2237,9 @@ setup_password_hostname() {
     local current_hostname new_hostname
     current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf "\n%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
+        printf " %s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
-        # printf "\n"
+        printf "\n"
         if [ -z "$new_hostname" ]; then
             :
         else
@@ -2241,15 +2247,13 @@ setup_password_hostname() {
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
             if [ $? -eq 0 ]; then
-                printf "%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
-                printf "\n"
+                printf "%s\n\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
             else
-                printf "%s\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
-                printf "\n"
+                printf "%s\n\n" "$(color red "$(get_message "MSG_HOSTNAME_ERROR")")"
             fi
         fi
     fi
-    
+
     # SSH LAN設定（UCI値でInterfaceが未設定の場合のみ）
     local dropbear_interface
     dropbear_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
