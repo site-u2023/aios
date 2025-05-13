@@ -2207,7 +2207,7 @@ setup_password_hostname() {
     passwd_field=$(awk -F: '/^root:/ {print $2}' /etc/shadow 2>/dev/null)
     if [ -z "$passwd_field" ] || [ "$passwd_field" = "*" ] || [ "$passwd_field" = "!" ]; then
         while :; do
-            printf "%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
+            printf "\n%s\n" "$(color yellow "$(get_message "MSG_PASSWORD_NOTICE")")"
             printf "%s" "$(color white "$(get_message "MSG_ENTER_PASSWORD")")"
             read -s new_password
             printf "\n"
@@ -2237,7 +2237,7 @@ setup_password_hostname() {
     local current_hostname new_hostname
     current_hostname=$(uci get system.@system[0].hostname 2>/dev/null)
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
-        printf " %s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
+        printf "%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
         printf "\n"
         if [ -z "$new_hostname" ]; then
