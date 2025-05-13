@@ -221,7 +221,7 @@ feed_package() {
 #   2. 最新のリリースからパッケージをダウンロード
 #   3. ダウンロードしたパッケージをインストール
 #########################################################################
-feed_package_release() {
+feed_package1() {
   local confirm_install="no"
   local skip_lang_pack="no"
   local force_install="no"
