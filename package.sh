@@ -18,24 +18,6 @@ LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
-# 現在選択されているメニュー情報（グローバル変数）
-SELECTED_MENU_KEY=""
-SELECTED_MENU_COLOR=""
-
-print_section_header() {
-    # $1: メッセージキー（省略時はSELECTED_MENU_KEY）
-    # $2: 色（省略時はSELECTED_MENU_COLOR）
-
-    local msg_key="${1:-$SELECTED_MENU_KEY}"
-    local color_name="${2:-$SELECTED_MENU_COLOR}"
-
-    # フォールバック対策
-    [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
-    [ -z "$color_name" ] && color_name="gray_white"
-
-    printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key")")"
-}
-
 # USBデバイスを検出し、必要なパッケージをインストールする関数
 install_usb_packages() {
     # USBデバイスのキャッシュファイルを確認
