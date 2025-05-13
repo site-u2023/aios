@@ -1,26 +1,50 @@
 SCRIPT_VERSION="2025.05.10-00-00"
 
 [BASE_SYSTEM.COMMON]
+# === 基本システム機能 ===
+print_section_header "PKG_SECTION_BASIC"
 install_package luci-i18n-base yn hidden
 install_package ttyd yn hidden disabled
 install_package openssh-sftp-server yn hidden
 install_package coreutils yn hidden
+
+# === システム管理 ===
+print_section_header "PKG_SECTION_SYSADMIN"
 install_package irqbalance yn hidden
+
+# === ネットワーク管理 ===
+print_section_header "PKG_SECTION_NETWORK"
 install_package luci-app-qos yn hidden
 install_package luci-app-sqm yn hidden
 install_package luci-i18n-statistics yn hidden
 install_package luci-i18n-nlbwmon yn hidden
 install_package wifischedule yn hidden
+
+# === セキュリティツール ===
+print_section_header "PKG_SECTION_SECURITY"
 install_package znc-mod-fail2ban yn hidden
 install_package banip yn hidden
+
+# === システム監視 ===
+print_section_header "PKG_SECTION_MONITORING"
+
+# === ネットワーク診断ツール ===
+print_section_header "PKG_SECTION_NETWORK_DIAG"
 install_package htop yn hidden
 install_package mtr yn hidden
 install_package nmap yn hidden
 install_package tcpdump yn hidden
+
+# === テーマおよびダッシュボード ===
 install_package luci-theme-openwrt yn hidden
 install_package attendedsysupgrade-common yn hidden
 
+# === ユーティリティ ===
+print_section_header "PKG_SECTION_UTILITY"
+
 [BASE_SYSTEM.DEFAULT]
+# === 追加機能 ===
+print_section_header "PKG_SECTION_ADDITION"
 install_package luci-mod-dashboard yn hidden
 feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden "desc=CPU performance information and management for LuCI"
 feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden "desc=CPU utilization info for the LuCI status page"
@@ -31,16 +55,22 @@ feed_package1 jerrykuku luci-theme-argon yn hidden disabled "desc=Argon is a cle
 feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid, btrfs-raid, btrfs-snapshot"
 
 [BASE_SYSTEM.RELEASE19]
+# === 追加機能 ===
+print_section_header "PKG_SECTION_ADDITION"
 #install_package luci-app-sqm yn hidden
 feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
 feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
 feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid, btrfs-raid, btrfs-snapshot"
 
 [BASE_SYSTEM.SNAPSHOT]
+# === 追加機能 ===
+print_section_header "PKG_SECTION_ADDITION"
 install_package luci yn hidden
 install_package luci-mod-dashboard yn hidden
 
 [USB.COMMON]
+# === USBストレージ ===
+print_section_header "PKG_SECTION_USB"
 install_package kmod-usb-storage yn hidden
 install_package dosfstools yn hidden
 install_package e2fsprogs yn hidden
@@ -51,4 +81,6 @@ install_package hfsfsck yn hidden
 install_package hdparm yn hidden
 
 [SAMBA.COMMON]
+# === ファイル共有 ===
+print_section_header "PKG_SECTION_SAMBA"
 install_package luci-app-samba4 yn hidden
