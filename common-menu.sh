@@ -1,39 +1,6 @@
 #!/bin/sh
 
-COMMON_VERSION="2025.04.26-00-00"
-
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-03-19
-#
-# 🏷️ License: CC0 (Public Domain)
-# 🎯 Compatibility: OpenWrt >= 19.07 (Tested on 24.10.0)
-#
-# ⚠️ IMPORTANT NOTICE:
-# OpenWrt OS exclusively uses **Almquist Shell (ash)** and
-# is **NOT** compatible with Bourne-Again Shell (bash).
-#
-# 📢 POSIX Compliance Guidelines:
-# ✅ Use `[` instead of `[[` for conditions
-# ✅ Use $(command) instead of backticks `command`
-# ✅ Use $(( )) for arithmetic instead of let
-# ✅ Define functions as func_name() {} (no function keyword)
-# ✅ No associative arrays (declare -A is NOT supported)
-# ✅ No here-strings (<<< is NOT supported)
-# ✅ No -v flag in test or [[
-# ✅ Avoid bash-specific string operations like ${var:0:3}
-# ✅ Avoid arrays entirely when possible (even indexed arrays can be problematic)
-# ✅ Use printf followed by read instead of read -p
-# ✅ Use printf instead of echo -e for portable formatting
-# ✅ Avoid process substitution <() and >()
-# ✅ Prefer case statements over complex if/elif chains
-# ✅ Use command -v instead of which or type for command existence checks
-# ✅ Keep scripts modular with small, focused functions
-# ✅ Use simple error handling instead of complex traps
-# ✅ Test scripts with ash/dash explicitly, not just bash
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
+COMMON_VERSION="2025.05.13-00-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -286,6 +253,10 @@ handle_user_selection() {
     local selected_key=$(awk "NR==$choice" "$menu_keys_file")
     local selected_color=$(awk "NR==$choice" "$menu_colors_file")
     local type="command"
+    
+    SELECTED_MENU_KEY="$selected_key"
+    SELECTED_MENU_COLOR="$selected_color"
+
     if echo "$action" | grep -q "^selector "; then
         type="menu"
         action=$(echo "$action" | sed 's/^selector //')
