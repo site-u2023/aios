@@ -2243,10 +2243,10 @@ setup_password_hostname() {
     if [ -z "$current_hostname" ] || [ "$current_hostname" = "OpenWrt" ]; then
         printf "%s" "$(color white "$(get_message "MSG_ENTER_HOSTNAME")")"
         read new_hostname
-        printf "\n"
         if [ -z "$new_hostname" ]; then
             printf "\n"
         else
+            printf "\n"
             uci set system.@system[0].hostname="$new_hostname"
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
@@ -2274,6 +2274,7 @@ setup_password_hostname() {
         printf "\n"
     fi
 }
+
 # 初期化処理のメイン
 main() {
 
