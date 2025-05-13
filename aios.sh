@@ -2246,10 +2246,10 @@ setup_password_hostname() {
         if [ -z "$new_hostname" ]; then
             printf "\n"
         else
-            printf "\n"
             uci set system.@system[0].hostname="$new_hostname"
             uci commit system
             echo "$new_hostname" > /etc/hostname 2>/dev/null
+            printf "\n"
             if [ $? -eq 0 ]; then
                 printf "%s\n" "$(color green "$(get_message "MSG_HOSTNAME_SET_OK" "h=$new_hostname")")"
             else
@@ -2258,7 +2258,7 @@ setup_password_hostname() {
             printf "\n"
         fi
     fi
-
+    
     # SSH LAN設定（UCI値でInterfaceが未設定の場合のみ）
     local dropbear_interface
     dropbear_interface=$(uci get dropbear.@dropbear[0].Interface 2>/dev/null)
