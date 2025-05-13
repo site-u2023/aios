@@ -31,6 +31,37 @@ SELECTED_MENU_COLOR=""
 unset MAIN_MENU
 MAIN_MENU="${MAIN_MENU:-MAIN_MENU_NAME}"
 
+print_section_header() {
+    # $1: メッセージキー（省略時はSELECTED_MENU_KEY）
+    # $2: 色（省略時はSELECTED_MENU_COLOR）
+
+    local msg_key="${1:-$SELECTED_MENU_KEY}"
+    local color_name="${2:-$SELECTED_MENU_COLOR}"
+
+    # フォールバック対策
+    [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
+    [ -z "$color_name" ] && color_name="gray_white"
+
+    printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key")")"
+    return 0
+}
+
+# 表題部専用関数
+print_section_title() {
+    # $1: メッセージキー（省略時はSELECTED_MENU_KEY）
+    # $2: 色（省略時はSELECTED_MENU_COLOR）
+
+    local msg_key="${1:-$SELECTED_MENU_KEY}"
+    local color_name="${2:-$SELECTED_MENU_COLOR}"
+
+    # フォールバック対策
+    [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
+    [ -z "$color_name" ] && color_name="blue"
+
+    printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key")")"
+    return 0
+}
+
 # メニュー履歴にエントリを追加する関数
 pop_menu_history() {
     debug_log "DEBUG" "Popping from menu history"
