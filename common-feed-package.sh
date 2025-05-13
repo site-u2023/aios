@@ -197,7 +197,7 @@ feed_package() {
 
 #########################################################################
 # Last Update: 2025-04-12 05:18:15 (UTC) 🚀
-# feed_package_release: リリースAPI用パッケージ取得関数
+# feed_package1: リリースAPI用パッケージ取得関数
 # 使用対象：リリースベースの構造を持つリポジトリ
 #          （例：lisaac/luci-app-diskman, jerrykuku/luci-theme-argon）
 #
@@ -213,15 +213,15 @@ feed_package() {
 #   desc="説明" - パッケージの説明文を指定
 #
 # 使用例:
-#   feed_package_release lisaac luci-app-diskman yn disabled
-#   feed_package_release yn hidden lisaac luci-app-diskman
+#   feed_package1 lisaac luci-app-diskman yn disabled
+#   feed_package1 yn hidden lisaac luci-app-diskman
 #
 # 機能:
 #   1. リポジトリのリリース情報からパッケージファイルを検索
 #   2. 最新のリリースからパッケージをダウンロード
 #   3. ダウンロードしたパッケージをインストール
 #########################################################################
-feed_package_release() {
+feed_package1() {
   local confirm_install="no"
   local skip_lang_pack="no"
   local force_install="no"
