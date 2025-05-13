@@ -309,32 +309,23 @@ confirm_package_lines() {
         debug_log "DEBUG" "confirm_package_lines: No USB device detected.";
     fi;
 
-    # AWK script to extract lines in order and ensure uniqueness.
-    # BOM and CR characters are removed by sed before awk processing.
     lines_to_process=$(sed -e '1s/^\xEF\xBB\xBF//' -e 's/\r$//' "$db_file" | awk -v os_ver_id_awk="$os_version_id" -v usb_is_present_awk="$usb_present" '
         BEGIN {
-            # Define target sections based on input variables
             section_base_common_target = "[BASE_SYSTEM.COMMON]";
             section_base_version_target = "[BASE_SYSTEM." os_ver_id_awk "]";
             section_usb_common_target = "[USB.COMMON]";
             section_samba_common_target = "[SAMBA.COMMON]";
 
-            # State flags for current section and counters for arrays
             in_section_base_common = 0; count_base_common = 0;
             in_section_base_version = 0; count_base_version = 0;
             in_section_usb_common = 0; count_usb_common = 0;
             in_section_samba_common = 0; count_samba_common = 0;
         }
-
-        # Main processing loop for each line
         {
             current_line_content = $0;
-
-            # Skip lines: empty, comments
             if (current_line_content ~ /^[[:space:]]*$/) { next; }
             if (current_line_content ~ /^[[:space:]]*#/) { next; }
 
-            # Section detection and flag management
             if (current_line_content == section_base_common_target) {
                 in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
             }
@@ -347,21 +338,16 @@ confirm_package_lines() {
             if (current_line_content == section_samba_common_target) {
                 in_section_samba_common = 1; in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next;
             }
-            
-            # If it is any other section line (starts with [), reset all flags and skip
             if (current_line_content ~ /^[[:space:]]*\[.*\][[:space:]]*$/) {
                 in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
             }
 
-            # Store lines from active sections into respective arrays
             if (in_section_base_common == 1)  { array_base_common[count_base_common++] = current_line_content; }
             if (in_section_base_version == 1)  { array_base_version[count_base_version++] = current_line_content; }
             if (in_section_usb_common == 1 && usb_is_present_awk == "1") { array_usb_common[count_usb_common++] = current_line_content; }
             if (in_section_samba_common == 1) { array_samba_common[count_samba_common++] = current_line_content; }
         }
-
         END {
-            # Print stored lines in the specified order
             for (idx = 0; idx < count_base_common; idx++) { print array_base_common[idx]; }
             for (idx = 0; idx < count_base_version; idx++) { print array_base_version[idx]; }
             if (usb_is_present_awk == "1") {
@@ -376,39 +362,34 @@ confirm_package_lines() {
         return 1;
     fi;
 
-    # ---- ▼▼▼ 変更箇所 ▼▼▼ ----
     # Process each line: call print_section_header for headers, echo package names for others.
-    # This will display headers and package names to the user before calling confirm.
     echo "$lines_to_process" | while IFS= read -r line || [ -n "$line" ]; do
         if [ -z "$line" ]; then
             continue
         fi
 
-        # Parse the line into fields using awk for simplicity and robustness with spaces
-        # ash (OpenWrt's shell) doesn't support `read -a` for arrays directly
-        # set -- $line might be problematic if fields contain spaces and are not quoted
-        
         _command=$(echo "$line" | awk '{print $1}')
-        _arg2=$(echo "$line" | awk '{print $2}')
-        # _arg3 and _arg5 are only needed for specific commands
         
+        # MODIFIED: Extract arguments and remove surrounding quotes if present
+        _arg2_raw=$(echo "$line" | awk '{print $2}')
+        _arg2=$(echo "$_arg2_raw" | sed 's/^"//;s/"$//')
+
         if [ "$_command" = "print_section_header" ]; then
-            print_section_header "$_arg2" # Call the shell function to display localized header
+            print_section_header "$_arg2" # Call the shell function with unquoted message key
         elif [ "$_command" = "install_package" ]; then
-            echo "$_arg2" # Display package name
+            echo "$_arg2" # Display unquoted package name
         elif [ "$_command" = "feed_package" ]; then
-            _arg5=$(echo "$line" | awk '{print $5}')
-            echo "$_arg5" # Display package name
+            _arg5_raw=$(echo "$line" | awk '{print $5}')
+            _arg5=$(echo "$_arg5_raw" | sed 's/^"//;s/"$//')
+            echo "$_arg5" # Display unquoted package name
         elif [ "$_command" = "feed_package1" ]; then
-            _arg3=$(echo "$line" | awk '{print $3}')
-            echo "$_arg3" # Display package name
+            _arg3_raw=$(echo "$line" | awk '{print $3}')
+            _arg3=$(echo "$_arg3_raw" | sed 's/^"//;s/"$//')
+            echo "$_arg3" # Display unquoted package name
         fi
-        # Other commands are ignored in this display part
     done
-    # ---- ▲▲▲ 変更箇所ここまで ▲▲▲ ----
 
     # Confirm execution.
-    # The `confirm` function is assumed to display its own prompt e.g., "確認(y/n) :"
     if confirm ""; then 
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
         return 0;
