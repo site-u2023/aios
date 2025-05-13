@@ -224,7 +224,7 @@ internet_auto_config_main() {
             display_conn_type="$connection_type"
         fi
 
-        printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$display_isp_name" tp="$display_conn_type")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$display_isp_name" tp="$display_conn_type")")"
 
         local confirm_apply=1
         confirm "MSG_AUTO_CONFIG_CONFIRM"
