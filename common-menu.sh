@@ -36,11 +36,12 @@ print_section_header() {
     # $2: 色（省略時はSELECTED_MENU_COLOR）
 
     local msg_key="${1:-$SELECTED_MENU_KEY}"
-    local color_name="${2:-$SELECTED_MENU_COLOR}"
+    # local color_name="${2:-$SELECTED_MENU_COLOR}"
+    local color_name="gray_white"
 
     # フォールバック対策
     [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
-    [ -z "$color_name" ] && color_name="gray_white"
+    [ -z "$color_name" ] && color_name="blue"
 
     printf "\n%s\n\n" "$(color "$color_name" "$(get_message "$msg_key")")"
     return 0
@@ -53,7 +54,7 @@ print_section_title() {
 
     local msg_key="${1:-$SELECTED_MENU_KEY}"
     local color_name="${2:-$SELECTED_MENU_COLOR}"
-
+    
     # フォールバック対策
     [ -z "$msg_key" ] && msg_key="NO_TITLE_KEY"
     [ -z "$color_name" ] && color_name="blue"
