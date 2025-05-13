@@ -1913,6 +1913,8 @@ restore_mape() {
 }
 
 internet_map_main() {
+
+    print_section_title
     
     # mapパッケージのインストール確認
     install_package map hidden
