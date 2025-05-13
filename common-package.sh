@@ -771,6 +771,158 @@ get_package_description() {
 process_package() {
     local package_name="$1"
     local base_name="$2"
+    local confirm_install_option="$3" 
+    local force_install="$4"
+    local skip_package_db="$5"
+    # local set_disabled="$6" 
+    local test_mode="$7" 
+    local lang_code="$8" 
+    local provided_description="$9" 
+    local silent_mode="${10}" 
+
+    local current_install_mode="${PACKAGE_INSTALL_MODE:-manual}"
+    local actual_confirm_install="$confirm_install_option" 
+
+    if [ "$current_install_mode" = "auto" ]; then
+        debug_log "DEBUG" "process_package: PACKAGE_INSTALL_MODE is 'auto'. Overriding confirm_install to 'no'."
+        actual_confirm_install="no" 
+    fi
+
+    case "$base_name" in
+        luci-i18n-*)
+            package_name="${base_name}-${lang_code}"
+            debug_log "DEBUG" "Language package detected, using: $package_name"
+            ;;
+    esac
+
+    local pre_install_status=0 
+    if [ "$test_mode" != "yes" ]; then
+        package_pre_install "$package_name"
+        pre_install_status=$? 
+
+        case $pre_install_status in
+            0) debug_log "DEBUG" "Package $package_name is ready for installation." ;;
+            1) debug_log "DEBUG" "Package $package_name is already installed. Skipping."; return 0 ;;
+            2) debug_log "DEBUG" "Package $package_name not found, skipping installation."; return 0 ;;
+            *) debug_log "WARNING" "Unexpected status $pre_install_status from package_pre_install for $package_name."; return 1 ;;
+        esac
+    else
+        debug_log "DEBUG" "Test mode enabled, skipping pre-install checks for $package_name"
+    fi
+
+    local final_description_for_prompt="" 
+    local original_desc_for_translation="" # ★ 翻訳対象となる元の説明文を保持する変数
+
+    if [ -n "$provided_description" ]; then
+        debug_log "DEBUG" "Using provided description (from desc= option): [$provided_description]"
+        original_desc_for_translation="$provided_description"
+    else
+        debug_log "DEBUG" "No description provided via desc= option. Attempting to get from repository."
+        # get_package_description は翻訳済みのものを返す可能性があるため、ここでは「元の」説明文は取得できない。
+        # しかし、get_package_description が翻訳処理を含むため、その結果をそのまま使う。
+        # もし「提供された説明文」と「リポジトリからの説明文」で翻訳ロジックを完全に統一したい場合、
+        # get_package_description から翻訳部分を分離し、ここで共通の翻訳処理を呼び出す必要がある。
+        # 現状は get_package_description の結果をそのまま使う。
+        original_desc_for_translation=$(get_package_description "$package_name") # ★ これは翻訳済みか、翻訳試行後のものが返る
+        # get_package_description の結果が改行を含む場合があるので注意（confirm関数は改行を扱えるか？）
+        # get_package_description は末尾に改行を付けて返すので、ここでトリムする。
+        original_desc_for_translation="${original_desc_for_translation%\"$'\n'\"}" 
+    fi
+
+    # ★★★ 翻訳処理 (get_package_description と同様のロジックをここに適用) ★★★
+    if [ -n "$original_desc_for_translation" ]; then
+        final_description_for_prompt="$original_desc_for_translation" # まずは元の(またはget_package_descriptionの結果)を設定
+        local current_ui_lang_code # get_language_code と同じように現在のUI言語を取得
+        if [ -f "${CACHE_DIR}/message.ch" ]; then current_ui_lang_code=$(cat "${CACHE_DIR}/message.ch"); else current_ui_lang_code="$DEFAULT_LANGUAGE"; fi
+
+        if [ "$current_ui_lang_code" != "$DEFAULT_LANGUAGE" ]; then # デフォルト言語でなければ翻訳を試みる
+            if type translate_package_description >/dev/null 2>&1; then # 翻訳関数が存在するか確認
+                debug_log "DEBUG" "Attempting to translate description for prompt: [$original_desc_for_translation] to lang [$current_ui_lang_code]"
+                local translated_desc_for_prompt
+                translated_desc_for_prompt=$(translate_package_description "$original_desc_for_translation" "$current_ui_lang_code" "$DEFAULT_LANGUAGE")
+                local translate_call_status=$?
+                
+                # translate_package_description の返り値は末尾に改行がないことを期待する (もしあればトリム)
+                translated_desc_for_prompt="${translated_desc_for_prompt%\"$'\n'\"}"
+
+                if [ "$translate_call_status" -eq 0 ] && [ -n "$translated_desc_for_prompt" ] && [ "$translated_desc_for_prompt" != "$original_desc_for_translation" ]; then
+                    final_description_for_prompt="$translated_desc_for_prompt"
+                    debug_log "DEBUG" "Description for prompt translated to: [$final_description_for_prompt]"
+                else
+                    debug_log "DEBUG" "Description for prompt used as is (original/untranslated or translation failed/same): [$final_description_for_prompt]"
+                fi
+            else
+                debug_log "DEBUG" "translate_package_description function not found. Using original description for prompt."
+            fi
+        else
+            debug_log "DEBUG" "Current UI language is default. No translation needed for prompt description."
+        fi
+    else
+        debug_log "DEBUG" "No original description available to translate for prompt."
+        final_description_for_prompt="" # 念のため空に
+    fi
+    # ★★★ 翻訳処理ここまで ★★★
+
+
+    if [ "$actual_confirm_install" = "yes" ] && [ "$silent_mode" != "yes" ]; then
+        local display_name
+        display_name=$(basename "$package_name")
+        display_name=${display_name%.*}
+
+        debug_log "DEBUG" "Confirming installation for display name: $display_name. Using description: [$final_description_for_prompt]"
+        
+        local colored_name
+        colored_name=$(color blue "$display_name") 
+
+        local confirm_result=0
+        if [ -n "$final_description_for_prompt" ]; then
+            if ! confirm "MSG_CONFIRM_INSTALL_WITH_DESC" "pkg=$colored_name" "desc=$final_description_for_prompt"; then 
+                confirm_result=1
+            fi
+        else
+            if ! confirm "MSG_CONFIRM_INSTALL" "pkg=$colored_name"; then 
+                confirm_result=1
+            fi
+        fi
+
+        if [ $confirm_result -ne 0 ]; then
+            debug_log "DEBUG" "User declined installation of $display_name"
+            return 2 
+        fi
+    elif [ "$actual_confirm_install" = "yes" ] && [ "$silent_mode" = "yes" ]; then
+        debug_log "DEBUG" "Silent mode enabled, skipping confirmation for $package_name (original yn was 'yes')"
+    elif [ "$confirm_install_option" = "yes" ] && [ "$current_install_mode" = "auto" ]; then
+        debug_log "DEBUG" "Auto mode: Confirmation for $package_name skipped due to PACKAGE_INSTALL_MODE=auto (original yn was 'yes')."
+    fi
+
+    if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then 
+        debug_log "ERROR" "Failed to install package: $package_name"
+        return 1 
+    fi
+
+    if [ "$skip_package_db" != "yes" ]; then
+        if ! local_package_db "$base_name"; then 
+            debug_log "WARNING" "local_package_db application failed or skipped for $base_name. Continuing..."
+        else
+             debug_log "DEBUG" "local_package_db applied successfully for $base_name"
+        fi
+    else
+        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
+    fi
+
+    debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
+    return 3 
+}
+
+# パッケージ処理メイン部分
+# Returns:
+#   0: Success (Already installed / Not found / User declined non-critical step)
+#   1: Error (Installation failed, local_package_db failed, etc.)
+#   2: User cancelled (Declined 'yn' prompt)
+#   3: New install success (Package installed and local_package_db applied successfully)
+OK_process_package() {
+    local package_name="$1"
+    local base_name="$2"
     local confirm_install_option="$3" # 元の yn オプションの値 (install_package から渡される PKG_OPTIONS_CONFIRM)
     local force_install="$4"
     local skip_package_db="$5"
