@@ -317,42 +317,47 @@ confirm_package_lines() {
             section_base_common_target = "[BASE_SYSTEM.COMMON]";
             section_base_version_target = "[BASE_SYSTEM." os_ver_id_awk "]";
             section_usb_common_target = "[USB.COMMON]";
+            section_samba_common_target = "[SAMBA.COMMON]";
 
             # State flags for current section and counters for arrays
             in_section_base_common = 0; count_base_common = 0;
             in_section_base_version = 0; count_base_version = 0;
             in_section_usb_common = 0; count_usb_common = 0;
+            in_section_samba_common = 0; count_samba_common = 0;
         }
 
         # Main processing loop for each line
         {
             current_line_content = $0;
 
-            # Skip lines: empty, comments, print_section_header
+            # Skip lines: empty, comments
             if (current_line_content ~ /^[[:space:]]*$/) { next; }
             if (current_line_content ~ /^[[:space:]]*#/) { next; }
-            if (current_line_content ~ /^print_section_header/) { next; }
 
             # Section detection and flag management
             if (current_line_content == section_base_common_target) {
-                in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; next;
+                in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
             }
             if (current_line_content == section_base_version_target) {
-                in_section_base_version = 1; in_section_base_common = 0; in_section_usb_common = 0; next;
+                in_section_base_version = 1; in_section_base_common = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
             }
             if (usb_is_present_awk == "1" && current_line_content == section_usb_common_target) {
-                in_section_usb_common = 1; in_section_base_common = 0; in_section_base_version = 0; next;
+                in_section_usb_common = 1; in_section_base_common = 0; in_section_base_version = 0; in_section_samba_common = 0; next;
+            }
+            if (current_line_content == section_samba_common_target) {
+                in_section_samba_common = 1; in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next;
             }
             
             # If it is any other section line (starts with [), reset all flags and skip
             if (current_line_content ~ /^[[:space:]]*\[.*\][[:space:]]*$/) {
-                in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next;
+                in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
             }
 
             # Store lines from active sections into respective arrays
             if (in_section_base_common == 1)  { array_base_common[count_base_common++] = current_line_content; }
             if (in_section_base_version == 1)  { array_base_version[count_base_version++] = current_line_content; }
             if (in_section_usb_common == 1 && usb_is_present_awk == "1") { array_usb_common[count_usb_common++] = current_line_content; }
+            if (in_section_samba_common == 1) { array_samba_common[count_samba_common++] = current_line_content; }
         }
 
         END {
@@ -362,36 +367,54 @@ confirm_package_lines() {
             if (usb_is_present_awk == "1") {
                 for (idx = 0; idx < count_usb_common; idx++) { print array_usb_common[idx]; }
             }
+            for (idx = 0; idx < count_samba_common; idx++) { print array_samba_common[idx]; }
         }
-    ' | awk '!seen[$0]++'); # Ensure unique lines overall, respecting the order from first awk script
+    ' | awk '!seen[$0]++');
 
     if [ -z "$lines_to_process" ]; then
         debug_log "INFO" "confirm_package_lines: No package-related commands are scheduled for execution.";
         return 1;
     fi;
 
-    # Display specific field of each line in lines_to_process based on the first field.
-    echo "$lines_to_process" | awk '
-{
-    if ($1 == "feed_package") {
-        print $5;
-    } else if ($1 == "feed_package1") {
-        print $3;
-    } else if ($1 == "install_package") {
-        print $2;
-    }
-}
-    ';
+    # ---- ▼▼▼ 変更箇所 ▼▼▼ ----
+    # Process each line: call print_section_header for headers, echo package names for others.
+    # This will display headers and package names to the user before calling confirm.
+    echo "$lines_to_process" | while IFS= read -r line || [ -n "$line" ]; do
+        if [ -z "$line" ]; then
+            continue
+        fi
 
-    # Confirm execution. Pass an empty string as the prompt.
-    # `confirm` function is assumed to exist and handle Y/N input,
-    # and will display its own prompt (e.g., "確認(y/n) :").
-    if confirm ""; then # confirm 関数に空文字列を渡す
+        # Parse the line into fields using awk for simplicity and robustness with spaces
+        # ash (OpenWrt's shell) doesn't support `read -a` for arrays directly
+        # set -- $line might be problematic if fields contain spaces and are not quoted
+        
+        _command=$(echo "$line" | awk '{print $1}')
+        _arg2=$(echo "$line" | awk '{print $2}')
+        # _arg3 and _arg5 are only needed for specific commands
+        
+        if [ "$_command" = "print_section_header" ]; then
+            print_section_header "$_arg2" # Call the shell function to display localized header
+        elif [ "$_command" = "install_package" ]; then
+            echo "$_arg2" # Display package name
+        elif [ "$_command" = "feed_package" ]; then
+            _arg5=$(echo "$line" | awk '{print $5}')
+            echo "$_arg5" # Display package name
+        elif [ "$_command" = "feed_package1" ]; then
+            _arg3=$(echo "$line" | awk '{print $3}')
+            echo "$_arg3" # Display package name
+        fi
+        # Other commands are ignored in this display part
+    done
+    # ---- ▲▲▲ 変更箇所ここまで ▲▲▲ ----
+
+    # Confirm execution.
+    # The `confirm` function is assumed to display its own prompt e.g., "確認(y/n) :"
+    if confirm ""; then 
         debug_log "DEBUG" "confirm_package_lines: User confirmed.";
-        return 0; # User confirmed
+        return 0;
     else
-        debug_log "DEBUG" "confirm_package_lines: User cancelled."; # 元のログメッセージとレベルを維持
-        return 1; # User cancelled
+        debug_log "DEBUG" "confirm_package_lines: User cancelled.";
+        return 1;
     fi;
 }
 
