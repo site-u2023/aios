@@ -870,7 +870,7 @@ EOF
     # Check if awk produced valid output (at least one value)
     if [ -z "$h0_str" ]; then
         # Using a more specific message key if available, or a generic one
-        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")"
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED")")"
         debug_log "DEBUG" "mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'"
         return 1
     fi
@@ -977,7 +977,7 @@ EOF
         OFFSET=6 # ruleprefix38_20では offset=6 を使用
     else
         # Using a more specific message key if available, or a generic one
-        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "P31=$prefix31_hex" "P38=$prefix38_hex")")"
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE")")"
         debug_log "DEBUG" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
         return 1
     fi
