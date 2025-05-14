@@ -1555,7 +1555,9 @@ internet_map_main() {
         return 1
     fi
 
-    replace_map_sh
+    if ! replace_map_sh; then
+        return 1
+    fi
     
     # UCI設定の適用
     if ! config_mape; then
