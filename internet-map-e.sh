@@ -796,7 +796,7 @@ mold_mape() {
     network_find_wan6 NET_IF6
 
     if [ -z "$NET_IF6" ]; then
-        debug_log "WARN" "mold_mape: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
+        debug_log "DEBUG" "mold_mape: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
         NET_IF6="wan6" # Default to wan6 if not found
     fi
     
@@ -807,12 +807,12 @@ mold_mape() {
         # Error message using existing key MSG_MAPE_IPV6_PREFIX_FAILED.
         # The pd_decision function would have logged details.
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED")")"
-        debug_log "ERROR" "mold_mape: pd_decision reported failure. Cannot proceed."
+        debug_log "DEBUG" "mold_mape: pd_decision reported failure. Cannot proceed."
         return 1
     fi
 
     # At this point, NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are set by pd_decision.
-    debug_log "INFO" "mold_mape: IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: $MAPE_IPV6_ACQUISITION_METHOD)"
+    debug_log "DEBUG" "mold_mape: IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: $MAPE_IPV6_ACQUISITION_METHOD)"
     
     # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant, space output) ---
     # NEW_IP6_PREFIX should contain a valid IPv6 address string (without /NN)
@@ -857,7 +857,7 @@ EOF
     if [ -z "$h0_str" ]; then
         # Using a more specific message key if available, or a generic one
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")"
-        debug_log "ERROR" "mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'"
+        debug_log "DEBUG" "mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'"
         return 1
     fi
 
@@ -964,7 +964,7 @@ EOF
     else
         # Using a more specific message key if available, or a generic one
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "P31=$prefix31_hex" "P38=$prefix38_hex")")"
-        debug_log "ERROR" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
+        debug_log "DEBUG" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
         return 1
     fi
 
@@ -977,7 +977,7 @@ EOF
         debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=6: $PSID"
     else
         PSID=0 # フォールバック
-        debug_log "WARN" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID set to 0."
+        debug_log "DEBUG" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID set to 0."
     fi
 
     # ポート範囲の計算
@@ -991,14 +991,14 @@ EOF
         local port_base=$(( A << shift_bits ))
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         if [ "$psid_shift" -lt 0 ]; then
-            debug_log "WARN" "mold_mape: Invalid calculation: psid_shift is negative (${psid_shift}). Check OFFSET (${OFFSET}) and PSIDLEN (${PSIDLEN}). Setting psid_shift to 0."
+            debug_log "DEBUG" "mold_mape: Invalid calculation: psid_shift is negative (${psid_shift}). Check OFFSET (${OFFSET}) and PSIDLEN (${PSIDLEN}). Setting psid_shift to 0."
             psid_shift=0
         fi
         local psid_part=$(( PSID << psid_shift ))
         local port=$(( port_base | psid_part ))
         local port_range_size=$(( 1 << psid_shift ))
         if [ "$port_range_size" -le 0 ]; then
-             debug_log "WARN" "mold_mape: Invalid calculation: port_range_size is not positive (${port_range_size}). Setting to 1."
+             debug_log "DEBUG" "mold_mape: Invalid calculation: port_range_size is not positive (${port_range_size}). Setting to 1."
              port_range_size=1
         fi
         local port_end=$(( port + port_range_size - 1 ))
@@ -1082,7 +1082,7 @@ EOF
         IP6PFX="${IP6PFX0}:${IP6PFX1}"
     else
         IP6PFX="" # フォールバック
-        debug_log "WARN" "mold_mape: Could not determine IP6PFX (for MAP-E rule) for IP6PREFIXLEN=$IP6PREFIXLEN"
+        debug_log "DEBUG" "mold_mape: Could not determine IP6PFX (for MAP-E rule) for IP6PREFIXLEN=$IP6PREFIXLEN"
     fi
     debug_log "DEBUG" "mold_mape: Generated IPv6 prefix for MAP-E rule (local IP6PFX for UCI): $IP6PFX"
 
@@ -1108,7 +1108,7 @@ EOF
     fi
     debug_log "DEBUG" "mold_mape: Selected peer address (BR): $BR"
 
-    debug_log "INFO" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
+    debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
 }
 
