@@ -80,7 +80,6 @@ install_package ntfs-3g yn hidden
 install_package hfsfsck yn hidden
 install_package hdparm yn hidden
 
-[SAMBA.COMMON]
 # === ファイル共有 ===
 print_section_header "PKG_SECTION_SAMBA"
 install_package luci-app-samba4 yn hidden
