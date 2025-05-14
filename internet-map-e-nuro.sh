@@ -71,7 +71,7 @@ $awk_output
 EOF
 
     if [ -z "$h0_str" ]; then
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")"
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED")")"
         debug_log "DEBUG" "mold_mape_nuro: Failed to parse IPv6 address part using awk. Input: '${ipv6_addr}'"
         return 1
     fi
@@ -120,7 +120,7 @@ EOF
         debug_log "DEBUG" "mold_mape_nuro: NURO Params: IPV4=$IPV4/$IP4PREFIXLEN, IP6PFX=$IP6PFX/$IP6PREFIXLEN, PSID=$PSID"
     else
         debug_log "DEBUG" "mold_mape_nuro: No matching NURO rule for key '$prefix36_hex_key_lookup'."
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "SERVICE=NURO" "KEY=$prefix36_hex_key_lookup")")"
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE")")"
         return 1
     fi
 
