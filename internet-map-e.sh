@@ -726,10 +726,10 @@ get_ruleprefix38_20_value() {
 }
 
 # Function to get the source IPv6 information for MAP-E calculation.
-# It tries to obtain a delegated prefix first, then falls back to a direct GUA.
+# It tries to obtain a global unicast address (GUA) first, then falls back to a delegated prefix (PD).
 # Sets global variables:
-#   NEW_IP6_PREFIX: The IPv6 address string (address part if from PD) to be used.
-#   MAPE_IPV6_ACQUISITION_METHOD: "pd", "gua", or "none".
+#   NEW_IP6_PREFIX: The IPv6 address string (full GUA if available, otherwise PD prefix) to be used.
+#   MAPE_IPV6_ACQUISITION_METHOD: "gua", "pd", or "none".
 # Arguments:
 #   $1: WAN interface name (e.g., "wan6")
 # Returns:
@@ -750,40 +750,54 @@ pd_decision() {
         return 1
     fi
 
+    # Try to get direct GUA (global unicast address) first
+    debug_log "DEBUG" "pd_decision: Attempting to get direct GUA from interface '${wan_iface}'."
+    network_get_ipaddr6 direct_gua "${wan_iface}"
+
+    if [ -n "$direct_gua" ]; then
+        # Check if the obtained address is global (2000::/3)
+        case "$direct_gua" in
+            2[0-9a-fA-F]*|3[0-9a-fA-F]*)
+                NEW_IP6_PREFIX="$direct_gua"
+                MAPE_IPV6_ACQUISITION_METHOD="gua"
+                debug_log "DEBUG" "pd_decision: Using direct global GUA: $NEW_IP6_PREFIX"
+                return 0 # Success with GUA
+                ;;
+            fe80:*)
+                # Only link-local address found, treat as error
+                printf "%s\n" "$(color red "$(get_message "MSG_MAPE_GUA_LINKLOCAL_ONLY")")"
+                debug_log "DEBUG" "pd_decision: Only link-local IPv6 address detected: $direct_gua"
+                return 1
+                ;;
+            *)
+                # Not a recognized global address, fallback to PD
+                debug_log "DEBUG" "pd_decision: Not a global GUA, trying PD. Got: $direct_gua"
+                ;;
+        esac
+    else
+        debug_log "DEBUG" "pd_decision: No GUA address found, fallback to PD."
+    fi
+
+    # Try to get delegated prefix (PD)
     debug_log "DEBUG" "pd_decision: Attempting to get delegated prefix from interface '${wan_iface}'."
     network_get_prefix6 delegated_prefix_with_length "${wan_iface}"
 
     if [ -n "$delegated_prefix_with_length" ]; then
-        debug_log "DEBUG" "pd_decision: Delegated prefix obtained on '${wan_iface}': ${delegated_prefix_with_length}"
         address_part_for_mape=$(echo "$delegated_prefix_with_length" | cut -d'/' -f1)
-        
         if [ -n "$address_part_for_mape" ]; then
             NEW_IP6_PREFIX="$address_part_for_mape"
             MAPE_IPV6_ACQUISITION_METHOD="pd"
             debug_log "DEBUG" "pd_decision: Using address part from PD: $NEW_IP6_PREFIX"
             return 0 # Success with PD
         else
-            debug_log "DEBUG" "pd_decision: Delegated prefix obtained, but failed to extract address part from '${delegated_prefix_with_length}'. Will attempt fallback to GUA."
+            debug_log "DEBUG" "pd_decision: Delegated prefix obtained, but failed to extract address part from '${delegated_prefix_with_length}'."
         fi
     else
-        debug_log "DEBUG" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'. Attempting fallback to get direct GUA."
+        debug_log "DEBUG" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'."
     fi
 
-    # Fallback to direct GUA if PD prefix was not obtained or address part extraction failed
-    debug_log "DEBUG" "pd_decision: Attempting to get direct GUA from interface '${wan_iface}'."
-    network_get_ipaddr6 direct_gua "${wan_iface}"
-    if [ -n "$direct_gua" ]; then
-        NEW_IP6_PREFIX="$direct_gua"
-        MAPE_IPV6_ACQUISITION_METHOD="gua"
-        debug_log "DEBUG" "pd_decision: Using direct GUA: $NEW_IP6_PREFIX"
-        return 0 # Success with GUA
-    else
-        debug_log "DEBUG" "pd_decision: Failed to obtain direct GUA on '${wan_iface}' as a fallback."
-    fi
-    
     # If both methods failed
-    debug_log "DEBUG" "pd_decision: Failed to obtain any usable IPv6 information (PD or GUA)."
-    # NEW_IP6_PREFIX is already empty, MAPE_IPV6_ACQUISITION_METHOD is already "none"
+    debug_log "DEBUG" "pd_decision: Failed to obtain any usable IPv6 information (GUA or PD)."
     return 1 # Failure
 }
 
