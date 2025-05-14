@@ -374,7 +374,8 @@ confirm_package_lines() {
         _arg2=$(echo "$_arg2_raw" | sed 's/^"//;s/"$//')
 
         if [ "$_command" = "print_section_header" ]; then
-            print_section_header "$_arg2" 
+            # print_section_header "$_arg2" 
+            : # コメントアウトしたので何もしない (コロンで空のコマンドとしておく)
         elif [ "$_command" = "install_package" ]; then
             echo "$_arg2" 
         elif [ "$_command" = "feed_package" ]; then
