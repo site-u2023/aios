@@ -315,12 +315,10 @@ confirm_package_lines() {
             section_base_common_target = "[BASE_SYSTEM.COMMON]";
             section_base_version_target = "[BASE_SYSTEM." os_ver_id_awk "]";
             section_usb_common_target = "[USB.COMMON]";
-            section_samba_common_target = "[SAMBA.COMMON]";
 
             in_section_base_common = 0; count_base_common = 0;
             in_section_base_version = 0; count_base_version = 0;
             in_section_usb_common = 0; count_usb_common = 0;
-            in_section_samba_common = 0; count_samba_common = 0;
         }
         {
             current_line_content = $0;
@@ -328,25 +326,21 @@ confirm_package_lines() {
             if (current_line_content ~ /^[[:space:]]*#/) { next; }
 
             if (current_line_content == section_base_common_target) {
-                in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
+                in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; next;
             }
             if (current_line_content == section_base_version_target) {
-                in_section_base_version = 1; in_section_base_common = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
+                in_section_base_version = 1; in_section_base_common = 0; in_section_usb_common = 0; next;
             }
             if (usb_is_present_awk == "1" && current_line_content == section_usb_common_target) {
-                in_section_usb_common = 1; in_section_base_common = 0; in_section_base_version = 0; in_section_samba_common = 0; next;
+                in_section_usb_common = 1; in_section_base_common = 0; in_section_base_version = 0; next;
             }
-            if (current_line_content == section_samba_common_target) {
-                in_section_samba_common = 1; in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next;
-            }
-            if (current_line_content ~ /^[[:space:]]*\[.*\][[:space:]]*$/) {
-                in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; in_section_samba_common = 0; next;
+            if (current_line_content ~ /^[[:space:]]*\[.*\][[:space:]]*$/) { # 他のセクションに移った場合
+                in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next;
             }
 
             if (in_section_base_common == 1)  { array_base_common[count_base_common++] = current_line_content; }
             if (in_section_base_version == 1)  { array_base_version[count_base_version++] = current_line_content; }
             if (in_section_usb_common == 1 && usb_is_present_awk == "1") { array_usb_common[count_usb_common++] = current_line_content; }
-            if (in_section_samba_common == 1) { array_samba_common[count_samba_common++] = current_line_content; }
         }
         END {
             for (idx = 0; idx < count_base_common; idx++) { print array_base_common[idx]; }
@@ -354,7 +348,6 @@ confirm_package_lines() {
             if (usb_is_present_awk == "1") {
                 for (idx = 0; idx < count_usb_common; idx++) { print array_usb_common[idx]; }
             }
-            for (idx = 0; idx < count_samba_common; idx++) { print array_samba_common[idx]; }
         }
     ' | awk '!seen[$0]++');
 
