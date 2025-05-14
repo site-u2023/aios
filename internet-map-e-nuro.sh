@@ -32,14 +32,14 @@ mold_mape_nuro() {
 
     if [ -z "$NET_PFX6" ]; then
         debug_log "DEBUG" "mold_mape_nuro: NET_PFX6 is not set. Cannot proceed."
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_empty")")"
+        printf "%s\\n" "$(color "red" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_empty")")"
         return 1
     fi
 
     NEW_IP6_PREFIX=$(echo "$NET_PFX6" | cut -d'/' -f1)
     if [ -z "$NEW_IP6_PREFIX" ]; then
         debug_log "DEBUG" "mold_mape_nuro: Failed to extract address part from NET_PFX6 ('$NET_PFX6')."
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_parse_fail")")"
+        printf "%s\\n" "$(color "red" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_parse_fail")")"
         return 1
     fi
     debug_log "DEBUG" "mold_mape_nuro: Using source IPv6 for MAP-E: $NEW_IP6_PREFIX (derived from NET_PFX6: $NET_PFX6)"
@@ -71,7 +71,7 @@ $awk_output
 EOF
 
     if [ -z "$h0_str" ]; then
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED")")"
+        printf "%s\\n" "$(color "red" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED")")"
         debug_log "DEBUG" "mold_mape_nuro: Failed to parse IPv6 address part using awk. Input: '${ipv6_addr}'"
         return 1
     fi
@@ -120,7 +120,7 @@ EOF
         debug_log "DEBUG" "mold_mape_nuro: NURO Params: IPV4=$IPV4/$IP4PREFIXLEN, IP6PFX=$IP6PFX/$IP6PREFIXLEN, PSID=$PSID"
     else
         debug_log "DEBUG" "mold_mape_nuro: No matching NURO rule for key '$prefix36_hex_key_lookup'."
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE")")"
+        printf "%s\\n" "$(color "red" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE")")"
         return 1
     fi
 
@@ -290,7 +290,7 @@ mape_nuro_config() {
     else
         debug_log "DEBUG" "mape_nuro_config: One or more UCI commit operations failed."
         # MSG_MAPE_UCI_COMMIT_FAILED is not in internet-map-e.sh, using direct English.
-        printf "%s\\n" "$(color "$CLR_RED" "Error: UCI commit failed.")"
+        printf "%s\\n" "$(color "red" "Error: UCI commit failed.")"
         return 1
     fi
 }
@@ -390,7 +390,7 @@ restore_mape_nuro() {
     if [ "$failed_count" -gt 0 ]; then
         debug_log "DEBUG" "restore_mape_nuro: Restore process completed with $failed_count failure(s)."
         # MSG_MAPE_RESTORE_WITH_ERRORS is not in internet-map-e.sh. Using direct English.
-        printf "%s\\n" "$(color "$CLR_RED" "Error: Restore completed with $failed_count failure(s).")"
+        printf "%s\\n" "$(color "red" "Error: Restore completed with $failed_count failure(s).")"
         overall_status=2
     elif [ "$restored_count" -gt 0 ]; then
         debug_log "DEBUG" "restore_mape_nuro: Restore process completed. $restored_count file(s) restored successfully."
