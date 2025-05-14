@@ -1554,6 +1554,8 @@ internet_map_main() {
         debug_log "DEBUG" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
         return 1
     fi
+
+    replace_map_sh
     
     # UCI設定の適用
     if ! config_mape; then
