@@ -1557,16 +1557,16 @@ internet_map_main() {
     fi
     
     # UCI設定の適用
-    #if ! config_mape; then
-    #    debug_log "DEBUG" "internet_map_main: config_mape function failed. UCI settings might be inconsistent."
-    #    return 1
-    #fi
+    if ! config_mape; then
+        debug_log "DEBUG" "internet_map_main: config_mape function failed. UCI settings might be inconsistent."
+        return 1
+    fi
     
     display_mape
     
     # 再起動
     #debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
-    #reboot
+    reboot
 
     return 0 # Explicitly exit with success status
 }
