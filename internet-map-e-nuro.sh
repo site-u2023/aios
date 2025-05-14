@@ -9,9 +9,6 @@ SCRIPT_VERSION="2025.05.14-00-00"
 . /lib/functions/network.sh
 
 # Function to get IPv4 base address for NURO (ruleprefix36)
-# Function to get IPv4 base address for NURO (ruleprefix36)
-# ARGS: $1 (string) = Hexadecimal prefix key (e.g., "0x240d000f00")
-# ECHO: (string) Comma-separated IPv4 octets (e.g., "219,104,128") or empty string
 get_ruleprefix36_value() {
     local prefix_hex_key="$1"
 
@@ -34,18 +31,18 @@ mold_mape_nuro() {
     network_get_prefix6 NET_PFX6 "${NET_IF6}"
 
     if [ -z "$NET_PFX6" ]; then
-        debug_log "$LVL_ERROR" "mold_mape_nuro: NET_PFX6 is not set. Cannot proceed." # 実績スクリプトの形式に合わせる
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_empty")")" # 実績スクリプトの形式に合わせる
+        debug_log "DEBUG" "mold_mape_nuro: NET_PFX6 is not set. Cannot proceed."
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_empty")")"
         return 1
     fi
 
     NEW_IP6_PREFIX=$(echo "$NET_PFX6" | cut -d'/' -f1)
     if [ -z "$NEW_IP6_PREFIX" ]; then
-        debug_log "$LVL_ERROR" "mold_mape_nuro: Failed to extract address part from NET_PFX6 ('$NET_PFX6')." # 実績スクリプトの形式に合わせる
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_parse_fail")")" # 実績スクリプトの形式に合わせる
+        debug_log "DEBUG" "mold_mape_nuro: Failed to extract address part from NET_PFX6 ('$NET_PFX6')."
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_parse_fail")")"
         return 1
     fi
-    debug_log "$LVL_INFO" "mold_mape_nuro: Using source IPv6 for MAP-E: $NEW_IP6_PREFIX (derived from NET_PFX6: $NET_PFX6)" # 実績スクリプトの形式に合わせる
+    debug_log "DEBUG" "mold_mape_nuro: Using source IPv6 for MAP-E: $NEW_IP6_PREFIX (derived from NET_PFX6: $NET_PFX6)"
 
     local ipv6_addr="$NEW_IP6_PREFIX"
     local h0_str h1_str h2_str h3_str
@@ -74,8 +71,8 @@ $awk_output
 EOF
 
     if [ -z "$h0_str" ]; then
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")" # 実績スクリプトの形式に合わせる
-        debug_log "$LVL_ERROR" "mold_mape_nuro: Failed to parse IPv6 address part using awk. Input: '${ipv6_addr}'" # 実績スクリプトの形式に合わせる
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")"
+        debug_log "DEBUG" "mold_mape_nuro: Failed to parse IPv6 address part using awk. Input: '${ipv6_addr}'"
         return 1
     fi
 
@@ -85,7 +82,7 @@ EOF
     HEXTET2=$(printf %d "0x${h2_str:-0}")
     HEXTET3=$(printf %d "0x${h3_str:-0}")
 
-    debug_log "$LVL_DEBUG" "mold_mape_nuro: Parsed HEXTETs (str): $h0_str:$h1_str:$h2_str:$h3_str (dec): $HEXTET0:$HEXTET1:$HEXTET2:$HEXTET3" # 実績スクリプトの形式に合わせる
+    debug_log "DEBUG" "mold_mape_nuro: Parsed HEXTETs (str): $h0_str:$h1_str:$h2_str:$h3_str (dec): $HEXTET0:$HEXTET1:$HEXTET2:$HEXTET3"
 
     local ruleprefix_h0_part_numeric=$((HEXTET0 * 65536))
     local ruleprefix_h1_part_numeric=$HEXTET1
@@ -94,7 +91,7 @@ EOF
     local prefix36_hex_key_lookup
     prefix36_hex_key_lookup=$(printf "0x%x" "$calculated_numeric_key")
 
-    debug_log "$LVL_DEBUG" "mold_mape_nuro: Calculated prefix36_hex_key_lookup=$prefix36_hex_key_lookup" # 実績スクリプトの形式に合わせる
+    debug_log "DEBUG" "mold_mape_nuro: Calculated prefix36_hex_key_lookup=$prefix36_hex_key_lookup"
 
     BR=""; IPV4=""; IPADDR=""; IP4PREFIXLEN=""; IP6PFX=""; IP6PREFIXLEN=""
     EALEN=""; PSIDLEN=""; OFFSET=""; PSID=0; PORTS=""; CE=""; IPV6PREFIX=""
@@ -103,7 +100,7 @@ EOF
     octet_str=$(get_ruleprefix36_value "$prefix36_hex_key_lookup")
 
     if [ -n "$octet_str" ]; then
-        debug_log "$LVL_INFO" "mold_mape_nuro: Matched NURO rule key '$prefix36_hex_key_lookup'. Octets: $octet_str" # 実績スクリプトの形式に合わせる
+        debug_log "DEBUG" "mold_mape_nuro: Matched NURO rule key '$prefix36_hex_key_lookup'. Octets: $octet_str"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet_str
 EOF
@@ -120,10 +117,10 @@ EOF
         local h2_upper_byte_only_val=$(( HEXTET2 & 0xff00 ))
         IP6PFX="${h0_str}:${h1_str}:$(printf %04x "$h2_upper_byte_only_val")"
 
-        debug_log "$LVL_DEBUG" "mold_mape_nuro: NURO Params: IPV4=$IPV4/$IP4PREFIXLEN, IP6PFX=$IP6PFX/$IP6PREFIXLEN, PSID=$PSID" # 実績スクリプトの形式に合わせる (内容は簡略化版)
+        debug_log "DEBUG" "mold_mape_nuro: NURO Params: IPV4=$IPV4/$IP4PREFIXLEN, IP6PFX=$IP6PFX/$IP6PREFIXLEN, PSID=$PSID"
     else
-        debug_log "$LVL_ERROR" "mold_mape_nuro: No matching NURO rule for key '$prefix36_hex_key_lookup'." # 実績スクリプトの形式に合わせる
-        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "SERVICE=NURO" "KEY=$prefix36_hex_key_lookup")")" # 実績スクリプトの形式に合わせる
+        debug_log "DEBUG" "mold_mape_nuro: No matching NURO rule for key '$prefix36_hex_key_lookup'."
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "SERVICE=NURO" "KEY=$prefix36_hex_key_lookup")")"
         return 1
     fi
 
@@ -165,34 +162,25 @@ EOF
     local CE_HEXTET7=$(( PSID << 8 ))
 
     CE="$(printf %04x "$CE_HEXTET0"):$(printf %04x "$CE_HEXTET1"):$(printf %04x "$CE_HEXTET2"):$(printf %04x "$CE_HEXTET3"):$(printf %04x "$CE_HEXTET4"):$(printf %04x "$CE_HEXTET5"):$(printf %04x "$CE_HEXTET6"):$(printf %04x "$CE_HEXTET7")"
-    debug_log "$LVL_DEBUG" "mold_mape_nuro: CE IPv6: $CE" # 実績スクリプトの形式に合わせる
+    debug_log "DEBUG" "mold_mape_nuro: CE IPv6: $CE"
 
     IPV6PREFIX="${h0_str}:${h1_str}:${h2_str}:${h3_str}::"
 
-    debug_log "$LVL_INFO" "mold_mape_nuro: MAP-E parameter calculation for NURO completed." # 実績スクリプトの形式に合わせる
+    debug_log "DEBUG" "mold_mape_nuro: MAP-E parameter calculation for NURO completed."
     return 0
 }
 
-# Function to apply NURO MAP-E UCI settings
-# This function assumes that global variables for MAP-E parameters
-# (BR, IPV4, IP4PREFIXLEN, IP6PFX, IP6PREFIXLEN, EALEN, PSIDLEN, OFFSET)
-# have been set by mold_mape_nuro().
-# It strictly adheres to the UCI settings from site-u2023/config-software/map-e-nuro.sh.
-# Returns:
-#   0 on success (UCI commands executed and committed)
-#   1 on UCI commit failure
 mape_nuro_config() {
     local wanmap_if='wanmap'
     local firewall_zone_idx='1'
     local openwrt_release_major
 
-    # 設定のバックアップ作成 (NURO版)
     debug_log "DEBUG" "mape_nuro_config: Backing up configuration files..."
     cp /etc/config/network /etc/config/network.map-e-nuro.bak && debug_log "DEBUG" "mape_nuro_config: network backup created (.map-e-nuro.bak)." || debug_log "DEBUG" "mape_nuro_config: Failed to backup network config."
     cp /etc/config/dhcp /etc/config/dhcp.map-e-nuro.bak && debug_log "DEBUG" "mape_nuro_config: dhcp backup created (.map-e-nuro.bak)." || debug_log "DEBUG" "mape_nuro_config: Failed to backup dhcp config."
     cp /etc/config/firewall /etc/config/firewall.map-e-nuro.bak && debug_log "DEBUG" "mape_nuro_config: firewall backup created (.map-e-nuro.bak)." || debug_log "DEBUG" "mape_nuro_config: Failed to backup firewall config."
 
-    debug_log "INFO" "mape_nuro_config: Applying NURO MAP-E UCI settings."
+    debug_log "DEBUG" "mape_nuro_config: Applying NURO MAP-E UCI settings."
 
     debug_log "DEBUG" "mape_nuro_config: Setting DHCP LAN..."
     uci set dhcp.lan.ra='relay'
@@ -205,6 +193,7 @@ mape_nuro_config() {
 
     debug_log "DEBUG" "mape_nuro_config: Setting DHCP WAN6..."
     uci set dhcp.wan6=dhcp
+    uci set dhcp.wan6.interface='wan'
     uci set dhcp.wan6.master='1'
     uci set dhcp.wan6.ra='relay'
     uci set dhcp.wan6.dhcpv6='relay'
@@ -231,16 +220,16 @@ mape_nuro_config() {
     if [ -n "$openwrt_release_major" ] && \
        ( [ "$openwrt_release_major" = "SN" ] || \
          [ "$openwrt_release_major" -ge 21 ] && [ "$openwrt_release_major" -le 24 ] ); then
-        debug_log "INFO" "mape_nuro_config: Applying settings for OpenWrt $openwrt_release_major (21-24, SN)..."
+        debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt $openwrt_release_major (21-24, SN)..."
         uci set dhcp.wan6.ignore='1'
         uci set network."$wanmap_if".legacymap='1'
         uci set network."$wanmap_if".tunlink='wan6'
     elif [ "$openwrt_release_major" = "19" ]; then
-        debug_log "INFO" "mape_nuro_config: Applying settings for OpenWrt 19..."
+        debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt 19..."
         uci -q delete network."$wanmap_if".tunlink
         uci add_list network."$wanmap_if".tunlink='wan6'
     else
-        debug_log "WARN" "mape_nuro_config: OpenWrt release '$openwrt_release_major' not explicitly handled by version-specific settings. Applying defaults which might be similar to 21+."
+        debug_log "DEBUG" "mape_nuro_config: OpenWrt release '$openwrt_release_major' not explicitly handled by version-specific settings. Applying defaults which might be similar to 21+."
         uci set dhcp.wan6.ignore='1'
         uci set network."$wanmap_if".legacymap='1'
         uci set network."$wanmap_if".tunlink='wan6'
@@ -274,102 +263,88 @@ mape_nuro_config() {
 
     uci add_list network.lan.dns='240d:0010:0004:0005::33'
     uci add_list network.lan.dns='240d:12:4:1b01:152:165:245:17'
-
+    
     uci add_list dhcp.lan.dns='2606:4700:4700::1111'
     uci add_list dhcp.lan.dns='2001:4860:4860::8888'
     uci add_list dhcp.lan.dns='2606:4700:4700::1001'
     uci add_list dhcp.lan.dns='2001:4860:4860::8844'
 
-    debug_log "INFO" "mape_nuro_config: Committing all UCI changes..."
+    debug_log "DEBUG" "mape_nuro_config: Committing all UCI changes..."
     local commit_success=1
     if ! uci commit dhcp; then
-        debug_log "ERROR" "mape_nuro_config: 'uci commit dhcp' failed."
+        debug_log "DEBUG" "mape_nuro_config: 'uci commit dhcp' failed."
         commit_success=0
     fi
     if ! uci commit network; then
-        debug_log "ERROR" "mape_nuro_config: 'uci commit network' failed."
+        debug_log "DEBUG" "mape_nuro_config: 'uci commit network' failed."
         commit_success=0
     fi
     if ! uci commit firewall; then
-        debug_log "ERROR" "mape_nuro_config: 'uci commit firewall' failed."
+        debug_log "DEBUG" "mape_nuro_config: 'uci commit firewall' failed."
         commit_success=0
     fi
 
     if [ "$commit_success" -eq 1 ]; then
-        debug_log "INFO" "mape_nuro_config: All UCI changes committed successfully."
+        debug_log "DEBUG" "mape_nuro_config: All UCI changes committed successfully."
         return 0
     else
-        debug_log "ERROR" "mape_nuro_config: One or more UCI commit operations failed."
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_UCI_COMMIT_FAILED")")"
+        debug_log "DEBUG" "mape_nuro_config: One or more UCI commit operations failed."
+        # MSG_MAPE_UCI_COMMIT_FAILED is not in internet-map-e.sh, using direct English.
+        printf "%s\\n" "$(color "$CLR_RED" "Error: UCI commit failed.")"
         return 1
     fi
 }
 
-# Function to display NURO MAP-E parameters and UCI configuration values
-# Assumes global variables from mold_mape_nuro() are set.
 display_mape_nuro() {
-    # Check if essential parameters are set (basic check)
-    if [ -z "$NEW_IP6_PREFIX" ] || [ -z "$BR" ] || [ -z "$IPV4" ]; then
-        debug_log "WARN" "display_mape_nuro: One or more essential MAP-E parameters are not set. Display may be incomplete."
-        printf "%s\\n" "$(color yellow "$(get_message "MSG_MAPE_DISPLAY_INCOMPLETE")")"
-    fi
+    # Parameter check: internet-map-e.sh display_mape does not have this initial check. Removing.
+    # if [ -z "$NEW_IP6_PREFIX" ] || [ -z "$BR" ] || [ -z "$IPV4" ]; then
+    #     debug_log "DEBUG" "display_mape_nuro: One or more essential MAP-E parameters are not set. Display may be incomplete."
+    #     # MSG_MAPE_DISPLAY_INCOMPLETE is not in internet-map-e.sh. Removing printf.
+    # fi
 
     # Header for the display section
-    # Assuming print_section_title or similar helper is available for consistent styling,
-    # otherwise, use simple echo with color.
-    if type print_section_title > /dev/null 2>&1; then
-        print_section_title "DISPLAY_MAPE_NURO_TITLE" # Message key for "NURO MAP-E Configuration Details"
-    else
-        printf "\\n%s\\n" "$(color blue "--- NURO MAP-E Configuration Details ---")"
-    fi
+    # internet-map-e.sh uses print_section_title "MENU_INTERNET_MAPE" in main, not in display_mape.
+    # display_mape in internet-map-e.sh directly prints titles.
+    printf "\\n%s\\n" "$(color "$CLR_BLUE" "--- NURO MAP-E Configuration Details ---")" # Retaining NURO specific title
 
-    printf "%s\\n" "$(color cyan "$(get_message "DISPLAY_SECTION_CALCULATED_PARAMS")")" # "Calculated MAP-E Parameters:"
-    printf "  %-25s: %s\\n" "$(get_message "DISPLAY_LABEL_SOURCE_IPV6")" "$NEW_IP6_PREFIX" # "Source IPv6 Prefix"
-    printf "  %-25s: %s\\n" "$(get_message "DISPLAY_LABEL_CE_IPV6")" "$CE" # "CE IPv6 Address"
-    printf "  %-25s: %s\\n" "$(get_message "DISPLAY_LABEL_FULL_IPV4")" "$IPADDR" # "Resulting IPv4 Address"
-    printf "  %-25s: %s\\n" "$(get_message "DISPLAY_LABEL_PSID_DEC")" "$PSID" # "PSID (Decimal)"
-    printf "  %-25s: %s\\n" "$(get_message "DISPLAY_LABEL_BR_ADDRESS")" "$BR" # "Border Relay (Peer)"
+    # Calculated Parameters Title (mimicking internet-map-e.sh's display_mape direct print style)
+    printf "%s\\n" "$(color "$CLR_CYAN" "Calculated MAP-E Parameters:")" # Direct English
+    printf "  %-25s: %s\\n" "Source IPv6 Prefix" "$NEW_IP6_PREFIX"
+    printf "  %-25s: %s\\n" "CE IPv6 Address" "$CE"
+    printf "  %-25s: %s\\n" "Resulting IPv4 Address" "$IPADDR"
+    printf "  %-25s: %s\\n" "PSID (Decimal)" "$PSID"
+    printf "  %-25s: %s\\n" "Border Relay (Peer)" "$BR"
 
-    printf "\\n%s\\n" "$(color cyan "$(get_message "DISPLAY_SECTION_UCI_VALUES")")" # "OpenWrt UCI Configuration Values (for network.wanmap):"
+    # UCI Values Title (mimicking internet-map-e.sh's display_mape direct print style)
+    printf "\\n%s\\n" "$(color "$CLR_CYAN" "OpenWrt UCI Configuration Values (for network.wanmap):")" # Direct English
     printf "  option%-20s '%s'\\n" " peeraddr" "$BR"
-    printf "  option%-20s '%s'\\n" " ipaddr" "$IPV4" # e.g., 219.104.128.0
-    printf "  option%-20s '%s'\\n" " ip4prefixlen" "$IP4PREFIXLEN" # e.g., 20
-    printf "  option%-20s '%s::'\\n" " ip6prefix" "$IP6PFX" # e.g., 240d:f:0 (:: is appended)
-    printf "  option%-20s '%s'\\n" " ip6prefixlen" "$IP6PREFIXLEN" # e.g., 36
-    printf "  option%-20s '%s'\\n" " ealen" "$EALEN" # e.g., 20
-    printf "  option%-20s '%s'\\n" " psidlen" "$PSIDLEN" # e.g., 8
-    printf "  option%-20s '%s'\\n" " offset" "$OFFSET" # e.g., 4
-    printf "  option%-20s '%s'\\n" " mtu" "1452" # Fixed value for NURO from map-e-nuro.sh
-    printf "  option%-20s '%s'\\n" " encaplimit" "ignore" # Fixed value for NURO
-    # legacymap and tunlink depend on OpenWrt version and are set in config_mape_nuro
-
-    # Port Information
-    # Calculate total available ports based on parameters
-    # Total ports = (2^OFFSET - 1) * 2^(16 - OFFSET - PSIDLEN)
-    # However, map-e-nuro.sh does not display total ports, it directly shows ranges.
-    # We will use the PORTS variable generated by mold_mape_nuro().
+    printf "  option%-20s '%s'\\n" " ipaddr" "$IPV4"
+    printf "  option%-20s '%s'\\n" " ip4prefixlen" "$IP4PREFIXLEN"
+    printf "  option%-20s '%s::'\\n" " ip6prefix" "$IP6PFX"
+    printf "  option%-20s '%s'\\n" " ip6prefixlen" "$IP6PREFIXLEN"
+    printf "  option%-20s '%s'\\n" " ealen" "$EALEN"
+    printf "  option%-20s '%s'\\n" " psidlen" "$PSIDLEN"
+    printf "  option%-20s '%s'\\n" " offset" "$OFFSET"
+    printf "  option%-20s '%s'\\n" " mtu" "1452"
+    printf "  option%-20s '%s'\\n" " encaplimit" "ignore"
 
     if [ -n "$PORTS" ]; then
-        printf "\\n%s\\n" "$(color cyan "$(get_message "DISPLAY_SECTION_PORT_RANGES")")" # "Available Port Ranges:"
-        # Display the PORTS string, interpreting newlines
-        # The PORTS variable is already formatted with spaces and newlines by mold_mape_nuro
-        printf "  %b\\n" "$PORTS" # Use %b to interpret backslash escapes like \n
+        # Port Ranges Title (mimicking internet-map-e.sh's display_mape direct print style)
+        printf "\\n%s\\n" "$(color "$CLR_CYAN" "Available Port Ranges:")" # Direct English
+        printf "  %b\\n" "$PORTS"
     else
-        debug_log "WARN" "display_mape_nuro: PORTS variable is empty. Cannot display port ranges."
+        debug_log "DEBUG" "display_mape_nuro: PORTS variable is empty. Cannot display port ranges."
     fi
 
-    printf "\\n%s\\n" "$(color magenta "(config-softwire)# site-u2023/aios/internet-map-e-nuro.sh")"
+    printf "\\n%s\\n" "$(color "$CLR_MAGENTA" "(config-softwire)# site-u2023/aios/internet-map-e-nuro.sh")"
     printf "\\n"
+
+    # display_mape in internet-map-e.sh has these success messages and read.
+    printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+    read -r -n 1 -s
 }
 
-# Function to restore NURO MAP-E configuration from backups
-# Restores network, dhcp, and firewall configs from ".map-e-nuro.bak" files.
-# Based on site-u2023/aios/internet-map-e.sh restore_mape()
-# and site-u2023/config-software/map-e-nuro.sh _func_RECOVERY()
-# Returns:
-#   0: If at least one backup file was successfully restored.
-#   1: If no backup files were found to restore.
-#   2: If one or more files failed to restore (but at least one backup was found).
 restore_mape_nuro() {
     local files_to_restore_nuro
     local original_file backup_file
@@ -385,143 +360,110 @@ restore_mape_nuro() {
         /etc/config/firewall:/etc/config/firewall.map-e-nuro.bak
     "
 
-    debug_log "INFO" "restore_mape_nuro: Starting restoration of NURO MAP-E configurations."
+    debug_log "DEBUG" "restore_mape_nuro: Starting restoration of NURO MAP-E configurations."
 
     echo "$files_to_restore_nuro" | while IFS= read -r item; do
         if [ -z "$item" ]; then continue; fi
-
         total_to_check=$((total_to_check + 1))
         original_file=$(echo "$item" | cut -d':' -f1)
         backup_file=$(echo "$item" | cut -d':' -f2)
 
         debug_log "DEBUG" "restore_mape_nuro: Checking backup '$backup_file' for '$original_file'."
         if [ -f "$backup_file" ]; then
-            debug_log "INFO" "restore_mape_nuro: Backup file '$backup_file' found. Attempting to restore to '$original_file'."
+            debug_log "DEBUG" "restore_mape_nuro: Backup file '$backup_file' found. Attempting to restore to '$original_file'."
             if cp "$backup_file" "$original_file"; then
-                debug_log "INFO" "restore_mape_nuro: Successfully restored '$original_file' from '$backup_file'."
+                debug_log "DEBUG" "restore_mape_nuro: Successfully restored '$original_file' from '$backup_file'."
                 restored_count=$((restored_count + 1))
             else
                 local cp_rc=$?
-                debug_log "ERROR" "restore_mape_nuro: Failed to restore '$original_file' from '$backup_file'. cp exit code: $cp_rc."
+                debug_log "DEBUG" "restore_mape_nuro: Failed to restore '$original_file' from '$backup_file'. cp exit code: $cp_rc."
                 failed_count=$((failed_count + 1))
             fi
         else
-            debug_log "WARN" "restore_mape_nuro: Backup file '$backup_file' not found. Skipping restore for '$original_file'."
+            debug_log "DEBUG" "restore_mape_nuro: Backup file '$backup_file' not found. Skipping restore for '$original_file'."
             not_found_count=$((not_found_count + 1))
         fi
     done
 
-    debug_log "INFO" "restore_mape_nuro: Restore summary: Total checked=$total_to_check, Restored=$restored_count, Not found=$not_found_count, Failed=$failed_count."
+    debug_log "DEBUG" "restore_mape_nuro: Restore summary: Total checked=$total_to_check, Restored=$restored_count, Not found=$not_found_count, Failed=$failed_count."
 
     if [ "$failed_count" -gt 0 ]; then
-        debug_log "ERROR" "restore_mape_nuro: Restore process completed with $failed_count failure(s)."
+        debug_log "DEBUG" "restore_mape_nuro: Restore process completed with $failed_count failure(s)."
+        # MSG_MAPE_RESTORE_WITH_ERRORS is not in internet-map-e.sh. Using direct English.
+        printf "%s\\n" "$(color "$CLR_RED" "Error: Restore completed with $failed_count failure(s).")"
         overall_status=2
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_RESTORE_WITH_ERRORS" "COUNT=$failed_count")")"
     elif [ "$restored_count" -gt 0 ]; then
-        debug_log "INFO" "restore_mape_nuro: Restore process completed. $restored_count file(s) restored successfully."
+        debug_log "DEBUG" "restore_mape_nuro: Restore process completed. $restored_count file(s) restored successfully."
+        printf "%s\\n" "$(color "$CLR_GREEN" "$(get_message "MSG_MAPE_RESTORE_COMPLETE" "COUNT=$restored_count")")" # Using MSG_MAPE_RESTORE_COMPLETE from internet-map-e.sh
         overall_status=0
-        printf "%s\\n" "$(color green "$(get_message "MSG_MAPE_RESTORE_COMPLETE_SUCCESS" "COUNT=$restored_count")")"
     else
-        debug_log "WARN" "restore_mape_nuro: No backup files (.map-e-nuro.bak) were found to restore."
+        debug_log "DEBUG" "restore_mape_nuro: No backup files (.map-e-nuro.bak) were found to restore."
+        printf "%s\\n" "$(color "$CLR_YELLOW" "$(get_message "MSG_NO_BACKUP_FOUND")")" # Using MSG_NO_BACKUP_FOUND from internet-map-e.sh
         overall_status=1
-        printf "%s\\n" "$(color yellow "$(get_message "MSG_MAPE_NO_BACKUPS_FOUND_NURO")")"
     fi
     
     if [ "$overall_status" -eq 0 ] || [ "$overall_status" -eq 2 ]; then
-        debug_log "INFO" "restore_mape_nuro: Attempting to remove 'map' package as part of NURO configuration restore."
+        debug_log "DEBUG" "restore_mape_nuro: Attempting to remove 'map' package as part of NURO configuration restore."
         if opkg remove map >/dev/null 2>&1; then
-            debug_log "INFO" "restore_mape_nuro: 'map' package removed successfully."
+            debug_log "DEBUG" "restore_mape_nuro: 'map' package removed successfully."
         else
-            debug_log "INFO" "restore_mape_nuro: Failed to remove 'map' package or it was not installed. Continuing."
+            debug_log "DEBUG" "restore_mape_nuro: Failed to remove 'map' package or it was not installed. Continuing."
         fi
+        # Messages from internet-map-e.sh restore_mape function
+        # printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE_COMPLETE")")" # Already printed above if successful
+        printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")" # This seems to be a generic "apply changes" message.
+        read -r -n 1 -s
+        # Reboot is handled by internet-map-e.sh restore_mape after these messages.
     fi
 
     return "$overall_status"
 }
 
-# Function to display available ports (for NURO Nichiban countermeasure)
-# Based on _func_NICHIBAN_PORT from site-u2023/config-software/map-e-nuro.sh
 display_nuro_ports() {
-    local rules_file="/tmp/map-wanmap.rules" # File path from map-e-nuro.sh
+    local rules_file="/tmp/map-wanmap.rules"
 
-    debug_log "INFO" "display_nuro_ports: Displaying PORTSETS from '$rules_file'."
+    debug_log "DEBUG" "display_nuro_ports: Displaying PORTSETS from '$rules_file'."
 
     if [ -f "$rules_file" ]; then
-        # Assuming get_message and color functions are available
-        printf "\\n%s\\n" "$(color cyan "$(get_message "DISPLAY_NURO_PORTSETS_TITLE")")" # "NURO MAP-E Active Port Sets (from $rules_file):"
-        
-        # map-e-nuro.sh uses awk '/PORTSETS/'
-        # We will replicate this. Output will be whatever map.sh puts in that file.
+        # No specific message key for this title in internet-map-e.sh. Using direct English.
+        printf "\\n%s\\n" "$(color "$CLR_CYAN" "NURO MAP-E Active Port Sets (from $rules_file):")"
         awk '/PORTSETS/' "$rules_file"
-        
         printf "\\n"
-        # map-e-nuro.sh has a read -p here. We'll make it optional or handled by calling context.
-        # For now, just display.
     else
-        debug_log "WARN" "display_nuro_ports: Rules file '$rules_file' not found. Cannot display port sets."
-        printf "%s\\n" "$(color yellow "$(get_message "MSG_MAPE_NURO_RULES_FILE_NOT_FOUND" "FILE=$rules_file")")"
+        debug_log "DEBUG" "display_nuro_ports: Rules file '$rules_file' not found. Cannot display port sets."
+        # No specific message key for this error in internet-map-e.sh. Using direct English.
+        printf "%s\\n" "$(color "$CLR_YELLOW" "Warning: Rules file '$rules_file' not found. Cannot display port sets.")"
         return 1
     fi
     return 0
 }
-
-# Function to display available ports (for NURO Nichiban countermeasure)
-# Based on _func_NICHIBAN_PORT from site-u2023/config-software/map-e-nuro.sh
-display_nuro_ports() {
-    local rules_file="/tmp/map-wanmap.rules" # File path from map-e-nuro.sh
-
-    debug_log "INFO" "display_nuro_ports: Displaying PORTSETS from '$rules_file'."
-
-    if [ -f "$rules_file" ]; then
-        # Assuming get_message and color functions are available
-        printf "\\n%s\\n" "$(color cyan "$(get_message "DISPLAY_NURO_PORTSETS_TITLE")")" # "NURO MAP-E Active Port Sets (from $rules_file):"
-        
-        # map-e-nuro.sh uses awk '/PORTSETS/'
-        # We will replicate this. Output will be whatever map.sh puts in that file.
-        awk '/PORTSETS/' "$rules_file"
-        
-        printf "\\n"
-        # map-e-nuro.sh has a read -p here. We'll make it optional or handled by calling context.
-        # For now, just display.
-    else
-        debug_log "WARN" "display_nuro_ports: Rules file '$rules_file' not found. Cannot display port sets."
-        printf "%s\\n" "$(color yellow "$(get_message "MSG_MAPE_NURO_RULES_FILE_NOT_FOUND" "FILE=$rules_file")")"
-        return 1
-    fi
-    return 0
-}
-
-
 
 internet_map_nuro_main() {
+    if type print_section_title > /dev/null 2>&1; then
+        print_section_title "MENU_INTERNET_MAPE" # This key exists in internet-map-e.sh
+    else
+        debug_log "DEBUG" "internet_map_nuro_main: Starting NURO MAP-E Setup."
+    fi
 
-    print_section_title "MENU_INTERNET_MAPE"
-
-    # MAP-Eパラメータ計算
     if ! mold_mape_nuro; then
-        debug_log "DEBUG" "mape_mold function failed. Exiting script."
+        debug_log "DEBUG" "internet_map_nuro_main: mold_mape_nuro function failed. Exiting script."
         return 1
     fi
     
-    # `map` パッケージのインストール 
     if ! install_package map hidden; then
-        debug_log "DEBUG" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
+        debug_log "DEBUG" "internet_map_nuro_main: Failed to install 'map' package. Exiting." # Critical, so exit
         return 1
     fi
 
-    # UCI設定の適用
-    if ! config_mape_nuro; then
-        debug_log "DEBUG" "internet_map_main: config_mape_nuro function failed. UCI settings might be inconsistent."
+    if ! mape_nuro_config; then
+        debug_log "DEBUG" "internet_map_nuro_main: mape_nuro_config function failed. UCI settings might be inconsistent."
         return 1
     fi
     
-    display_mape_nuro
+    display_mape_nuro # This function now handles its own final messages and read
     
-    # 再起動
-    #debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
+    debug_log "DEBUG" "internet_map_nuro_main: Configuration complete. Rebooting system."
     reboot
 
-    return 0 # Explicitly exit with success status
+    return 0
 }
-
-# internet_map_nuro_main
