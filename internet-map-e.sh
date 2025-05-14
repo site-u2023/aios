@@ -1465,9 +1465,10 @@ mape_config() {
     uci set network.wan.auto='0'
 
     # --- DHCP LAN 設定 ---
-    uci set dhcp.lan.dhcpv6='relay'
-    uci set dhcp.lan.ra='relay'
-    uci set dhcp.lan.ndp='relay'
+    uci set dhcp.lan.ra='server'
+    uci set dhcp.lan.dhcpv6='server'
+    uci set dhcp.lan.ra_flags='other-config'
+    uci set dhcp.lan.ndp='disabled'
     uci set dhcp.lan.force='1'
 
     # --- DHCP WAN6 設定 ---
