@@ -22,6 +22,7 @@ en|MSG_PD_MANUAL_CONFIG_SUCCESS=Manual PD configuration completed successfully
 en|MSG_MAP_SH_UPDATE_SUCCESS=map.sh has been updated successfully
 en|MSG_PD_MANUAL_FAIL_NO_PREFIX=Manual PD config failed{:} IPV6PREFIX is not set
 en|MSG_PD_MANUAL_FAIL_COMMIT=Manual PD config failed{:} Could not save settings
+en|MSG_MAPE_GUA_LINKLOCAL_ONLY=Please connect your router directly to the ONU. 
 
 # internet-ds-lite.sh
 en|MSG_DSLITE_APPLY_SUCCESS=DS-Lite settings applied successfully for {sp}
