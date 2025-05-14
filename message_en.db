@@ -23,7 +23,7 @@ en|MSG_MAP_SH_UPDATE_SUCCESS=map.sh has been updated successfully
 en|MSG_PD_MANUAL_FAIL_NO_PREFIX=Manual PD config failed{:} IPV6PREFIX is not set
 en|MSG_PD_MANUAL_FAIL_COMMIT=Manual PD config failed{:} Could not save settings
 en|MSG_MAPE_GUA_LINKLOCAL_ONLY=Please connect your router directly to the ONU. 
-en|MSG_MAPE_UNSUPPORTED_PREFIX_RULE=Error: Unsupported MAP-E prefix or rule.
+en|MSG_MAPE_UNSUPPORTED_PREFIX_RULE=MAP-E Not supported
 en|MSG_MAPE_IPV6_AWK_PARSE_FAILED=Failed to process IPv6 address.
 
 # internet-ds-lite.sh
