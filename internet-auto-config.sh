@@ -235,7 +235,6 @@ internet_auto_config_main() {
             return 0
         fi
         debug_log "DEBUG" "User confirmed applying settings for $display_isp_name ($display_conn_type)."
-        printf "\n"
     fi
 
     # --- 5. Execute Configuration Based on Type ---
