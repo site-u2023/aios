@@ -46,6 +46,7 @@ check_install_list() {
     local SHOW_APK_ENTRY_DETAIL="${SHOW_APK_ENTRY_DETAIL:-0}"
 
     printf "%s\n" "$(color blue "$(get_message "MSG_PACKAGES_INSTALLED_AFTER_FLASHING")")"
+    printf "\n"
     
     # パッケージマネージャの種類を確認
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
