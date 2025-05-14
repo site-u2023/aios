@@ -1,12 +1,19 @@
 #!/bin/sh
-# Information provided by https://github.com/tinysun & https://qiita.com/obsolete-standard/items/e410530cecb0a21d3ecc
+# Information provided by https://github.com/tinysun
 # Vr.4.01
 # License: CC0
 
+SCRIPT_VERSION="2025.05.14-00-00"
+
+# OpenWrt関数をロード
 . /lib/functions/network.sh
-network_flush_cache
-network_find_wan6 NET_IF6
-network_get_prefix6 NET_PFX6 "${NET_IF6}"
+
+mape_nuro_mold() {
+    # グローバル変数としてNEW_IP6_PREFIXをここで定義
+    local NET_IF6 NET_ADDR6
+    network_flush_cache
+    network_find_wan6 NET_IF6
+    network_get_prefix6 NET_PFX6 "${NET_IF6}"
 
 #set -e
 export LANG=C
@@ -28,143 +35,6 @@ else
         test $cn -eq 7
 fi
 NURO_V6=`echo $NET_PFX6 |cut -b -11`
-
-
-function _func_NURO {
-OPENWRT_RELEAS=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release | cut -d"'" -f2 | cut -c 1-2)
-if [[ "${OPENWRT_RELEAS}" = "24" || "${OPENWRT_RELEAS}" = "23" || "${OPENWRT_RELEAS}" = "22" || "${OPENWRT_RELEAS}" = "21" || "${OPENWRT_RELEAS}" = "19" ]]; then
-  opkg update && opkg install map
-  echo -e " \033[1;34mnuro map-e\033[0;39m"
-elif [[ "${OPENWRT_RELEAS}" = "SN" ]]; then
-  apk update
-  apk add map
-fi
-
-# network backup
-cp /etc/config/network /etc/config/network.map-e-nuro.old
-cp /etc/config/network /etc/config/dhcp.map-e-nuro.old
-cp /etc/config/firewall /etc/config/firewall.map-e-nuro.old
-# DHCP LAN
-uci set dhcp.lan.ra='relay'
-uci set dhcp.lan.dhcpv6='server'
-uci set dhcp.lan.ndp='relay'
-uci set dhcp.lan.force='1'
-# WAN
-uci set network.wan.auto='1'
-# DHCP WAN6
-uci set dhcp.wan6=dhcp
-#uci set dhcp.wan6.ignore='1'
-uci set dhcp.wan6.master='1'
-uci set dhcp.wan6.ra='relay'
-uci set dhcp.wan6.dhcpv6='relay'
-uci set dhcp.wan6.ndp='relay'
-# WANMAP
-WANMAP='wanmap'
-uci set network.${WANMAP}=interface
-uci set network.${WANMAP}.proto='map'
-uci set network.${WANMAP}.maptype='map-e'
-uci set network.${WANMAP}.peeraddr=${BR_ADDR}
-uci set network.${WANMAP}.ipaddr=${IPV4_PREFIX}
-uci set network.${WANMAP}.ip4prefixlen='20'
-uci set network.${WANMAP}.ip6prefix=${IPV6_PREFIX}::
-uci set network.${WANMAP}.ip6prefixlen='36'
-uci set network.${WANMAP}.ealen='20'
-uci set network.${WANMAP}.psidlen='8'
-uci set network.${WANMAP}.offset='4'
-#uci set network.${WANMAP}.legacymap='1'
-uci set network.${WANMAP}.mtu='1452'
-uci set network.${WANMAP}.encaplimit='ignore'
-#uci set network.${WANMAP}.tunlink='wan6'
-# Version-specific settings
-OPENWRT_RELEAS=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release | cut -d"'" -f2 | cut -c 1-2)
-if [[ "${OPENWRT_RELEAS}" = "SN" || "${OPENWRT_RELEAS}" = "24" || "${OPENWRT_RELEAS}" = "23" || "${OPENWRT_RELEAS}" = "22" || "${OPENWRT_RELEAS}" = "21" ]]; then
-  #uci set dhcp.wan6.interface='wan6'
-  uci set dhcp.wan6.ignore='1'
-  uci set network.${WANMAP}.legacymap='1'
-  uci set network.${WANMAP}.tunlink='wan6'
-elif [[ "${OPENWRT_RELEAS}" = "19" ]]; then
-  uci add_list network.${WANMAP}.tunlink='wan6'
-fi
-# FW
-ZOON_NO='1'
-uci del_list firewall.@zone[${ZOON_NO}].network='wan'
-uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
-# delete
-uci -q delete dhcp.lan.dns
-uci -q delete dhcp.lan.dhcp_option
-# IPV4
-uci add_list network.lan.dns='118.238.201.33' # dns1.nuro.jp
-uci add_list network.lan.dns='152.165.245.17' # dns1.nuro.jp
-#uci add_list network.lan.dns='118.238.201.49' # dns2.nuro.jp
-#uci add_list network.lan.dns='152.165.245.1' # dns2.nuro.jp
-uci add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8'
-uci add_list dhcp.lan.dhcp_option='6,1.0.0.1,8.8.4.4'
-# IPV6
-uci add_list network.lan.dns='240d:0010:0004:0005::33'
-uci add_list network.lan.dns='240d:12:4:1b01:152:165:245:17'
-#uci add_list network.lan.dns='240d:0010:0004:0006::49'
-#uci add_list network.lan.dns='240d:12:4:1b00:152:165:245:1'
-uci add_list dhcp.lan.dns='2606:4700:4700::1111'
-uci add_list dhcp.lan.dns='2001:4860:4860::8888'
-uci add_list dhcp.lan.dns='2606:4700:4700::1001'
-uci add_list dhcp.lan.dns='2001:4860:4860::8844'
-uci commit
-echo -e "\033[1;33m wan ipaddr6: ${NET_ADDR6}\033[0;33m"
-echo -e "\033[1;32m ${WANMAP} peeraddr: \033[0;39m"${BR_ADDR}
-echo -e "\033[1;32m ${WANMAP} ip4prefixlen: \033[0;39m"20
-echo -e "\033[1;32m ${WANMAP} ip6pfx: \033[0;39m"${IPV6_PREFIX}::
-echo -e "\033[1;32m ${WANMAP} ip6prefixlen: \033[0;39m"36
-echo -e "\033[1;32m ${WANMAP} ealen: \033[0;39m"20
-echo -e "\033[1;32m ${WANMAP} psidlen: \033[0;39m"8
-echo -e "\033[1;32m ${WANMAP} offset: \033[0;39m"4
-read -p " 何かキーを押してデバイスを再起動してください"
-reboot
-return 0
-}
-
-function _func_RECOVERY {
-echo -e " \033[1;41mリカバリー\033[0;39m"
-cp /etc/config/network.map-e-nuro.old /etc/config/network
-cp /etc/config/dhcp.map-e-nuro.old /etc/config/dhcp
-cp /etc/config/firewall.map-e-nuro.old /etc/config/firewall
-#rm /etc/config/network.map-e-nuro.old
-#rm /etc/config/dhcp.map-e-nuro.old
-#rm /etc/config/firewall.map-e-nuro.old
-read -p " 何かキーを押してデバイスを再起動してください"
-reboot
-return 0
-}
-
-function _func_NICHIBAN {
-cp /lib/netifd/proto/map.sh /lib/netifd/proto/map.sh.old
-OPENWRT_RELEAS=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release | cut -d"'" -f2 | cut -c 1-2)
-if [[ "${OPENWRT_RELEAS}" = "SN" || "${OPENWRT_RELEAS}" = "24" || "${OPENWRT_RELEAS}" = "23" || "${OPENWRT_RELEAS}" = "22" || "${OPENWRT_RELEAS}" = "21" ]]; then
-  wget --no-check-certificate -O /lib/netifd/proto/map.sh https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.new
-  read -p " 何かキーを押してデバイスを再起動してください"
-  reboot
-  return 0
-elif [[ "${OPENWRT_RELEAS}" = "19" ]]; then
-  wget --no-check-certificate -O /lib/netifd/proto/map.sh https://raw.githubusercontent.com/site-u2023/map-e/main/map19.sh.new
-  read -p " 何かキーを押してデバイスを再起動してください"
-  reboot
-  return 0
-fi
-
-
-}
-
-function _func_NICHIBAN_PORT {
-cat /tmp/map-wanmap.rules | awk '/PORTSETS/'
-read -p " 何かキーを押してください"
-return 0
-}
-
-function _func_NICHIBAN_RECOVERY {
-cp /lib/netifd/proto/map.sh.old /lib/netifd/proto/map.sh
-read -p " 何かキーを押してデバイスを再起動してください"
-reboot
-return 0
-}
 
 RULE_0=240d:000f:0
 RULE_1=240d:000f:1
@@ -286,26 +156,235 @@ else
         exit 0
     fi
 fi
+}
 
-while :
-do
-  echo -e " \033[1;37mnuro光 MAP-eの設定を開始します\033[0;39m"
-  echo -e " \033[1;37mNET_PFX6: ${NET_PFX6}\033[0;39m"
-  echo -e " \033[1;37mnuro光 ----------------------------------------------\033[0;39m"
-  echo -e " \033[1;34m[n]: nuro map-e\033[0;39m"
-  echo -e " \033[1;44m[r]: nuro map-e リカバリー\033[0;39m"
-  echo -e " \033[1;31m[m]: マルチセッション対応（ニチバン対策）\033[0;39m"
-  echo -e " \033[1;31m[p]: 利用可能ポート確認\033[0;39m"
-  echo -e " \033[1;41m[x]: マルチセッション対応（ニチバン対策）リカバリー\033[0;39m"
-  echo -e " \033[7;40m[q]: 退出\033[0;39m"
-  echo -e " \033[1;37m-----------------------------------------------------\033[0;39m"
-  read -p " Please select key [n/r/m/p/x or q]: " num
-  case "${num}" in
-    "n" ) _func_NURO ;;
-    "r" ) _func_RECOVERY ;;
-    "m" ) _func_NICHIBAN ;;
-    "p" ) _func_NICHIBAN_PORT ;;
-    "x" ) _func_NICHIBAN_RECOVERY ;;
-    "q" ) exit 0 ;;
-  esac
-done
+mape_nuro_config() {
+
+    # 設定のバックアップ作成
+    debug_log "DEBUG" "Backing up configuration files..."
+    cp /etc/config/network /etc/config/network.map-e-nuro.bak && debug_log "DEBUG" "network backup created." || debug_log "DEBUG" "Failed to backup network config."
+    cp /etc/config/dhcp /etc/config/dhcp.map-e-nuro.bak && debug_log "DEBUG" "dhcp backup created." || debug_log "DEBUG" "Failed to backup dhcp config."
+    cp /etc/config/firewall /etc/config/firewall.map-e-nuro.bak && debug_log "DEBUG" "firewall backup created." || debug_log "DEBUG" "Failed to backup firewall config."
+    
+# DHCP LAN
+uci set dhcp.lan.ra='relay'
+uci set dhcp.lan.dhcpv6='server'
+uci set dhcp.lan.ndp='relay'
+uci set dhcp.lan.force='1'
+# WAN
+uci set network.wan.auto='1'
+# DHCP WAN6
+uci set dhcp.wan6=dhcp
+#uci set dhcp.wan6.ignore='1'
+uci set dhcp.wan6.master='1'
+uci set dhcp.wan6.ra='relay'
+uci set dhcp.wan6.dhcpv6='relay'
+uci set dhcp.wan6.ndp='relay'
+# WANMAP
+WANMAP='wanmap'
+uci set network.${WANMAP}=interface
+uci set network.${WANMAP}.proto='map'
+uci set network.${WANMAP}.maptype='map-e'
+uci set network.${WANMAP}.peeraddr=${BR_ADDR}
+uci set network.${WANMAP}.ipaddr=${IPV4_PREFIX}
+uci set network.${WANMAP}.ip4prefixlen='20'
+uci set network.${WANMAP}.ip6prefix=${IPV6_PREFIX}::
+uci set network.${WANMAP}.ip6prefixlen='36'
+uci set network.${WANMAP}.ealen='20'
+uci set network.${WANMAP}.psidlen='8'
+uci set network.${WANMAP}.offset='4'
+#uci set network.${WANMAP}.legacymap='1'
+uci set network.${WANMAP}.mtu='1452'
+uci set network.${WANMAP}.encaplimit='ignore'
+#uci set network.${WANMAP}.tunlink='wan6'
+# Version-specific settings
+OPENWRT_RELEAS=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release | cut -d"'" -f2 | cut -c 1-2)
+if [[ "${OPENWRT_RELEAS}" = "SN" || "${OPENWRT_RELEAS}" = "24" || "${OPENWRT_RELEAS}" = "23" || "${OPENWRT_RELEAS}" = "22" || "${OPENWRT_RELEAS}" = "21" ]]; then
+  #uci set dhcp.wan6.interface='wan6'
+  uci set dhcp.wan6.ignore='1'
+  uci set network.${WANMAP}.legacymap='1'
+  uci set network.${WANMAP}.tunlink='wan6'
+elif [[ "${OPENWRT_RELEAS}" = "19" ]]; then
+  uci add_list network.${WANMAP}.tunlink='wan6'
+fi
+# FW
+ZOON_NO='1'
+uci del_list firewall.@zone[${ZOON_NO}].network='wan'
+uci add_list firewall.@zone[${ZOON_NO}].network=${WANMAP}
+# delete
+uci -q delete dhcp.lan.dns
+uci -q delete dhcp.lan.dhcp_option
+# IPV4
+uci add_list network.lan.dns='118.238.201.33' # dns1.nuro.jp
+uci add_list network.lan.dns='152.165.245.17' # dns1.nuro.jp
+#uci add_list network.lan.dns='118.238.201.49' # dns2.nuro.jp
+#uci add_list network.lan.dns='152.165.245.1' # dns2.nuro.jp
+uci add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8'
+uci add_list dhcp.lan.dhcp_option='6,1.0.0.1,8.8.4.4'
+# IPV6
+uci add_list network.lan.dns='240d:0010:0004:0005::33'
+uci add_list network.lan.dns='240d:12:4:1b01:152:165:245:17'
+#uci add_list network.lan.dns='240d:0010:0004:0006::49'
+#uci add_list network.lan.dns='240d:12:4:1b00:152:165:245:1'
+uci add_list dhcp.lan.dns='2606:4700:4700::1111'
+uci add_list dhcp.lan.dns='2001:4860:4860::8888'
+uci add_list dhcp.lan.dns='2606:4700:4700::1001'
+uci add_list dhcp.lan.dns='2001:4860:4860::8844'
+uci commit
+echo -e "\033[1;33m wan ipaddr6: ${NET_ADDR6}\033[0;33m"
+echo -e "\033[1;32m ${WANMAP} peeraddr: \033[0;39m"${BR_ADDR}
+echo -e "\033[1;32m ${WANMAP} ip4prefixlen: \033[0;39m"20
+echo -e "\033[1;32m ${WANMAP} ip6pfx: \033[0;39m"${IPV6_PREFIX}::
+echo -e "\033[1;32m ${WANMAP} ip6prefixlen: \033[0;39m"36
+echo -e "\033[1;32m ${WANMAP} ealen: \033[0;39m"20
+echo -e "\033[1;32m ${WANMAP} psidlen: \033[0;39m"8
+echo -e "\033[1;32m ${WANMAP} offset: \033[0;39m"4
+read -p " 何かキーを押してデバイスを再起動してください"
+reboot
+return 0
+}
+
+
+# MAP-E設定情報を表示する関数
+mape_nuro_display() {
+
+    printf "\n"
+    printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
+    printf "  IPv6 Prefix: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
+    printf "  CE IPv6 Address: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
+    printf "  IPv4 Address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
+    printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
+
+    printf "\n"
+    printf "%s\n" "$(color blue "OpenWrt Configuration Values:")" # "OpenWrt設定値:"
+    printf "  option peeraddr '%s'\n" "$BR" # BRが空の場合もあるためクォート
+    printf "  option ipaddr %s\n" "$IPV4"
+    printf "  option ip4prefixlen '%s'\n" "$IP4PREFIXLEN"
+    printf "  option ip6prefix '%s::'\n" "$IP6PFX" # IP6PFXが空の場合もあるためクォート
+    printf "  option ip6prefixlen '%s'\n" "$IP6PREFIXLEN"
+    printf "  option ealen '%s'\n" "$EALEN"
+    printf "  option psidlen '%s'\n" "$PSIDLEN"
+    printf "  option offset '%s'\n" "$OFFSET"
+    printf "\n"
+    printf "  export LEGACY=1\n"
+
+    printf "\n"
+    printf "%s\n" "$(color magenta "(config-softwire)# missing233")"
+    printf "\n"
+    printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+    read -r -n 1 -s
+    
+    return 0
+}
+
+# MAP-E noro設定のバックアップを復元する関数
+# 戻り値:
+# 0: 1つ以上のバックアップが正常に復元され、再起動プロセス開始
+# 1: 復元対象のバックアップファイルが1つも見つからなかった / またはその他のエラー
+# 2: 1つ以上のファイルの復元に失敗したが、処理は継続し再起動プロセス開始
+restore_mape_nuro() {
+    local backup_files_restored_count=0
+    local backup_files_not_found_count=0
+    local restore_failed_count=0
+    local total_files_to_check=0
+    local overall_restore_status=1 # 初期値を「失敗または何もせず」に設定
+
+    # 対象ファイルとバックアップファイルのマッピング
+    # 構造: "オリジナルファイル名:バックアップファイル名"
+    local files_to_restore="
+        /etc/config/network:/etc/config/network.map-e-nuro.bak
+        /etc/config/dhcp:/etc/config/dhcp.map-e-nuro.bak
+        /etc/config/firewall:/etc/config/firewall.map-e-nuro.bak
+    "
+
+    debug_log "DEBUG" "Starting restore_mape function." # 関数名を修正
+
+    # 各ファイルの復元処理
+    for item in $files_to_restore; do
+        total_files_to_check=$((total_files_to_check + 1))
+        local original_file
+        local backup_file
+        original_file=$(echo "$item" | cut -d':' -f1)
+        backup_file=$(echo "$item" | cut -d':' -f2)
+
+        if [ -f "$backup_file" ]; then
+            debug_log "DEBUG" "Attempting to restore '$original_file' from '$backup_file'."
+            if cp "$backup_file" "$original_file"; then
+                debug_log "DEBUG" "Successfully restored '$original_file' from '$backup_file'."
+                backup_files_restored_count=$((backup_files_restored_count + 1))
+            else
+                debug_log "DEBUG" "Failed to copy '$backup_file' to '$original_file'."
+                restore_failed_count=$((restore_failed_count + 1))
+            fi
+        else
+            debug_log "DEBUG" "Backup file '$backup_file' not found. Skipping restore for '$original_file'."
+            backup_files_not_found_count=$((backup_files_not_found_count + 1))
+        fi
+    done
+
+    debug_log "DEBUG" "Restore process summary: Total checked=$total_files_to_check, Restored=$backup_files_restored_count, Not found=$backup_files_not_found_count, Failed=$restore_failed_count."
+
+    if [ "$restore_failed_count" -gt 0 ]; then
+        debug_log "DEBUG" "Restore completed with errors."
+        overall_restore_status=2 # 1つ以上のファイルの復元に失敗
+    elif [ "$backup_files_restored_count" -gt 0 ]; then
+        debug_log "DEBUG" "Restore completed successfully for at least one file."
+        overall_restore_status=0 # 1つ以上のバックアップが正常に復元された
+    else
+        # この分岐は backup_files_not_found_count == total_files_to_check と同義
+        debug_log "DEBUG" "No backup files were found to restore."
+        overall_restore_status=1 # 復元対象のバックアップファイルが1つも見つからなかった
+    fi
+
+    # overall_restore_status が 0 (成功) または 2 (一部失敗だが復元試行はあった) の場合に後続処理を実行
+    if [ "$overall_restore_status" -eq 0 ] || [ "$overall_restore_status" -eq 2 ]; then
+        debug_log "DEBUG" "Attempting to remove 'map' package as part of restore process."
+        if opkg remove map >/dev/null 2>&1; then
+            debug_log "DEBUG" "'map' package removed successfully."
+        else
+            debug_log "DEBUG" "Failed to remove 'map' package or package was not installed. Continuing."
+        fi
+        
+        printf "\n%s\n" "$(color green "$(get_message "MSG_MAPE_RESTORE_COMPLETE")")"
+        printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+        read -r -n 1 -s
+        printf "\n"
+        
+        debug_log "DEBUG" "Rebooting system after restore."
+        reboot
+        return 0 # reboot が呼ばれるので、ここには到達しないはずだが念のため
+    elif [ "$overall_restore_status" -eq 1 ]; then
+        # バックアップファイルが見つからなかった場合
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_NO_BACKUP_FOUND")")"
+        return 1 # 失敗として返す
+    fi
+    
+    # 通常はここまで来ないはずだが、万が一のためのフォールバック
+    return "$overall_restore_status"
+}
+
+internet_map_nuro_main() {
+
+    print_section_title "MENU_INTERNET_MAPE"
+
+    # MAP-Eパラメータ計算
+    if ! mape_nuro_mold; then
+        debug_log "DEBUG" "mape_mold function failed. Exiting script."
+        return 1
+    fi
+    
+    install_package map hidden
+    
+    replace_map_sh
+
+    mape_nuro_config
+    
+    mape_nuro_display
+    
+    reboot
+
+    return 0 # Explicitly exit with success status
+}
+
+# internet_map_nuro_main
