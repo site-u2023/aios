@@ -589,107 +589,6 @@ display_nuro_ports() {
     return 0
 }
 
-# Function to replace /lib/netifd/proto/map.sh for NURO (Nichiban countermeasure)
-# Based on _func_NICHIBAN from site-u2023/config-software/map-e-nuro.sh
-# and structure from site-u2023/aios/internet-map-e.sh replace_map_sh().
-# Returns:
-#   0 on success (script downloaded and permissions set)
-#   1 on download failure or if downloaded file is empty
-#   2 on chmod failure (download was successful)
-#   3 if OS version is not recognized for this function
-replace_map_sh_nuro() {
-    local proto_script_path="/lib/netifd/proto/map.sh"
-    local backup_script_path="${proto_script_path}.nuro-orig-bak" # Specific backup name for this operation
-    local openwrt_release_major
-    local source_url=""
-    local wget_exit_code
-    # WGET_IPV_OPT should be defined globally, e.g., "-4" or "-6" or ""
-    # For NURO, IPv6 is primary, so -6 might be preferable if WAN6 is up.
-    # map-e-nuro.sh uses wget without explicit -4/-6. We'll assume WGET_IPV_OPT is available or default to no option.
-    local current_wget_opts="${WGET_IPV_OPT:-}" # Use global or empty if not set
-
-    debug_log "INFO" "replace_map_sh_nuro: Starting replacement of $proto_script_path for NURO."
-
-    # Determine OpenWrt major release
-    openwrt_release_major=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release 2>/dev/null | cut -d"'" -f2 | cut -c 1-2)
-    debug_log "DEBUG" "replace_map_sh_nuro: Detected OpenWrt major release: '$openwrt_release_major'"
-
-    # Determine source URL based on OpenWrt version (logic from map-e-nuro.sh)
-    if [ "$openwrt_release_major" = "SN" ] || \
-       ( [ -n "$openwrt_release_major" ] && [ "$openwrt_release_major" -ge 21 ] && [ "$openwrt_release_major" -le 24 ] ); then # Covers 21, 22, 23, 24, SN
-        source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.new"
-        debug_log "INFO" "replace_map_sh_nuro: Target OpenWrt version ($openwrt_release_major) uses map.sh.new."
-    elif [ "$openwrt_release_major" = "19" ]; then
-        source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map19.sh.new" # map-e-nuro.sh uses map19.sh.new for 19.x
-        debug_log "INFO" "replace_map_sh_nuro: Target OpenWrt version (19) uses map19.sh.new."
-    else
-        debug_log "ERROR" "replace_map_sh_nuro: OpenWrt release '$openwrt_release_major' is not supported for map.sh replacement by this NURO script."
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_OS_FOR_MAP_SH" "VERSION=$openwrt_release_major")")"
-        return 3 # OS version not recognized
-    fi
-    debug_log "DEBUG" "replace_map_sh_nuro: Source URL for map.sh: $source_url"
-
-    # Backup the original map.sh script if it exists
-    if [ -f "$proto_script_path" ]; then
-        debug_log "DEBUG" "replace_map_sh_nuro: Backing up '$proto_script_path' to '$backup_script_path'..."
-        if cp "$proto_script_path" "$backup_script_path"; then
-            debug_log "INFO" "replace_map_sh_nuro: Original '$proto_script_path' backed up to '$backup_script_path'."
-        else
-            local cp_rc=$?
-            debug_log "WARN" "replace_map_sh_nuro: Failed to back up '$proto_script_path'. cp exit code: $cp_rc."
-            # Continue anyway, as replacing is the primary goal.
-        fi
-    else
-        debug_log "INFO" "replace_map_sh_nuro: Original '$proto_script_path' not found. Skipping backup."
-    fi
-
-    # Download the new map.sh script
-    # map-e-nuro.sh uses `wget --no-check-certificate -O ...`
-    debug_log "INFO" "replace_map_sh_nuro: Downloading from '$source_url' to '$proto_script_path'..."
-    # Adding -q for quiet, but errors will still go to stderr if wget fails badly.
-    command wget -q $current_wget_opts --no-check-certificate -O "$proto_script_path" "$source_url"
-    wget_exit_code=$?
-
-    if [ "$wget_exit_code" -eq 0 ]; then
-        # Check if the downloaded file is not empty
-        if [ -s "$proto_script_path" ]; then
-            debug_log "INFO" "replace_map_sh_nuro: Download successful. '$proto_script_path' has been updated."
-            # Set execute permissions
-            debug_log "DEBUG" "replace_map_sh_nuro: Setting execute permission on '$proto_script_path'."
-            if chmod +x "$proto_script_path"; then
-                debug_log "INFO" "replace_map_sh_nuro: Execute permission set successfully for '$proto_script_path'."
-                printf "%s\\n" "$(color green "$(get_message "MSG_MAPE_MAP_SH_REPLACED_SUCCESS")")"
-                # map-e-nuro.sh includes a reboot prompt here.
-                # This function will just do the replacement. Reboot decision is up to the main script.
-                return 0 # Success
-            else
-                local chmod_rc=$?
-                debug_log "ERROR" "replace_map_sh_nuro: chmod +x FAILED for '$proto_script_path'. Exit code: $chmod_rc."
-                printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_MAP_SH_CHMOD_FAILED" "FILE=$proto_script_path")")"
-                return 2 # chmod failure
-            fi
-        else
-            debug_log "ERROR" "replace_map_sh_nuro: wget reported success (exit code 0), but the downloaded file '$proto_script_path' is EMPTY."
-            printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_MAP_SH_DOWNLOAD_EMPTY" "URL=$source_url")")"
-            # Attempt to restore backup if it exists and download failed to produce a valid file
-            if [ -f "$backup_script_path" ]; then
-                debug_log "INFO" "replace_map_sh_nuro: Attempting to restore original from '$backup_script_path' due to empty download."
-                if cp "$backup_script_path" "$proto_script_path"; then
-                    debug_log "INFO" "replace_map_sh_nuro: Original '$proto_script_path' restored from backup."
-                else
-                    debug_log "WARN" "replace_map_sh_nuro: Failed to restore original from backup after empty download."
-                fi
-            fi
-            return 1 # Downloaded file is empty
-        fi
-    else
-        debug_log "ERROR" "replace_map_sh_nuro: wget download FAILED. Exit code: $wget_exit_code. URL: $source_url"
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_MAP_SH_DOWNLOAD_FAILED" "URL=$source_url" "CODE=$wget_exit_code")")"
-        # No attempt to restore backup here, as the original might still be in place if wget failed to overwrite.
-        return 1 # wget failure
-    fi
-}
-
 # Function to display available ports (for NURO Nichiban countermeasure)
 # Based on _func_NICHIBAN_PORT from site-u2023/config-software/map-e-nuro.sh
 display_nuro_ports() {
@@ -716,36 +615,7 @@ display_nuro_ports() {
     return 0
 }
 
-# Function to recover the original map.sh script (for NURO Nichiban countermeasure)
-# Based on _func_NICHIBAN_RECOVERY from site-u2023/config-software/map-e-nuro.sh
-# Returns:
-#   0 if recovery was attempted (successful or not, if backup existed)
-#   1 if backup file was not found
-recover_original_map_sh_nuro() {
-    local proto_script_path="/lib/netifd/proto/map.sh"
-    local backup_script_path="${proto_script_path}.nuro-orig-bak" # Must match the backup name used in replace_map_sh_nuro
 
-    debug_log "INFO" "recover_original_map_sh_nuro: Attempting to recover original '$proto_script_path' from '$backup_script_path'."
-
-    if [ -f "$backup_script_path" ]; then
-        if cp "$backup_script_path" "$proto_script_path"; then
-            debug_log "INFO" "recover_original_map_sh_nuro: Original '$proto_script_path' successfully restored from '$backup_script_path'."
-            printf "%s\\n" "$(color green "$(get_message "MSG_MAPE_MAP_SH_RECOVER_SUCCESS")")"
-            # map-e-nuro.sh includes a reboot prompt here.
-            # This function will just do the recovery. Reboot decision is up to the main script.
-            return 0
-        else
-            local cp_rc=$?
-            debug_log "ERROR" "recover_original_map_sh_nuro: Failed to restore '$proto_script_path' from '$backup_script_path'. cp exit code: $cp_rc."
-            printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_MAP_SH_RECOVER_FAILED" "FILE=$proto_script_path")")"
-            return 0 # Still return 0 as an attempt was made based on backup presence
-        fi
-    else
-        debug_log "WARN" "recover_original_map_sh_nuro: Backup file '$backup_script_path' not found. Cannot recover."
-        printf "%s\\n" "$(color yellow "$(get_message "MSG_MAPE_MAP_SH_BACKUP_NOT_FOUND" "FILE=$backup_script_path")")"
-        return 1 # Backup not found
-    fi
-}
 
 internet_map_nuro_main() {
 
@@ -757,12 +627,22 @@ internet_map_nuro_main() {
         return 1
     fi
     
-    install_package map hidden
+    # `map` パッケージのインストール 
+    if ! install_package map hidden; then
+        debug_log "DEBUG" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
+        return 1
+    fi
 
-    config_mape_nuro
+    # UCI設定の適用
+    if ! config_mape_nuro; then
+        debug_log "DEBUG" "internet_map_main: config_mape_nuro function failed. UCI settings might be inconsistent."
+        return 1
+    fi
     
     display_mape_nuro
     
+    # 再起動
+    #debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
     reboot
 
     return 0 # Explicitly exit with success status
