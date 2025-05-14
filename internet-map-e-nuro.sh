@@ -27,47 +27,28 @@ get_ruleprefix36_value() {
 }
 
 # Function to calculate MAP-E parameters for NURO Hikari
-# This function assumes NET_PFX6 (from network_get_prefix6) is globally available and set.
-# It sets the following global variables:
-#   NEW_IP6_PREFIX: Source IPv6 address (address part from NET_PFX6)
-#   BR: Border Relay IPv6 address
-#   IPV4: IPv4 address for UCI config (e.g., "219.104.128.0")
-#   IPADDR: Full calculated IPv4 address (for display)
-#   IP4PREFIXLEN: IPv4 prefix length (e.g., "20")
-#   IP6PFX: IPv6 prefix for MAP-E rule (e.g., "240d:f:0")
-#   IP6PREFIXLEN: IPv6 prefix length for MAP-E rule (e.g., "36")
-#   EALEN: EA-bits length (e.g., "20")
-#   PSIDLEN: PSID length (e.g., "8")
-#   OFFSET: Offset value (e.g., "4")
-#   PSID: Calculated PSID value (decimal)
-#   PORTS: String of calculated port ranges
-#   CE: Calculated CE IPv6 address
-#   IPV6PREFIX: LAN-side /64 IPv6 prefix derived from NEW_IP6_PREFIX (for display/wan6 config)
-# Returns:
-#   0 on success
-#   1 on failure
 mold_mape_nuro() {
-    local NET_IF6 NET_ADDR6
+    local NET_IF6
     network_flush_cache
     network_find_wan6 NET_IF6
     network_get_prefix6 NET_PFX6 "${NET_IF6}"
 
     if [ -z "$NET_PFX6" ]; then
-        debug_log "ERROR" "mold_mape_nuro: NET_PFX6 is not set. Cannot proceed."
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_empty")")"
+        debug_log "$LVL_ERROR" "mold_mape_nuro: NET_PFX6 is not set. Cannot proceed." # 実績スクリプトの形式に合わせる
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_empty")")" # 実績スクリプトの形式に合わせる
         return 1
     fi
 
     NEW_IP6_PREFIX=$(echo "$NET_PFX6" | cut -d'/' -f1)
     if [ -z "$NEW_IP6_PREFIX" ]; then
-        debug_log "ERROR" "mold_mape_nuro: Failed to extract address part from NET_PFX6 ('$NET_PFX6')."
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_parse_fail")")"
+        debug_log "$LVL_ERROR" "mold_mape_nuro: Failed to extract address part from NET_PFX6 ('$NET_PFX6')." # 実績スクリプトの形式に合わせる
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED" "DETAIL=NET_PFX6_parse_fail")")" # 実績スクリプトの形式に合わせる
         return 1
     fi
-    debug_log "INFO" "mold_mape_nuro: Using source IPv6 for MAP-E: $NEW_IP6_PREFIX (derived from NET_PFX6: $NET_PFX6)"
+    debug_log "$LVL_INFO" "mold_mape_nuro: Using source IPv6 for MAP-E: $NEW_IP6_PREFIX (derived from NET_PFX6: $NET_PFX6)" # 実績スクリプトの形式に合わせる
 
     local ipv6_addr="$NEW_IP6_PREFIX"
-    local h0_str h1_str h2_str h3_str # Hexadecimal string representations
+    local h0_str h1_str h2_str h3_str
 
     local awk_output
     awk_output=$(echo "$ipv6_addr" | awk '
@@ -81,15 +62,10 @@ mold_mape_nuro() {
                 zeros = zeros "0" (i < zero_fields ? ":" : "")
             }
             sub(/::/, zeros)
-            if ($1 == "") $1 = "0"
-            if ($NF == "" && NF == 8) $NF = "0"
-            if (NF == 1 && $1 == "") $1 = "0"
+            if ($1 == "") $1 = "0"; if ($NF == "" && NF == 8) $NF = "0"; if (NF == 1 && $1 == "") $1 = "0"
         }
-        # Ensure all fields are present, default to "0" if empty after expansion
-        h0 = $1; if (h0 == "") h0 = "0"
-        h1 = $2; if (h1 == "") h1 = "0"
-        h2 = $3; if (h2 == "") h2 = "0"
-        h3 = $4; if (h3 == "") h3 = "0"
+        h0 = $1; if (h0 == "") h0 = "0"; h1 = $2; if (h1 == "") h1 = "0"
+        h2 = $3; if (h2 == "") h2 = "0"; h3 = $4; if (h3 == "") h3 = "0"
         print h0 " " h1 " " h2 " " h3
     }')
 
@@ -97,203 +73,103 @@ mold_mape_nuro() {
 $awk_output
 EOF
 
-    if [ -z "$h0_str" ]; then # Basic check, assumes awk_output gives 4 space-separated values or is empty on error
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")"
-        debug_log "ERROR" "mold_mape_nuro: Failed to parse IPv6 address part using awk. Input: '${ipv6_addr}'"
+    if [ -z "$h0_str" ]; then
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")" # 実績スクリプトの形式に合わせる
+        debug_log "$LVL_ERROR" "mold_mape_nuro: Failed to parse IPv6 address part using awk. Input: '${ipv6_addr}'" # 実績スクリプトの形式に合わせる
         return 1
     fi
 
-    local HEXTET0 HEXTET1 HEXTET2 HEXTET3 # Decimal representations
+    local HEXTET0 HEXTET1 HEXTET2 HEXTET3
     HEXTET0=$(printf %d "0x${h0_str:-0}")
     HEXTET1=$(printf %d "0x${h1_str:-0}")
     HEXTET2=$(printf %d "0x${h2_str:-0}")
     HEXTET3=$(printf %d "0x${h3_str:-0}")
 
-    debug_log "DEBUG" "mold_mape_nuro: Parsed HEXTETs (strings): h0_str=${h0_str}, h1_str=${h1_str}, h2_str=${h2_str}, h3_str=${h3_str}"
-    debug_log "DEBUG" "mold_mape_nuro: Parsed HEXTETs (decimal): HEXTET0=${HEXTET0}, HEXTET1=${HEXTET1}, HEXTET2=${HEXTET2}, HEXTET3=${HEXTET3}"
+    debug_log "$LVL_DEBUG" "mold_mape_nuro: Parsed HEXTETs (str): $h0_str:$h1_str:$h2_str:$h3_str (dec): $HEXTET0:$HEXTET1:$HEXTET2:$HEXTET3" # 実績スクリプトの形式に合わせる
 
-    # --- MODIFIED KEY CALCULATION (to match実績スクリプト) ---
-    local ruleprefix_h0_part_numeric=$((HEXTET0 * 65536))  # HEXTET0 << 16
-    local ruleprefix_h1_part_numeric=$HEXTET1              # HEXTET1
-    # Extract the upper byte of HEXTET2 (e.g., if HEXTET2_STR is "a0xx", this will be 0xa0)
+    local ruleprefix_h0_part_numeric=$((HEXTET0 * 65536))
+    local ruleprefix_h1_part_numeric=$HEXTET1
     local ruleprefix_h2_byte_for_key=$(( (HEXTET2 & 0xff00) >> 8 ))
-
-    # Combine parts: ((H0_val << 16) | H1_val) << 8) | H2_upper_byte_val
     local calculated_numeric_key=$(( (ruleprefix_h0_part_numeric + ruleprefix_h1_part_numeric) * 256 + ruleprefix_h2_byte_for_key ))
     local prefix36_hex_key_lookup
     prefix36_hex_key_lookup=$(printf "0x%x" "$calculated_numeric_key")
-    # --- END OF MODIFIED KEY CALCULATION ---
 
-    debug_log "DEBUG" "mold_mape_nuro: Calculated prefix36_hex_key_lookup (for NURO) = $prefix36_hex_key_lookup"
+    debug_log "$LVL_DEBUG" "mold_mape_nuro: Calculated prefix36_hex_key_lookup=$prefix36_hex_key_lookup" # 実績スクリプトの形式に合わせる
 
-    BR=""
-    IPV4=""
-    IPADDR=""
-    IP4PREFIXLEN=""
-    IP6PFX=""
-    IP6PREFIXLEN=""
-    EALEN=""
-    PSIDLEN=""
-    OFFSET=""
-    PSID=0
-    PORTS=""
-    CE=""
-    IPV6PREFIX=""
+    BR=""; IPV4=""; IPADDR=""; IP4PREFIXLEN=""; IP6PFX=""; IP6PREFIXLEN=""
+    EALEN=""; PSIDLEN=""; OFFSET=""; PSID=0; PORTS=""; CE=""; IPV6PREFIX=""
 
     local octet_str octet1 octet2 octet3
     octet_str=$(get_ruleprefix36_value "$prefix36_hex_key_lookup")
 
     if [ -n "$octet_str" ]; then
-        debug_log "INFO" "mold_mape_nuro: Matched NURO ruleprefix36 for key '$prefix36_hex_key_lookup'. IPv4 base octets: $octet_str"
+        debug_log "$LVL_INFO" "mold_mape_nuro: Matched NURO rule key '$prefix36_hex_key_lookup'. Octets: $octet_str" # 実績スクリプトの形式に合わせる
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet_str
 EOF
-
         BR="2001:3b8:200:ff9::1"
         IP6PREFIXLEN=36
         PSIDLEN=8
         OFFSET=4
-        EALEN=$((56 - IP6PREFIXLEN)) # EA-bits length: IPv6 suffix (56 bits for /36) - Rule IPv6 prefix length (36) = 20
-        IP4PREFIXLEN=$((32 - (EALEN - PSIDLEN))) # IPv4 Prefix Length: 32 - (EAILEN - PSIDLEN) = 32 - (20 - 8) = 32 - 12 = 20
-        IPV4="${octet1}.${octet2}.${octet3}.0" # Base IPv4 for UCI (e.g. 219.104.128.0)
-        PSID=$(( HEXTET3 & 0x00ff )) # PSID is the last byte of the 4th hextet of the IPv6 address
-        IPADDR="${octet1}.${octet2}.${octet3}.${PSID}" # Full IPv4 address
+        EALEN=$((56 - IP6PREFIXLEN))
+        IP4PREFIXLEN=$((32 - (EALEN - PSIDLEN)))
+        IPV4="${octet1}.${octet2}.${octet3}.0"
+        PSID=$(( HEXTET3 & 0x00ff ))
+        IPADDR="${octet1}.${octet2}.${octet3}.${PSID}"
 
-        # For IP6PFX, use the original hex strings of H0, H1, and H2's upper byte
-        # HEXTET2_STR is like "a0xx". We need "a000".
-        # So, take HEXTET2 (decimal), mask its lower byte to zero, then convert to hex.
         local h2_upper_byte_only_val=$(( HEXTET2 & 0xff00 ))
-        IP6PFX0_str_for_rule=${h0_str} # Use original hex string
-        IP6PFX1_str_for_rule=${h1_str} # Use original hex string
-        IP6PFX2_str_for_rule=$(printf %04x "$h2_upper_byte_only_val") # e.g. if H2_STR was "a0ab", this becomes "a000"
+        IP6PFX="${h0_str}:${h1_str}:$(printf %04x "$h2_upper_byte_only_val")"
 
-        IP6PFX="${IP6PFX0_str_for_rule}:${IP6PFX1_str_for_rule}:${IP6PFX2_str_for_rule}" # e.g. 240d:000f:a000
-
-        debug_log "DEBUG" "mold_mape_nuro: NURO Params: BR=$BR, IPV4=$IPV4, IP4PREFIXLEN=$IP4PREFIXLEN, IP6PFX=$IP6PFX, IP6PREFIXLEN=$IP6PREFIXLEN"
-        debug_log "DEBUG" "mold_mape_nuro: NURO Params: EALEN=$EALEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET, PSID=$PSID, IPADDR=$IPADDR"
-
+        debug_log "$LVL_DEBUG" "mold_mape_nuro: NURO Params: IPV4=$IPV4/$IP4PREFIXLEN, IP6PFX=$IP6PFX/$IP6PREFIXLEN, PSID=$PSID" # 実績スクリプトの形式に合わせる (内容は簡略化版)
     else
-        debug_log "ERROR" "mold_mape_nuro: No matching NURO ruleprefix36 found for key '$prefix36_hex_key_lookup'."
-        printf "%s\\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "SERVICE=NURO" "KEY=$prefix36_hex_key_lookup")")"
+        debug_log "$LVL_ERROR" "mold_mape_nuro: No matching NURO rule for key '$prefix36_hex_key_lookup'." # 実績スクリプトの形式に合わせる
+        printf "%s\\n" "$(color "$CLR_RED" "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "SERVICE=NURO" "KEY=$prefix36_hex_key_lookup")")" # 実績スクリプトの形式に合わせる
         return 1
     fi
 
     PORTS=""
-    local AMAX=$(( (1 << OFFSET) - 1 )) # For OFFSET=4, AMAX = 15
-    debug_log "DEBUG" "mold_mape_nuro: Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
-
+    local AMAX=$(( (1 << OFFSET) - 1 ))
     local A
-    for A in $(seq 0 "$AMAX"); do # Algorithm typically uses A from 0 to 2^OFFSET - 1
-        local shift_val=$((16 - OFFSET - PSIDLEN)) # For OFFSET=4, PSIDLEN=8 -> 16-4-8 = 4
-        if [ "$shift_val" -lt 0 ]; then
-             debug_log "WARN" "mold_mape_nuro: Port calculation shift_val is negative ($shift_val). Setting to 0."
-             shift_val=0
-        fi
-        local K=$((1 << shift_val)) # Number of ports per algorithm step: 2^4 = 16
-
-        local port_start=$(( ( (A << (16 - OFFSET)) | (PSID << shift_val) ) & 0xFFFF ))
-        # Ensure port_start is within valid range, especially if it's 0 from calculation
-        if [ "$port_start" -eq 0 ] && [ "$A" -eq 0 ] && [ "$PSID" -eq 0 ]; then # Avoid port 0 unless explicitly allowed by some rule
-             # For NURO, some discussions suggest port 0 is not used or is problematic.
-             # The provided map-e-nuro.sh PORTS calculation implies A from 1 to 15.
-             # Let's adjust loop for A from 1 to AMAX to match observed NURO behavior if port 0 is an issue.
-             # If A starts from 0, then first port_start could be 0 if PSID is 0.
-             # For now, stick to A=0..AMAX as per generic MAP-E, but note NURO might have specific port 0 handling.
-             # The provided site-u2023 code for PORTS uses A from 1 to AMAX.
-             # Re-adjusting loop to A=1..AMAX to align with that.
-             # This means the for loop should be `for A in $(seq 1 "$AMAX")`
-             # The following section is based on A from 1 to AMAX as in the user's provided full script.
-             : # Placeholder if we were to handle A=0 differently.
-        fi
-    done
-
-    # Recalculate PORTS based on the loop structure from the user's full script (A from 1 to AMAX)
-    PORTS=""
-    for A in $(seq 1 "$AMAX"); do # A from 1 to 15 (if AMAX=15)
-        local shift_bits=$(( 16 - OFFSET )) # 16 - 4 = 12
-        local port_base=$(( A << shift_bits )) # A * 2^12
-        local psid_shift_val=$(( 16 - OFFSET - PSIDLEN )) # 16 - 4 - 8 = 4
-         if [ "$psid_shift_val" -lt 0 ]; then
-            debug_log "WARN" "mold_mape_nuro: psid_shift_val is negative ($psid_shift_val). Setting to 0."
-            psid_shift_val=0
-        fi
-        local psid_part=$(( PSID << psid_shift_val )) # PSID * 2^4
+    for A in $(seq 1 "$AMAX"); do
+        local shift_bits=$(( 16 - OFFSET ))
+        local port_base=$(( A << shift_bits ))
+        local psid_shift_val=$(( 16 - OFFSET - PSIDLEN ))
+         if [ "$psid_shift_val" -lt 0 ]; then psid_shift_val=0; fi
+        local psid_part=$(( PSID << psid_shift_val ))
         local port_start=$(( port_base | psid_part ))
-        local port_range_size=$(( 1 << psid_shift_val )) # 2^4 = 16 ports
-        if [ "$port_range_size" -le 0 ]; then
-             debug_log "WARN" "mold_mape_nuro: port_range_size is not positive ($port_range_size). Setting to 1."
-             port_range_size=1
-        fi
+        local port_range_size=$(( 1 << psid_shift_val ))
+        if [ "$port_range_size" -le 0 ]; then port_range_size=1; fi
         local port_end=$(( port_start + port_range_size - 1 ))
 
-        # Ensure ports are within 1-65535
         if [ "$port_start" -lt 1 ]; then port_start=1; fi
         if [ "$port_end" -gt 65535 ]; then port_end=65535; fi
-        if [ "$port_start" -gt "$port_end" ]; then # Should not happen if range_size is positive
-            debug_log "WARN" "mold_mape_nuro: port_start ($port_start) > port_end ($port_end). Skipping this range."
-            continue
-        fi
+        if [ "$port_start" -gt "$port_end" ]; then continue; fi
 
         PORTS="${PORTS}${port_start}-${port_end}"
-
         if [ "$A" -lt "$AMAX" ]; then
-            if [ $(( A % 3 )) -eq 0 ]; then # Match formatting from user's full script
-                PORTS="${PORTS}\n"
-            else
-                PORTS="${PORTS} "
-            fi
+            if [ $(( A % 3 )) -eq 0 ]; then PORTS="${PORTS}\n"; else PORTS="${PORTS} "; fi
         fi
     done
-    debug_log "DEBUG" "mold_mape_nuro: Calculated PORTS string (raw): $PORTS"
 
-
-    local RFC=false # NURO does not use RFC6052 style CE address from what's observed
-    local CE_HEXTET0 CE_HEXTET1 CE_HEXTET2 CE_HEXTET3 CE_HEXTET4 CE_HEXTET5 CE_HEXTET6 CE_HEXTET7
-    CE_HEXTET0=$HEXTET0 # Use decimal HEXTET values for calculation
-    CE_HEXTET1=$HEXTET1
-    CE_HEXTET2=$HEXTET2
-    CE_HEXTET3=$(( HEXTET3 & 0xff00 )) # Upper byte of HEXTET3 (decimal)
-
-    # IPADDR is like "o1.o2.o3.o4" (o4 is PSID)
     local ce_octet1_disp ce_octet2_disp ce_octet3_disp ce_octet4_disp
     ce_octet1_disp=$(echo "$IPADDR" | cut -d. -f1)
     ce_octet2_disp=$(echo "$IPADDR" | cut -d. -f2)
     ce_octet3_disp=$(echo "$IPADDR" | cut -d. -f3)
-    ce_octet4_disp=$(echo "$IPADDR" | cut -d. -f4) # This is PSID
+    ce_octet4_disp=$(echo "$IPADDR" | cut -d. -f4)
 
-    if [ "$RFC" = "true" ]; then # This block is unlikely for NURO
-        debug_log "DEBUG" "mold_mape_nuro: Calculating CE Address (RFC mode - unexpected for NURO)"
-        CE_HEXTET4=0 # u-bit (RFC6052) typically 0 for MAP-E
-        CE_HEXTET5=$(( (ce_octet1_disp << 8) | ce_octet2_disp ))
-        CE_HEXTET6=$(( (ce_octet3_disp << 8) | ce_octet4_disp ))
-        CE_HEXTET7=$PSID # PSID (already o4)
-    else # Non-RFC / observed NURO behavior from site-u2023 implies specific construction
-        debug_log "DEBUG" "mold_mape_nuro: Calculating CE Address (Non-RFC mode, similar to site-u2023 example)"
-        CE_HEXTET4=$ce_octet1_disp                                 # o1
-        CE_HEXTET5=$(( (ce_octet2_disp << 8) | ce_octet3_disp ))   # o2:o3
-        CE_HEXTET6=$(( ce_octet4_disp << 8 ))                      # o4:00 (PSID:00)
-        CE_HEXTET7=$(( PSID << 8 ))                                # PSID:00 (Matches user's full script logic if PSID is used for CE_HEXTET7 directly)
-                                                                   # User's script CE_HEXTET7=$(( PSID << 8 )) means if PSID=1, CE_HEXTET7=0x0100
-    fi
+    local CE_HEXTET0=$HEXTET0; local CE_HEXTET1=$HEXTET1
+    local CE_HEXTET2=$HEXTET2; local CE_HEXTET3=$(( HEXTET3 & 0xff00 ))
+    local CE_HEXTET4=$ce_octet1_disp
+    local CE_HEXTET5=$(( (ce_octet2_disp << 8) | ce_octet3_disp ))
+    local CE_HEXTET6=$(( ce_octet4_disp << 8 ))
+    local CE_HEXTET7=$(( PSID << 8 ))
 
-    local CE0_str CE1_str CE2_str CE3_str CE4_str CE5_str CE6_str CE7_str
-    CE0_str=$(printf %04x "$CE_HEXTET0")
-    CE1_str=$(printf %04x "$CE_HEXTET1")
-    CE2_str=$(printf %04x "$CE_HEXTET2") # Full HEXTET2
-    CE3_str=$(printf %04x "$CE_HEXTET3") # Upper byte of original HEXTET3, rest zero
-    CE4_str=$(printf %04x "$CE_HEXTET4")
-    CE5_str=$(printf %04x "$CE_HEXTET5")
-    CE6_str=$(printf %04x "$CE_HEXTET6")
-    CE7_str=$(printf %04x "$CE_HEXTET7")
-    CE="${CE0_str}:${CE1_str}:${CE2_str}:${CE3_str}:${CE4_str}:${CE5_str}:${CE6_str}:${CE7_str}"
-    debug_log "DEBUG" "mold_mape_nuro: Generated CE IPv6 Address: $CE"
+    CE="$(printf %04x "$CE_HEXTET0"):$(printf %04x "$CE_HEXTET1"):$(printf %04x "$CE_HEXTET2"):$(printf %04x "$CE_HEXTET3"):$(printf %04x "$CE_HEXTET4"):$(printf %04x "$CE_HEXTET5"):$(printf %04x "$CE_HEXTET6"):$(printf %04x "$CE_HEXTET7")"
+    debug_log "$LVL_DEBUG" "mold_mape_nuro: CE IPv6: $CE" # 実績スクリプトの形式に合わせる
 
-    # For LAN-side prefix, use the original HEXTET strings for first 4 segments
     IPV6PREFIX="${h0_str}:${h1_str}:${h2_str}:${h3_str}::"
-    debug_log "DEBUG" "mold_mape_nuro: LAN-side IPv6 Prefix (IPV6PREFIX for display/wan6): $IPV6PREFIX"
 
-
-    debug_log "INFO" "mold_mape_nuro: MAP-E parameter calculation for NURO completed successfully."
+    debug_log "$LVL_INFO" "mold_mape_nuro: MAP-E parameter calculation for NURO completed." # 実績スクリプトの形式に合わせる
     return 0
 }
 
