@@ -746,7 +746,7 @@ pd_decision() {
     MAPE_IPV6_ACQUISITION_METHOD="none"
 
     if [ -z "$wan_iface" ]; then
-        debug_log "ERROR" "pd_decision: WAN interface name not provided."
+        debug_log "DEBUG" "pd_decision: WAN interface name not provided."
         return 1
     fi
 
@@ -754,7 +754,7 @@ pd_decision() {
     network_get_prefix6 delegated_prefix_with_length "${wan_iface}"
 
     if [ -n "$delegated_prefix_with_length" ]; then
-        debug_log "INFO" "pd_decision: Delegated prefix obtained on '${wan_iface}': ${delegated_prefix_with_length}"
+        debug_log "DEBUG" "pd_decision: Delegated prefix obtained on '${wan_iface}': ${delegated_prefix_with_length}"
         address_part_for_mape=$(echo "$delegated_prefix_with_length" | cut -d'/' -f1)
         
         if [ -n "$address_part_for_mape" ]; then
@@ -763,10 +763,10 @@ pd_decision() {
             debug_log "DEBUG" "pd_decision: Using address part from PD: $NEW_IP6_PREFIX"
             return 0 # Success with PD
         else
-            debug_log "WARN" "pd_decision: Delegated prefix obtained, but failed to extract address part from '${delegated_prefix_with_length}'. Will attempt fallback to GUA."
+            debug_log "DEBUG" "pd_decision: Delegated prefix obtained, but failed to extract address part from '${delegated_prefix_with_length}'. Will attempt fallback to GUA."
         fi
     else
-        debug_log "INFO" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'. Attempting fallback to get direct GUA."
+        debug_log "DEBUG" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'. Attempting fallback to get direct GUA."
     fi
 
     # Fallback to direct GUA if PD prefix was not obtained or address part extraction failed
@@ -775,19 +775,19 @@ pd_decision() {
     if [ -n "$direct_gua" ]; then
         NEW_IP6_PREFIX="$direct_gua"
         MAPE_IPV6_ACQUISITION_METHOD="gua"
-        debug_log "INFO" "pd_decision: Using direct GUA: $NEW_IP6_PREFIX"
+        debug_log "DEBUG" "pd_decision: Using direct GUA: $NEW_IP6_PREFIX"
         return 0 # Success with GUA
     else
-        debug_log "ERROR" "pd_decision: Failed to obtain direct GUA on '${wan_iface}' as a fallback."
+        debug_log "DEBUG" "pd_decision: Failed to obtain direct GUA on '${wan_iface}' as a fallback."
     fi
     
     # If both methods failed
-    debug_log "ERROR" "pd_decision: Failed to obtain any usable IPv6 information (PD or GUA)."
+    debug_log "DEBUG" "pd_decision: Failed to obtain any usable IPv6 information (PD or GUA)."
     # NEW_IP6_PREFIX is already empty, MAPE_IPV6_ACQUISITION_METHOD is already "none"
     return 1 # Failure
 }
 
-mape_mold() {
+mold_mape() {
     # グローバル変数 NEW_IP6_PREFIX と MAPE_IPV6_ACQUISITION_METHOD は
     # pd_decision 関数によって設定される。
     local NET_IF6
@@ -796,7 +796,7 @@ mape_mold() {
     network_find_wan6 NET_IF6
 
     if [ -z "$NET_IF6" ]; then
-        debug_log "WARN" "mape_mold: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
+        debug_log "DEBUG" "mold_mape: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
         NET_IF6="wan6" # Default to wan6 if not found
     fi
     
@@ -807,12 +807,12 @@ mape_mold() {
         # Error message using existing key MSG_MAPE_IPV6_PREFIX_FAILED.
         # The pd_decision function would have logged details.
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED")")"
-        debug_log "ERROR" "mape_mold: pd_decision reported failure. Cannot proceed."
+        debug_log "DEBUG" "mold_mape: pd_decision reported failure. Cannot proceed."
         return 1
     fi
 
     # At this point, NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are set by pd_decision.
-    debug_log "INFO" "mape_mold: IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: $MAPE_IPV6_ACQUISITION_METHOD)"
+    debug_log "DEBUG" "mold_mape: IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: $MAPE_IPV6_ACQUISITION_METHOD)"
     
     # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant, space output) ---
     # NEW_IP6_PREFIX should contain a valid IPv6 address string (without /NN)
@@ -857,7 +857,7 @@ EOF
     if [ -z "$h0_str" ]; then
         # Using a more specific message key if available, or a generic one
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED" "INPUT=$ipv6_addr")")"
-        debug_log "ERROR" "mape_mold: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'"
+        debug_log "DEBUG" "mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'"
         return 1
     fi
 
@@ -911,7 +911,7 @@ EOF
     local octet1 octet2 octet3 octet4 octet
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
-        debug_log "DEBUG" "mape_mold: Matched ruleprefix38: $octet"
+        debug_log "DEBUG" "mold_mape: Matched ruleprefix38: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
@@ -927,7 +927,7 @@ EOF
         OFFSET=4
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
         octet="$(get_ruleprefix31_value "$prefix31_hex")"
-        debug_log "DEBUG" "mape_mold: Matched ruleprefix31: $octet"
+        debug_log "DEBUG" "mold_mape: Matched ruleprefix31: $octet"
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
@@ -943,7 +943,7 @@ EOF
         OFFSET=4
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-        debug_log "DEBUG" "mape_mold: Matched ruleprefix38_20: $octet"
+        debug_log "DEBUG" "mold_mape: Matched ruleprefix38_20: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
@@ -964,26 +964,26 @@ EOF
     else
         # Using a more specific message key if available, or a generic one
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE" "P31=$prefix31_hex" "P38=$prefix38_hex")")"
-        debug_log "ERROR" "mape_mold: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
+        debug_log "DEBUG" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
         return 1
     fi
 
     # PSID計算
     if [ "$PSIDLEN" -eq 8 ]; then
         PSID=$(( (HEXTET3 & 65280) >> 8 )) # 0xff00
-        debug_log "DEBUG" "mape_mold: PSID calculation for PSIDLEN=8: $PSID"
+        debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=8: $PSID"
     elif [ "$PSIDLEN" -eq 6 ]; then
         PSID=$(( (HEXTET3 & 16128) >> 8 )) # 0x3f00
-        debug_log "DEBUG" "mape_mold: PSID calculation for PSIDLEN=6: $PSID"
+        debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=6: $PSID"
     else
         PSID=0 # フォールバック
-        debug_log "WARN" "mape_mold: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID set to 0."
+        debug_log "DEBUG" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID set to 0."
     fi
 
     # ポート範囲の計算
     PORTS=""
     local AMAX=$(( (1 << OFFSET) - 1 ))
-    debug_log "DEBUG" "mape_mold: Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
+    debug_log "DEBUG" "mold_mape: Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
 
     local A
     for A in $(seq 1 "$AMAX"); do
@@ -991,14 +991,14 @@ EOF
         local port_base=$(( A << shift_bits ))
         local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
         if [ "$psid_shift" -lt 0 ]; then
-            debug_log "WARN" "mape_mold: Invalid calculation: psid_shift is negative (${psid_shift}). Check OFFSET (${OFFSET}) and PSIDLEN (${PSIDLEN}). Setting psid_shift to 0."
+            debug_log "DEBUG" "mold_mape: Invalid calculation: psid_shift is negative (${psid_shift}). Check OFFSET (${OFFSET}) and PSIDLEN (${PSIDLEN}). Setting psid_shift to 0."
             psid_shift=0
         fi
         local psid_part=$(( PSID << psid_shift ))
         local port=$(( port_base | psid_part ))
         local port_range_size=$(( 1 << psid_shift ))
         if [ "$port_range_size" -le 0 ]; then
-             debug_log "WARN" "mape_mold: Invalid calculation: port_range_size is not positive (${port_range_size}). Setting to 1."
+             debug_log "DEBUG" "mold_mape: Invalid calculation: port_range_size is not positive (${port_range_size}). Setting to 1."
              port_range_size=1
         fi
         local port_end=$(( port + port_range_size - 1 ))
@@ -1031,13 +1031,13 @@ EOF
     
     if [ "$RFC" = "true" ]; then
         # このブロックはRFC=falseのため通常実行されない
-        debug_log "DEBUG" "mape_mold: Calculating CE Address (RFC mode - unexpected)"
+        debug_log "DEBUG" "mold_mape: Calculating CE Address (RFC mode - unexpected)"
         CE_HEXTET4=0
         CE_HEXTET5=$(( (ce_octet1 << 8) | ce_octet2 ))
         CE_HEXTET6=$(( (ce_octet3 << 8) | ce_octet4 ))
         CE_HEXTET7=$PSID
     else
-        debug_log "DEBUG" "mape_mold: Calculating CE Address (Non-RFC mode)"
+        debug_log "DEBUG" "mold_mape: Calculating CE Address (Non-RFC mode)"
         CE_HEXTET4=$ce_octet1
         CE_HEXTET5=$(( (ce_octet2 << 8) | ce_octet3 ))
         CE_HEXTET6=$(( ce_octet4 << 8 ))
@@ -1058,13 +1058,13 @@ EOF
     # IPV6PREFIX is used by check_pd for potential manual prefix setting.
     # It should represent the /64 network prefix derived from the source GUA (NEW_IP6_PREFIX).
     IPV6PREFIX="${h0_str}:${h1_str}:${h2_str}:${h3_str}::"
-    debug_log "DEBUG" "mape_mold: Generated CE address (CE): $CE"
-    debug_log "DEBUG" "mape_mold: Generated CE Network Prefix for wan6 (global IPV6PREFIX for check_pd): $IPV6PREFIX"
+    debug_log "DEBUG" "mold_mape: Generated CE address (CE): $CE"
+    debug_log "DEBUG" "mold_mape: Generated CE Network Prefix for wan6 (global IPV6PREFIX for check_pd): $IPV6PREFIX"
 
     # EALENとプレフィックス長の計算
     EALEN=$(( 56 - IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
-    debug_log "DEBUG" "mape_mold: EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
+    debug_log "DEBUG" "mold_mape: EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
 
     # IPv6プレフィックスの計算 (MAP-Eルール用)
     # This IP6PFX is specific to the MAP-E rule configuration (e.g., option ip6prefix for map interface)
@@ -1082,9 +1082,9 @@ EOF
         IP6PFX="${IP6PFX0}:${IP6PFX1}"
     else
         IP6PFX="" # フォールバック
-        debug_log "WARN" "mape_mold: Could not determine IP6PFX (for MAP-E rule) for IP6PREFIXLEN=$IP6PREFIXLEN"
+        debug_log "DEBUG" "mold_mape: Could not determine IP6PFX (for MAP-E rule) for IP6PREFIXLEN=$IP6PREFIXLEN"
     fi
-    debug_log "DEBUG" "mape_mold: Generated IPv6 prefix for MAP-E rule (local IP6PFX for UCI): $IP6PFX"
+    debug_log "DEBUG" "mold_mape: Generated IPv6 prefix for MAP-E rule (local IP6PFX for UCI): $IP6PFX"
 
     # ブロードバンドルーターアドレス(BR/Peer)の判定
     BR=""
@@ -1106,9 +1106,9 @@ EOF
              BR="2001:380:a120::9"
         fi
     fi
-    debug_log "DEBUG" "mape_mold: Selected peer address (BR): $BR"
+    debug_log "DEBUG" "mold_mape: Selected peer address (BR): $BR"
 
-    debug_log "INFO" "mape_mold: Exiting mape_mold() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
+    debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
 }
 
@@ -1131,12 +1131,12 @@ EOF
 #
 # The user will be asked if their situation corresponds to No.1.
 # Based on their 'y' or 'n' response, a global variable (e.g., USER_REQUESTS_MANUAL_WAN6_PREFIX)
-# will be set. The mape_config() function will then use this variable to conditionally
+# will be set. The config_mape() function will then use this variable to conditionally
 # execute 'uci set network.wan6.ip6prefix...' or 'uci delete network.wan6.ip6prefix'.
 #
 # This function takes no arguments.
 # It sets a global variable reflecting the user's choice.
-mape_config() {
+config_mape() {
 
     local WANMAP='wanmap' # 設定セクション名
     local ZONE_NO='1'
@@ -1144,12 +1144,12 @@ mape_config() {
     local osversion=""
     
     # 設定のバックアップ作成
-    debug_log "DEBUG" "mape_config: Backing up configuration files..."
-    cp /etc/config/network /etc/config/network.map-e.bak && debug_log "DEBUG" "mape_config: network backup created." || debug_log "DEBUG" "mape_config: Failed to backup network config."
-    cp /etc/config/dhcp /etc/config/dhcp.map-e.bak && debug_log "DEBUG" "mape_config: dhcp backup created." || debug_log "DEBUG" "mape_config: Failed to backup dhcp config."
-    cp /etc/config/firewall /etc/config/firewall.map-e.bak && debug_log "DEBUG" "mape_config: firewall backup created." || debug_log "DEBUG" "mape_config: Failed to backup firewall config."
+    debug_log "DEBUG" "config_mape: Backing up configuration files..."
+    cp /etc/config/network /etc/config/network.map-e.bak && debug_log "DEBUG" "config_mape: network backup created." || debug_log "DEBUG" "config_mape: Failed to backup network config."
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.bak && debug_log "DEBUG" "config_mape: dhcp backup created." || debug_log "DEBUG" "config_mape: Failed to backup dhcp config."
+    cp /etc/config/firewall /etc/config/firewall.map-e.bak && debug_log "DEBUG" "config_mape: firewall backup created." || debug_log "DEBUG" "config_mape: Failed to backup firewall config."
 
-    debug_log "DEBUG" "mape_config: Applying MAP-E configuration using UCI."
+    debug_log "DEBUG" "config_mape: Applying MAP-E configuration using UCI."
 
     # 既存のwanインターフェースの自動起動を停止
     uci set network.wan.disabled='1'
@@ -1176,20 +1176,20 @@ mape_config() {
     uci set network.wan6.reqprefix='auto'
 
     # Conditional setting of network.wan6.ip6prefix based on acquisition method
-    debug_log "DEBUG" "mape_config: IPv6 acquisition method is '${MAPE_IPV6_ACQUISITION_METHOD}'."
+    debug_log "DEBUG" "config_mape: IPv6 acquisition method is '${MAPE_IPV6_ACQUISITION_METHOD}'."
     if [ "$MAPE_IPV6_ACQUISITION_METHOD" = "gua" ]; then
         if [ -n "$IPV6PREFIX" ]; then
-            debug_log "INFO" "mape_config: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
+            debug_log "DEBUG" "config_mape: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
             uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
         else
-            debug_log "WARN" "mape_config: IPV6PREFIX is empty, cannot set network.wan6.ip6prefix for GUA method."
+            debug_log "DEBUG" "config_mape: IPV6PREFIX is empty, cannot set network.wan6.ip6prefix for GUA method."
             uci -q delete network.wan6.ip6prefix
         fi
     elif [ "$MAPE_IPV6_ACQUISITION_METHOD" = "pd" ]; then
-        debug_log "INFO" "mape_config: Deleting network.wan6.ip6prefix (PD method)."
+        debug_log "DEBUG" "config_mape: Deleting network.wan6.ip6prefix (PD method)."
         uci -q delete network.wan6.ip6prefix
     else
-        debug_log "WARN" "mape_config: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.wan6.ip6prefix."
+        debug_log "DEBUG" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.wan6.ip6prefix."
         uci -q delete network.wan6.ip6prefix
     fi
         
@@ -1211,18 +1211,18 @@ mape_config() {
     # --- バージョン固有設定 ---
     if [ -f "$osversion_file" ]; then
         osversion=$(cat "$osversion_file")
-        debug_log "DEBUG" "mape_config: OS Version from '$osversion_file': $osversion"
+        debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
     else
         osversion="unknown"
-        debug_log "DEBUG" "mape_config: OS version file '$osversion_file' not found. Applying default/latest version settings."
+        debug_log "DEBUG" "config_mape: OS version file '$osversion_file' not found. Applying default/latest version settings."
     fi
     if echo "$osversion" | grep -q "^19"; then
-        debug_log "DEBUG" "mape_config: Applying settings for OpenWrt 19.x compatible version."
+        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt 19.x compatible version."
         uci -q delete network.${WANMAP}.tunlink
         uci add_list network.${WANMAP}.tunlink='wan6'
         uci -q delete network.${WANMAP}.legacymap
     else
-        debug_log "DEBUG" "mape_config: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
+        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
         # dhcp.wan6.interface は既に上で設定済み
         uci set dhcp.wan6.ignore='1'
         uci set network.${WANMAP}.legacymap='1'
@@ -1234,28 +1234,28 @@ mape_config() {
     current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network)
     if echo "$current_wan_networks" | grep -q "\bwan\b"; then
         uci del_list firewall.@zone[${ZONE_NO}].network='wan'
-        debug_log "DEBUG" "mape_config: Removed 'wan' from firewall zone ${ZONE_NO} network list."
+        debug_log "DEBUG" "config_mape: Removed 'wan' from firewall zone ${ZONE_NO} network list."
     fi
     if ! echo "$current_wan_networks" | grep -q "\b${WANMAP}\b"; then
         uci add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
-        debug_log "DEBUG" "mape_config: Added '${WANMAP}' to firewall zone ${ZONE_NO} network list."
+        debug_log "DEBUG" "config_mape: Added '${WANMAP}' to firewall zone ${ZONE_NO} network list."
     else
-        debug_log "DEBUG" "mape_config: '${WANMAP}' already in firewall zone ${ZONE_NO} network list."
+        debug_log "DEBUG" "config_mape: '${WANMAP}' already in firewall zone ${ZONE_NO} network list."
     fi
     uci set firewall.@zone[${ZONE_NO}].masq='1'
     uci set firewall.@zone[${ZONE_NO}].mtu_fix='1'
 
     # 設定の保存
-    debug_log "DEBUG" "mape_config: Committing UCI changes..."
+    debug_log "DEBUG" "config_mape: Committing UCI changes..."
     local commit_ok=1
-    if ! uci commit network; then debug_log "ERROR" "mape_config: Failed to commit network."; commit_ok=0; fi
-    if ! uci commit dhcp; then debug_log "ERROR" "mape_config: Failed to commit dhcp."; commit_ok=0; fi
-    if ! uci commit firewall; then debug_log "ERROR" "mape_config: Failed to commit firewall."; commit_ok=0; fi
+    if ! uci commit network; then debug_log "DEBUG" "config_mape: Failed to commit network."; commit_ok=0; fi
+    if ! uci commit dhcp; then debug_log "DEBUG" "config_mape: Failed to commit dhcp."; commit_ok=0; fi
+    if ! uci commit firewall; then debug_log "DEBUG" "config_mape: Failed to commit firewall."; commit_ok=0; fi
 
     if [ "$commit_ok" -eq 1 ]; then
-        debug_log "DEBUG" "mape_config: All UCI sections committed successfully."
+        debug_log "DEBUG" "config_mape: All UCI sections committed successfully."
     else
-        debug_log "DEBUG" "mape_config: One or more UCI sections failed to commit."
+        debug_log "DEBUG" "config_mape: One or more UCI sections failed to commit."
     fi
     
     return 0
@@ -1338,7 +1338,7 @@ replace_map_sh() {
 }
 
 # MAP-E設定情報を表示する関数
-mape_display() {
+display_mape() {
 
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
@@ -1388,7 +1388,7 @@ mape_display() {
     printf "\n"
     printf "%s\n" "$(color blue "Port Ranges:")" # "ポート範囲:"
     
-    # PORTSが既にmape_mold()で計算済みかつ正常な場合は、それを表示
+    # PORTSが既にmold_mape()で計算済みかつ正常な場合は、それを表示
     if [ -n "$PORTS" ]; then
         # ポート範囲の各行の先頭にスペースを追加し、エスケープシーケンスを解釈
         printf "  %b\n" "$(echo "$PORTS" | sed 's/\\n/\\n  /g')"
@@ -1531,27 +1531,27 @@ internet_map_main() {
     print_section_title "MENU_INTERNET_MAPE"
 
     # MAP-Eパラメータ計算
-    if ! mape_mold; then
-        debug_log "ERROR" "internet_map_main: mape_mold function failed. Exiting script."
+    if ! mold_mape; then
+        debug_log "DEBUG" "internet_map_main: mold_mape function failed. Exiting script."
         return 1
     fi
 
     # `map` パッケージのインストール 
     if ! install_package map hidden; then
-        debug_log "WARN" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
+        debug_log "DEBUG" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
         return 1
     fi
     
     # UCI設定の適用
-    if ! mape_config; then
-        debug_log "ERROR" "internet_map_main: mape_config function failed. UCI settings might be inconsistent."
+    if ! config_mape; then
+        debug_log "DEBUG" "internet_map_main: config_mape function failed. UCI settings might be inconsistent."
         return 1
     fi
     
-    mape_display
+    display_mape
     
     # 再起動
-    debug_log "INFO" "internet_map_main: Configuration complete. Rebooting system."
+    debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
     reboot
 
     return 0 # Explicitly exit with success status
