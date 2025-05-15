@@ -3,7 +3,7 @@ SCRIPT_VERSION="2025.05.10-00-00"
 [BASE_SYSTEM.COMMON]
 # === 基本システム機能 ===
 print_section_header "PKG_SECTION_BASIC"
-install_package luci-i18n-base yn hidden
+install_package luci-base yn hidden
 install_package ttyd yn hidden disabled
 install_package openssh-sftp-server yn hidden
 install_package coreutils yn hidden
@@ -16,9 +16,11 @@ install_package irqbalance yn hidden
 print_section_header "PKG_SECTION_NETWORK"
 install_package luci-app-qos yn hidden
 install_package luci-app-sqm yn hidden
-install_package luci-i18n-statistics yn hidden
-install_package luci-i18n-nlbwmon yn hidden
+install_package luci-app-statistics yn hidden
+install_package nlbwmon yn hidden
 install_package wifischedule yn hidden
+install_package luci-app-wol yn hidden
+install_package luci-app-ddns yn hidden
 
 # === セキュリティツール ===
 print_section_header "PKG_SECTION_SECURITY"
@@ -42,6 +44,7 @@ install_package attendedsysupgrade-common yn hidden
 
 # === ユーティリティ ===
 print_section_header "PKG_SECTION_UTILITY"
+install_package wireguard-tools yn hidden
 
 [BASE_SYSTEM.DEFAULT]
 # === 追加機能 ===
@@ -58,7 +61,6 @@ feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Man
 [BASE_SYSTEM.RELEASE19]
 # === 追加機能 ===
 print_section_header "PKG_SECTION_ADDITION"
-#install_package luci-app-sqm yn hidden
 feed_package gSpotx2f packages-openwrt 19.07 luci-app-cpu-status-mini yn hidden "desc=CPU utilization info for the LuCI status page"
 feed_package gSpotx2f packages-openwrt 19.07 luci-app-log yn hidden "desc=Advanced syslog and kernel log (tail, search, etc) for LuCI"
 feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Manager for LuCI, support disk partition and format, support raid, btrfs-raid, btrfs-snapshot"
