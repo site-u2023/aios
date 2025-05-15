@@ -42,7 +42,7 @@ DEBUG_MODE="${DEBUG_MODE:-false}"
 #   force       - パッケージの強制再インストール
 #                 例: install_package force luci-app-opkg
 #
-#   notpack     - local-package.dbの設定適用をスキップ
+#   notpack     - package-local.dbの設定適用をスキップ
 #                 例: install_package notpack htop
 #
 #   disabled    - サービスの自動設定をスキップ
@@ -235,20 +235,20 @@ update_package_list() {
     return 0
 }
 
-# local-package.dbからの設定を適用
+# package-local.dbからの設定を適用
 local_package_db() {
     local package_name="$1"  # どんなパッケージ名でも受け取れる
 
-    debug_log "DEBUG" "Starting to apply local-package.db for package: $package_name"
+    debug_log "DEBUG" "Starting to apply package-local.db for package: $package_name"
 
-    # `local-package.db` から `$package_name` に該当するセクションを抽出
+    # `package-local.db` から `$package_name` に該当するセクションを抽出
     extract_commands() {
         # ★ 修正: pkg 変数名を変更 (p から pkg へ) し、正規表現をより厳密に
         awk -v pkg="$package_name" '
             $0 ~ "^\\[" pkg "\\]$" {flag=1; next} # ★ セクション名を完全一致で検索
             $0 ~ "^\\[" {flag=0}
             flag && $0 !~ "^#" && $0 !~ "^[[:space:]]*$" {print} # ★ 空行も除外
-        ' "${BASE_DIR}/local-package.db"
+        ' "${BASE_DIR}/package-local.db"
     }
 
     # コマンドを取得
@@ -256,7 +256,7 @@ local_package_db() {
     cmds=$(extract_commands)
 
     if [ -z "$cmds" ]; then
-        debug_log "DEBUG" "No commands found for package: $package_name in ${BASE_DIR}/local-package.db" # ★ DBファイルパスをログに追加
+        debug_log "DEBUG" "No commands found for package: $package_name in ${BASE_DIR}/package-local.db" # ★ DBファイルパスをログに追加
         return 1 # ★ コマンドが見つからない場合はエラーコード 1 を返すように変更
     fi
 
@@ -907,7 +907,7 @@ process_package() {
              debug_log "DEBUG" "local_package_db applied successfully for $base_name"
         fi
     else
-        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
+        debug_log "DEBUG" "Skipping package-local.db application for $base_name due to notpack option"
     fi
 
     debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
@@ -1039,7 +1039,7 @@ OK_process_package() {
              debug_log "DEBUG" "local_package_db applied successfully for $base_name"
         fi
     else
-        debug_log "DEBUG" "Skipping local-package.db application for $base_name due to notpack option"
+        debug_log "DEBUG" "Skipping package-local.db application for $base_name due to notpack option"
     fi
 
     debug_log "DEBUG" "Package $package_name processed successfully (New Install)."
