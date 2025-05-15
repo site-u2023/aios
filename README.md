@@ -26,7 +26,7 @@ wget -O /tmp/aios_all.ipk "https://github.com/site-u2023/aios-package/releases/d
 
 “snapshot” build (apk)
 ```sh
-wget -O /tmp/aios.apk https://github.com/site-u2023/aios-package/releases/download/apk0.0/aios-1.0-r1.apk && apk add --allow-untrusted /tmp/aios.apk
+wget -O /tmp/aios.apk https://github.com/site-u2023/aios-package/releases/download/apk0.0/aios-1.0-r1.apk; apk add --allow-untrusted /tmp/aios.apk
 ```
 
 ### How to use
