@@ -2251,7 +2251,7 @@ setup_password_hostname() {
         uci commit dropbear
         /etc/init.d/dropbear restart 1>/dev/null 2>&1
         if [ $? -eq 0 ]; then
-            printf "%s\n" "$(color white "$(get_message "MSG_SSH_LAN_SET_OK")")"
+            printf "%s\n" "$(color green "$(get_message "MSG_SSH_LAN_SET_OK")")"
         else
             printf "%s\n" "$(color red "$(get_message "MSG_SSH_LAN_SET_FAIL")")"
         fi
