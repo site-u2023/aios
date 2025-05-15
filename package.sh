@@ -382,18 +382,6 @@ confirm_package_lines() {
             echo "$_arg3" 
         fi
     done
-    
-    printf "\n" 
-
-    # Confirm execution.
-    # MODIFIED: Use the new dedicated message key for this confirmation
-    if confirm "MSG_CONFIRM_PACKAGE_OPERATION"; then 
-        debug_log "DEBUG" "confirm_package_lines: User confirmed package operation.";
-        return 0;
-    else
-        debug_log "DEBUG" "confirm_package_lines: User cancelled package operation.";
-        return 1;
-    fi;
 }
 
 # メイン処理
@@ -413,6 +401,7 @@ package_main() {
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
+        if ! confirm "MSG_CONFIRM_PACKAGE_OPERATION"; then
             debug_log "DEBUG" "User cancelled automatic package installation."
             # printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")")"
             return 1 # 中断して終了
@@ -428,6 +417,7 @@ package_main() {
 
     # 自動インストール成功時のメッセージ (オプション)
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
+        printf "\n" 
         printf "\n%s\n" "$(color green "$(get_message "MSG_PACKAGE_INSTALL_COMPLETED")")"
     fi
     return 0 # 正常終了
