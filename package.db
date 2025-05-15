@@ -65,7 +65,6 @@ feed_package1 lisaac luci-app-diskman yn hidden disabled "desc=A Simple Disk Man
 [BASE_SYSTEM.SNAPSHOT]
 # === 追加機能 ===
 print_section_header "PKG_SECTION_ADDITION"
-install_package luci yn hidden
 install_package luci-mod-dashboard yn hidden
 
 [USB.COMMON]
