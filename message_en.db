@@ -68,8 +68,7 @@ en|MSG_TRANSLATION_SUCCESS=Translation completed
 
 # package.sh
 # en|MSG_PACKAGE_INSTALL_AUTO=Auto install recommended packages {yn}{:}
-en|MSG_PACKAGE_INSTALL_CANCELLED=Auto install cancelled
-en|MSG_PACKAGE_INSTALL_COMPLETED=Auto install completed successfully (reboot recommended)
+en|MSG_PACKAGE_INSTALL_COMPLETED=Install completed successfully (reboot recommended)
 en|MSG_PACKAGES_INSTALLED_AFTER_FLASHING=Packages installed after flashing
 en|MSG_CONFIRM_INSTALL_PACKAGES=Do you want to install this package {yn}{;}
 en|PKG_SECTION_BASIC=Basic System Functions
