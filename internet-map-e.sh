@@ -1,5 +1,6 @@
 #!/bin/ash
-# this script based http://ipv4.web.fc2.com/map-e.html
+
+# Based on script from https://github.com/missing233/map-e, with appreciation.
 
 SCRIPT_VERSION="2025.05.12-05-00"
 
