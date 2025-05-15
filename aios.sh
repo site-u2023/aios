@@ -2045,13 +2045,13 @@ download_files() {
     download "common-country.sh" "chmod" "load"
     download "common-menu.sh" "chmod" "load"
     download "common-package.sh" "chmod" "load"
-    download "common-feed-package.sh" "chmod" "load"
+    download "common-package-feed.sh" "chmod" "load"
 
     download "menu.db"
     download "country.db"
     download "message_${DEFAULT_LANGUAGE}.db"
-    download "local-package.db"
-    download "custom-package.db"
+    download "package-local.db"
+    download "package-custom.db"
 }
 
 check_common() {
@@ -2105,12 +2105,12 @@ check_common() {
             download "common-country.sh" "hidden" "chmod" "load"
             download "common-menu.sh" "hidden" "chmod" "load"
             download "common-package.sh" "hidden" "chmod" "load"
-            download "common-feed-package.sh" "hidden" "chmod" "load"
+            download "common-package-feed.sh" "hidden" "chmod" "load"
             download "menu.db" "hidden"
             download "country.db" "hidden"
             download "message_${DEFAULT_LANGUAGE}.db" "hidden"
-            download "local-package.db" "hidden"
-            download "custom-package.db" "hidden"
+            download "package-local.db" "hidden"
+            download "package-custom.db" "hidden"
             print_information
             information_main
             country_main "$lang_code"
