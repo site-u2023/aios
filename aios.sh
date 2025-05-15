@@ -1407,7 +1407,7 @@ download_parallel() {
     local loaded_files source_success source_status
     local osversion # OSバージョン用ローカル変数
 
-    start_time=$(date +%s)
+    start_time=$$
     end_time=""
     elapsed_seconds=0
 
@@ -1447,7 +1447,7 @@ download_parallel() {
     # --- 以下、既存の処理 ---
     if ! mkdir -p "$DL_DIR"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
-        end_time=$(date +%s)
+        end_time=$$
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (directory creation) in %s seconds.\n" "$elapsed_seconds"
         return 1
@@ -1462,7 +1462,7 @@ download_parallel() {
     if [ ! -f "$script_path" ]; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_FAILED')" "failure"
         debug_log "DEBUG" "Script path '$script_path' is not found"
-        end_time=$(date +%s)
+        end_time=$$
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (script not found) in %s seconds.\n" "$elapsed_seconds"
         return 1
@@ -1500,7 +1500,7 @@ download_parallel() {
     # コマンドリストが空なら終了
     if ! grep -q . "$cmd_tmpfile"; then
         stop_spinner "$(get_message 'DOWNLOAD_PARALLEL_SUCCESS')" "success"
-        end_time=$(date +%s)
+        end_time=$$
         elapsed_seconds=$((end_time - start_time))
         printf "Download completed (no tasks) in %s seconds.\n" "$elapsed_seconds"
         rm -f "$cmd_tmpfile" "$load_tmpfile"
@@ -1634,7 +1634,7 @@ download_parallel() {
 
     # --- 最終ステータス判定と終了処理 ---
     if [ $overall_status -eq 0 ]; then
-        end_time=$(date +%s)
+        end_time=$$
         elapsed_seconds=$((end_time - start_time))
         success_message="$(get_message 'DOWNLOAD_PARALLEL_SUCCESS' "s=${elapsed_seconds}")"
         stop_spinner "$success_message" "success"
@@ -1644,7 +1644,7 @@ download_parallel() {
         [ -z "$first_error_message" ] && first_error_message="Check logs in $LOG_DIR"
         failure_message="$(get_message 'DOWNLOAD_PARALLEL_FAILED' "f=$first_failed_command" "e=$first_error_message")"
         stop_spinner "$failure_message" "failure"
-        end_time=$(date +%s)
+        end_time=$$
         elapsed_seconds=$((end_time - start_time))
         printf "Download failed (task: %s) in %s seconds.\n" "$first_failed_command" "$elapsed_seconds"
         return 1
@@ -1674,7 +1674,7 @@ download_fetch_file() {
 
     # Apply dynamic cache busting only if DOWNLOAD_METHOD is 'direct'
     if [ "$DOWNLOAD_METHOD" = "direct" ]; then
-        local cache_bust_param="?cache_bust=$(date +%s)"
+        local cache_bust_param="?cache_bust=$$"
         remote_url="${remote_url}${cache_bust_param}"
         debug_log "DEBUG" "Cache busting applied dynamically (DOWNLOAD_METHOD=direct): ${remote_url}"
     else
