@@ -8,6 +8,11 @@ January 25, 2025: version α
 
 ![2025-03-15 133725](https://github.com/user-attachments/assets/e3c7cef3-140d-4583-ae63-378e6e40d83d)
 
+
+### aios-package
+
+[aios-package](https://github.com/site-u2023/aios-package)
+
 ### aios update
 ```sh
 aios -u
@@ -111,4 +116,3 @@ aios -t
 
 ## Requirement Document
 
-https://github.com/site-u2023/aios/blob/main/requirement-definition.md
