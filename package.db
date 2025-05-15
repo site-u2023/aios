@@ -27,6 +27,7 @@ install_package banip yn hidden
 
 # === システム監視 ===
 print_section_header "PKG_SECTION_MONITORING"
+install_package luci-app-watchcat yn hidden
 
 # === ネットワーク診断ツール ===
 print_section_header "PKG_SECTION_NETWORK_DIAG"
