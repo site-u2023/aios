@@ -400,7 +400,6 @@ package_main() {
     fi
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
-        # if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
         printf "\n" 
         if ! confirm "MSG_CONFIRM_PACKAGE_OPERATION"; then
             debug_log "DEBUG" "User cancelled automatic package installation."
