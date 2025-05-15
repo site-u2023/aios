@@ -401,9 +401,10 @@ package_main() {
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         # if ! confirm "MSG_PACKAGE_INSTALL_AUTO"; then
+        printf "\n" 
         if ! confirm "MSG_CONFIRM_PACKAGE_OPERATION"; then
             debug_log "DEBUG" "User cancelled automatic package installation."
-            # printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")")"
+            printf "\n%s\n" "$(color yellow "$(get_message "MSG_PACKAGE_INSTALL_CANCELLED")")"
             return 1 # 中断して終了
         fi
         debug_log "DEBUG" "User confirmed automatic package installation."
