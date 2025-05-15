@@ -2051,7 +2051,7 @@ download_files() {
     download "country.db"
     download "message_${DEFAULT_LANGUAGE}.db"
     download "package-local.db"
-    download "package-custom.db"
+    # download "package-custom.db"
 }
 
 check_common() {
@@ -2110,7 +2110,7 @@ check_common() {
             download "country.db" "hidden"
             download "message_${DEFAULT_LANGUAGE}.db" "hidden"
             download "package-local.db" "hidden"
-            download "package-custom.db" "hidden"
+            # download "package-custom.db" "hidden"
             print_information
             information_main
             country_main "$lang_code"
