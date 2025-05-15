@@ -8,19 +8,27 @@ January 25, 2025: version α
 
 ![2025-03-15 133725](https://github.com/user-attachments/assets/e3c7cef3-140d-4583-ae63-378e6e40d83d)
 
-
-### aios-package
-
-[aios-package](https://github.com/site-u2023/aios-package)
-
-### aios update
+## Install
+Release Build (opkg)
 ```sh
-aios -u
+opkg install https://github.com/site-u2023/aios-package/releases/latest/download/aios.ipk
 ```
 
-### GitHub Personal Access Token
+“snapshot” build (apk)
 ```sh
-aios -t
+
+```
+
+### How to use
+Command from the console.
+```sh
+aios
+```
+
+### To specify a country code.
+Example: JP
+```sh
+aios -JP
 ```
 
 ### Parallel Processing Test Data
