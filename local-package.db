@@ -1,6 +1,7 @@
 SCRIPT_VERSION="2025.03.27-00-01"
 
-[luci-i18n-base]
+[luci-base]
+install_package luci-i18n-base hidden
 install_package luci-i18n-opkg hidden
 install_package luci-i18n-firewall hidden
 
@@ -45,8 +46,17 @@ uci set irqbalance.irqbalance=irqbalance
 uci set irqbalance.irqbalance.enabled='1'
 uci commit irqbalance
 
+[luci-app-statistics]
+install_package luci-i18n-statistics hidden
+
+[nlbwmon]
+install_package luci-i18n-nlbwmon hidden
+
+[luci-app-wol]
+install_package luci-i18n-wol hidden
+
 [luci-app-watchcat]
-install_package luci-i18n-watchcat
+install_package luci-i18n-watchcat hidden
 
 [internet-detector]
 install_package luci-compat hidden
@@ -159,3 +169,10 @@ install_package collectd-mod-thermal hidden
 [banip]
 install_package luci-app-banip hidden
 install_package luci-i18n-banip hidden
+
+[wireguard-tools]
+install_package luci-app-wireguard hidden
+install_package kmod-wireguard hidden
+
+[luci-app-ddns]
+install_package luci-i18n-ddns hidden
