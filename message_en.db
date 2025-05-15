@@ -67,7 +67,7 @@ en|MSG_LANGUAGE_CODE=Translation language code{:} {i}
 en|MSG_TRANSLATION_SUCCESS=Translation completed
 
 # package.sh
-en|MSG_PACKAGE_INSTALL_AUTO=Auto install recommended packages {yn}{:}
+# en|MSG_PACKAGE_INSTALL_AUTO=Auto install recommended packages {yn}{:}
 en|MSG_PACKAGE_INSTALL_CANCELLED=Auto install cancelled
 en|MSG_PACKAGE_INSTALL_COMPLETED=Auto install completed successfully (reboot recommended)
 en|MSG_PACKAGES_INSTALLED_AFTER_FLASHING=Packages installed after flashing
