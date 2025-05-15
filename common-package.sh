@@ -220,7 +220,7 @@ update_package_list() {
     if [ $? -ne 0 ]; then
         debug_log "DEBUG" "Failed to create/update cache file: $update_cache"
         # パッケージリストは更新できているのでエラー扱いはしない
-        debug_log "WARN" "Cache timestamp could not be updated, next run will force update"
+        debug_log "DEBUG" "Cache timestamp could not be updated, next run will force update"
     else
         debug_log "DEBUG" "Cache timestamp updated: $update_cache"
     fi
@@ -229,7 +229,7 @@ update_package_list() {
     if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
         debug_log "DEBUG" "Package list cache successfully created: $package_cache"
     else
-        debug_log "WARN" "Package list cache not properly created: $package_cache"
+        debug_log "DEBUG" "Package list cache not properly created: $package_cache"
     fi
 
     return 0
@@ -896,7 +896,7 @@ process_package() {
     fi
 
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then 
-        debug_log "ERROR" "Failed to install package: $package_name"
+        debug_log "DEBUG" "Failed to install package: $package_name"
         return 1 
     fi
 
@@ -1026,7 +1026,7 @@ OK_process_package() {
 
     # パッケージのインストール
     if ! install_normal_package "$package_name" "$force_install" "$silent_mode"; then # install_normal_package は既存と仮定
-        debug_log "ERROR" "Failed to install package: $package_name"
+        debug_log "DEBUG" "Failed to install package: $package_name"
         return 1 # Return 1 on installation failure
     fi
 
@@ -1055,7 +1055,7 @@ OK_process_package() {
 install_package() {
     # オプション解析
     if ! parse_package_options "$@"; then # parse_package_options は既存と仮定
-        debug_log "ERROR" "Failed to parse package options."
+        debug_log "DEBUG" "Failed to parse package options."
         return 1 # Return 1 on option parsing failure
     fi
 
@@ -1083,13 +1083,13 @@ install_package() {
 
     # パッケージマネージャー確認
     if ! verify_package_manager; then # verify_package_manager は既存と仮定
-        debug_log "ERROR" "Failed to verify package manager."
+        debug_log "DEBUG" "Failed to verify package manager."
         return 1 # Return 1 if verification fails
     fi
 
     # パッケージリスト更新 (エラー時は 1 を返す)
     if ! update_package_list "$PKG_OPTIONS_SILENT"; then # update_package_list は既存と仮定
-         debug_log "ERROR" "Failed to update package list."
+         debug_log "DEBUG" "Failed to update package list."
          return 1 # Return 1 if update fails
     fi
 
@@ -1121,7 +1121,7 @@ install_package() {
         0) # Success (Skipped, DB failed/skipped) or handled internally
            ;;
         1) # Error during processing
-           debug_log "ERROR" "Error occurred during package processing for $BASE_NAME."
+           debug_log "DEBUG" "Error occurred during package processing for $BASE_NAME."
            return 1 # Propagate error
            ;;
         2) # User cancelled
@@ -1137,7 +1137,7 @@ install_package() {
            fi
            ;;
         *) # Unexpected status from process_package
-           debug_log "ERROR" "Unexpected status $process_status received from process_package for $BASE_NAME."
+           debug_log "DEBUG" "Unexpected status $process_status received from process_package for $BASE_NAME."
            return 1 # Treat unexpected as error
            ;;
     esac
