@@ -11,7 +11,7 @@ May 15, 2025: version β
 ## Install
 Release Build (opkg)
 ```sh
-opkg install https://github.com/site-u2023/aios-package/releases/latest/download/aios.ipk
+opkg install https://github.com/site-u2023/aios-package/releases/latest/download/aios_all.ipk
 ```
 
 “snapshot” build (apk)
