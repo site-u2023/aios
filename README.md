@@ -19,14 +19,14 @@ opkg install https://github.com/site-u2023/aios-package/releases/download/ipk0.0
 <details><summary>For version 19.07</summary>
 
 ```sh
-wget -O /tmp/aios_all.ipk "https://github.com/site-u2023/aios-package/releases/download/apk0.1/aios.apk"; opkg install /tmp/aios_all.ipk
+wget -O /tmp/aios_all.ipk "https://github.com/site-u2023/aios-package/releases/download/ipk0.0/aios_all.ipk"; opkg install /tmp/aios_all.ipk
 ```
 ---
 </details>
 
 “snapshot” build (apk)
 ```sh
-wget -O /tmp/aios_all.ipk "https://github.com/site-u2023/aios-package/releases/download/ipk0.1/aios.ipk"; opkg install /tmp/aios_all.ipk
+wget -O /tmp/aios.apk "https://github.com/site-u2023/aios-package/releases/download/apk0.1/aios.apk"; opkg install /tmp/aios.apk
 ```
 
 ### How to use
