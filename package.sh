@@ -415,11 +415,10 @@ package_main() {
     # USB関連パッケージのインストール
     install_usb_packages
 
-    # 自動インストール成功時のメッセージ (オプション)
-    if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
-        printf "\n" 
-        printf "\n%s\n" "$(color green "$(get_message "MSG_PACKAGE_INSTALL_COMPLETED")")"
-    fi
+    # インストール完了時のメッセージ
+    printf "\n" 
+    printf "\n%s\n" "$(color green "$(get_message "MSG_PACKAGE_INSTALL_COMPLETED")")"
+    
     return 0 # 正常終了
 }
 
