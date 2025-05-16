@@ -362,15 +362,22 @@ into_memory_message_definitions() {
 }
 
 into_memory_message() {
-    MSG_MEMORY=""
-    MSG_MEMORY_INITIALIZED="false"
+    if [ -z "$1" ]; then
+        MSG_MEMORY=""
+        MSG_MEMORY_INITIALIZED="false"
+        
+        into_memory_message_definitions
 
-    into_memory_message_definitions
+        if [ -n "$MSG_MEMORY" ]; then
+            MSG_MEMORY_INITIALIZED="true"
+        fi
+        return 0
+    else
 
-    if [ -n "$MSG_MEMORY" ]; then
-        MSG_MEMORY_INITIALIZED="true"
+        if [ -n "$1" ]; then
+            MSG_MEMORY="${MSG_MEMORY}$1"$'\n'
+        fi
     fi
-    return 0 # Normal exit
 }
 
 # 翻訳システムを初期化する関数
