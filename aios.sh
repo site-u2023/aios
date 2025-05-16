@@ -336,51 +336,47 @@ clear_input_buffer() {
 }
 
 into_memory_message_definitions() {
-    into_memory_message en|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWRT
-    into_memory_message en|MSG_BANNER_NAME=All-in-One Scripts
-    into_memory_message en|MSG_BANNER_DISCLAIMER=WARNING{:} This script is used at your own risk
-    into_memory_message en|MSG_PASSWORD_NOTICE=Notice: Set a new password with 8 or more characters (Press Enter to skip)
-    into_memory_message en|MSG_ENTER_PASSWORD=Enter new password{;}
-    into_memory_message en|MSG_CONFIRM_PASSWORD=Confirm new password{;}
-    into_memory_message en|MSG_PASSWORD_ERROR=Invalid password. Minimum 8 characters. Enter the same password twice
-    into_memory_message en|MSG_PASSWORD_SET_OK=Password set successfully
-    into_memory_message en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}
-    into_memory_message en|DOWNLOAD_PARALLEL_START=Downloading essential files
-    into_memory_message en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully
-    into_memory_message en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in task {f}{:} {e}
-    into_memory_message en|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}
-    into_memory_message en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}
-    into_memory_message en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared
-    into_memory_message en|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared
-    into_memory_message en|MSG_HOSTNAME_SET=Set hostname{;}
-    into_memory_message en|MSG_ENTER_HOSTNAME=Enter new hostname{;}
-    into_memory_message en|MSG_HOSTNAME_SET_OK=Hostname set to {h}
-    into_memory_message en|MSG_HOSTNAME_ERROR=Failed to set hostname
-    into_memory_message en|MSG_SSH_LAN_SET=Set SSH to LAN interface{:}
-    into_memory_message en|MSG_SSH_LAN_SET_OK=SSH is now set to LAN interface
-    into_memory_message en|MSG_SSH_LAN_SET_FAIL=Failed to set SSH to LAN interface
+    into_memory_message "en|MSG_BANNER_DECCRIPTION=Dedicated configuration software for OpenWRT"
+    into_memory_message "en|MSG_BANNER_NAME=All-in-One Scripts"
+    into_memory_message "en|MSG_BANNER_DISCLAIMER=WARNING{:} This script is used at your own risk"
+    into_memory_message "en|MSG_PASSWORD_NOTICE=Notice: Set a new password with 8 or more characters (Press Enter to skip)"
+    into_memory_message "en|MSG_ENTER_PASSWORD=Enter new password{;}"
+    into_memory_message "en|MSG_CONFIRM_PASSWORD=Confirm new password{;}"
+    into_memory_message "en|MSG_PASSWORD_ERROR=Invalid password. Minimum 8 characters. Enter the same password twice"
+    into_memory_message "en|MSG_PASSWORD_SET_OK=Password set successfully"
+    into_memory_message "en|MSG_MAX_PARALLEL_TASKS=Maximum number of threads{:} {m}"
+    into_memory_message "en|DOWNLOAD_PARALLEL_START=Downloading essential files"
+    into_memory_message "en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully"
+    into_memory_message "en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in task {f}{:} {e}"
+    into_memory_message "en|CONFIG_DOWNLOAD_SUCCESS=Downloaded {f}"
+    into_memory_message "en|CONFIG_DOWNLOAD_UNNECESSARY=Latest Files{:}"
+    into_memory_message "en|MSG_RESET_COMPLETE=Reset completed. All cached data has been cleared"
+    into_memory_message "en|MSG_DELETE_COMPLETE=Delete completed. All base data has been cleared"
+    into_memory_message "en|MSG_HOSTNAME_SET=Set hostname{;}"
+    into_memory_message "en|MSG_ENTER_HOSTNAME=Enter new hostname{;}"
+    into_memory_message "en|MSG_HOSTNAME_SET_OK=Hostname set to {h}"
+    into_memory_message "en|MSG_HOSTNAME_ERROR=Failed to set hostname"
+    into_memory_message "en|MSG_SSH_LAN_SET=Set SSH to LAN interface{:}"
+    into_memory_message "en|MSG_SSH_LAN_SET_OK=SSH is now set to LAN interface"
+    into_memory_message "en|MSG_SSH_LAN_SET_FAIL=Failed to set SSH to LAN interface"
 }
 
 into_memory_message() {
     if [ -z "$1" ]; then
         MSG_MEMORY=""
         MSG_MEMORY_INITIALIZED="false"
-        
         into_memory_message_definitions
-
         if [ -n "$MSG_MEMORY" ]; then
             MSG_MEMORY_INITIALIZED="true"
         fi
         return 0
     else
-
         if [ -n "$1" ]; then
             MSG_MEMORY="${MSG_MEMORY}$1"$'\n'
         fi
     fi
 }
 
-# 翻訳システムを初期化する関数
 init_translation() {
     debug_log "DEBUG" "Initializing translation system"
     
