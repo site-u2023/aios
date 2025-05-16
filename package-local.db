@@ -42,6 +42,9 @@ uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
 uci commit ttyd
 
 [irqbalance]
+install_package luci-app-irqbalance hidden
+install_package luci-i18n-irqbalance hidden
+
 uci set irqbalance.irqbalance=irqbalance
 uci set irqbalance.irqbalance.enabled='1'
 uci commit irqbalance
