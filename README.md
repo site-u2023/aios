@@ -40,3 +40,8 @@ Example: JP
 ```sh
 aios JP
 ```
+
+### Location Information
+```
+https://location-api-worker.site-u.workers.dev/
+```
