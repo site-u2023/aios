@@ -38,5 +38,5 @@ aios
 ### To specify a country code.
 Example: JP
 ```sh
-aios -JP
+aios JP
 ```
