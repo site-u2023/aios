@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-08-00-02"
+SCRIPT_VERSION="2025-05-16-00-00"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -28,6 +28,9 @@ AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を�
 
 # --- Set MAX_PARALLEL_TASKS ---
 MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
+
+# 翻訳処理時間を保持するグローバル変数
+LAST_ELAPSED_SECONDS_TRANSLATION=0
 
 # URL安全エンコード関数（seqを使わない最適化版）
 # @param $1: string - The string to encode.
@@ -569,9 +572,6 @@ create_language_db_all() {
     return "$exit_status"
 }
 
-# --- Main Parallel Execution Wrapper ---
-# Routes to the appropriate worker function based on OS version, passing the pre-calculated parallelism limit.
-# Uses the original OK_create_language_db_parallel logic and relies on global CORE_COUNT and MAX_PARALLEL_TASKS.
 create_language_db_parallel() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"  # Passed for logging/context
@@ -645,6 +645,9 @@ create_language_db_parallel() {
     end_time=$(date +%s)
     # start_time が空でないことを確認 (Original Logic)
     [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time)) || elapsed_seconds=0
+    # グローバル変数に処理時間を設定
+    LAST_ELAPSED_SECONDS_TRANSLATION="$elapsed_seconds"
+
 
     # スピナーが開始されていた場合のみ停止処理 (Original Logic)
     if [ "$spinner_started" = "true" ]; then
@@ -655,8 +658,8 @@ create_language_db_parallel() {
         if [ "$exit_status" -eq 0 ]; then
              # 成功した場合
              if [ "$total_lines" -gt 0 ]; then
-                 # 翻訳行があった場合
-                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")
+                 # 翻訳行があった場合 - 秒数情報を含まない汎用メッセージに変更
+                 final_message=$(get_message "MSG_TRANSLATION_SUCCESS" "default=Translation completed successfully")
              else
                  # 翻訳行がなかった場合 (total_lines が 0)
                  final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
@@ -676,7 +679,8 @@ create_language_db_parallel() {
     else
         # スピナーが開始されていなかった場合 (フォールバック表示) (Original Logic)
          if [ "$exit_status" -eq 0 ]; then
-             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds" "default=Language file created successfully (${elapsed_seconds}s)")")"
+             # 秒数情報を含まない汎用メッセージに変更
+             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS" "default=Translation completed successfully")")"
          elif [ "$exit_status" -eq 2 ]; then
              printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
          else
@@ -954,7 +958,10 @@ translate_main() {
     if [ -f "$target_db" ]; then
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Assuming valid and displaying info."
         # If file exists, display info and return success
-        display_detected_translation
+        # 既存DB表示時は処理時間0を渡すか、あるいは引数なしで呼び出すよう display_detected_translation を調整する。
+        # ここでは処理時間情報がないため、空文字列を渡すか、引数を渡さない古い呼び出し方を想定。
+        # → display_detected_translation側で引数の有無をチェックするように修正
+        display_detected_translation "" # 既存DBの場合は処理時間なし
         return 0 # <<< Early return: DB exists
     else
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
@@ -1001,8 +1008,8 @@ translate_main() {
     # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
         debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}."
-        # Display info only after successful creation
-        display_detected_translation
+        # Display info only after successful creation, passing the stored elapsed time
+        display_detected_translation "$LAST_ELAPSED_SECONDS_TRANSLATION"
         return 0 # Success
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
