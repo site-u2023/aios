@@ -35,7 +35,7 @@ Command from the console
 aios
 ```
 
-### Specify a country code
+### Specify country code
 Example: JP
 ```sh
 aios JP
