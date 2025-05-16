@@ -637,10 +637,10 @@ create_language_db_parallel() {
         local spinner_status="success"
 
         if [ "$exit_status" -eq 0 ]; then
-             if [ "$total_lines" -le 0 ]; then # 翻訳対象がなかった場合のみメッセージ表示
+             if [ "$total_lines" -le 0 ]; then # 翻訳対象がなかった場合
                  final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
-             else
-                 final_message="" # 翻訳成功時はメッセージなし (display_detected_translationで表示)
+             else # 翻訳成功時は MSG_TRANSLATING_CREATED (固定文字列) を表示
+                 final_message=$(get_message "MSG_TRANSLATING_CREATED" "default=Language file created successfully")
              fi
         elif [ "$exit_status" -eq 2 ]; then
             final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
@@ -650,16 +650,12 @@ create_language_db_parallel() {
             spinner_status="error"
         fi
         
-        if [ -n "$final_message" ]; then
-            stop_spinner "$final_message" "$spinner_status"
-        else
-            stop_spinner "" "$spinner_status" # メッセージなしでスピナー停止
-        fi
+        stop_spinner "$final_message" "$spinner_status"
         debug_log "DEBUG" "create_language_db_parallel: Task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
     else
          if [ "$exit_status" -eq 0 ]; then
              if [ "$total_lines" -gt 0 ]; then
-                : # 成功かつ翻訳行があった場合は、ここでは何も表示しない
+                printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATING_CREATED" "default=Language file created successfully")")"
              else
                 printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")")"
              fi
@@ -873,13 +869,14 @@ display_detected_translation() {
     local source_db="message_${source_lang}.db"
     local target_db="message_${lang_code}.db" # This might not exist if creation failed
 
-    debug_log "DEBUG" "display_detected_translation: Called with elapsed_seconds: '$elapsed_seconds_for_creation', lang_code: '$lang_code'"
+    debug_log "DEBUG" "display_detected_translation: Called with elapsed_seconds: '$elapsed_seconds_for_creation', lang_code: '$lang_code'" # このデバッグログは元のまま
 
-    # 最初に翻訳処理時間を表示 (MSG_TRANSLATING_CREATED を使用)
+    # 最初に新しいメッセージキーで翻訳処理時間を表示
     if [ -n "$elapsed_seconds_for_creation" ] && [ "$elapsed_seconds_for_creation" -ne 0 ]; then
-        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds_for_creation")")"
+        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_ELAPSED_TIME" "s=$elapsed_seconds_for_creation")")"
     fi
 
+    # 以降は元の表示順序
     printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
     if [ -f "${BASE_DIR}/${target_db}" ]; then
         printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
@@ -889,9 +886,8 @@ display_detected_translation() {
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang")")"
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code")")"
 
-    debug_log "DEBUG" "Translation information display completed for ${lang_code}"
+    debug_log "DEBUG" "Translation information display completed for ${lang_code}" # このデバッグログは元のまま
 }
-
 
 # @FUNCTION: translate_main
 # @DESCRIPTION: Entry point for translation. Reads target language from cache (message.ch),
