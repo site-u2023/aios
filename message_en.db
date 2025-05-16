@@ -148,7 +148,7 @@ en|DOWNLOAD_PARALLEL_START=Downloading essential files
 # en|DOWNLOAD_PARALLEL_START=Downloading essential files{:} {c}/{t} # display_detected_download() 利用時
 en|MSG_CONFIRM_RESTART=Download failed. Do you want to stop the system? (y/n){;}
 # en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully{:} {s}
-en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully # display_detected_download() 利用時
+en|DOWNLOAD_PARALLEL_SUCCESS=Essential files downloaded successfully
 
 en|MSG_INFO_DEVICE_TIME=Download Time{:} {s} seconds
 # en|DOWNLOAD_PARALLEL_FAILED=Parallel download failed in {f}{:} {e}
