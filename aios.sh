@@ -1160,79 +1160,6 @@ update_spinner() {
 
 # 🔵　ダウンロード系　ここから　🔵　-------------------------------------------------------------------------------------------------------------------------------------------
 
-version_is_newer() {
-    local current="$1"  # リモートバージョン
-    local reference="$2"  # ローカルバージョン
-    
-    debug_log "DEBUG" "Comparing: Remote=$current, Local=$reference"
-    
-    # どちらかが不明の場合は更新必要
-    if echo "$current $reference" | grep -q "No version\|unknown"; then
-        debug_log "DEBUG" "Unknown version detected, update required"
-        return 0
-    fi
-    
-    # 完全一致の場合は更新不要
-    if [ "$current" = "$reference" ]; then
-        debug_log "DEBUG" "Exact match: No update needed"
-        return 1
-    fi
-    
-    # 日付部分を抽出（YYYY.MM.DD形式）
-    local current_date=$(echo "$current" | grep -o "[0-9][0-9][0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]" | head -1)
-    local reference_date=$(echo "$reference" | grep -o "[0-9][0-9][0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]" | head -1)
-    
-    # 日付が抽出できなかった場合は更新が必要
-    if [ -z "$current_date" ] || [ -z "$reference_date" ]; then
-        debug_log "DEBUG" "Date extraction failed: Update for safety"
-        return 0
-    fi
-    
-    # 日付を数値に変換（区切り文字を削除）
-    local current_num=$(echo "$current_date" | tr -d '.')
-    local reference_num=$(echo "$reference_date" | tr -d '.')
-    
-    # 数値比較（日付形式）
-    if [ "$current_num" -gt "$reference_num" ]; then
-        debug_log "DEBUG" "Remote date is newer: Update required"
-        return 0  # リモート（current）が新しい
-    elif [ "$current_num" -lt "$reference_num" ]; then
-        debug_log "DEBUG" "Local date is newer: No update needed"
-        return 1  # ローカル（reference）が新しい
-    fi
-    
-    # 日付が同じ場合はSHA部分を比較
-    local current_sha=$(echo "$current" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
-    local reference_sha=$(echo "$reference" | grep -o "\-[a-z0-9]*" | sed 's/^-//' | head -1)
-    
-    # SHA情報をデバッグ出力
-    debug_log "DEBUG" "SHA comparison: Remote=$current_sha, Local=$reference_sha"
-    
-    # 直接DL時の特別処理: ハッシュの先頭7文字だけ比較して異なる場合のみ更新
-    if [ -n "$current_sha" ] && [ -n "$reference_sha" ]; then
-        # どちらかにdirectというマークがあれば直接DLモードと判断
-        if echo "$current $reference" | grep -q "direct"; then
-            # 先頭7文字だけ比較（SHA-1とSHA-256を混在比較する場合の対策）
-            local current_short=$(echo "$current_sha" | head -c 7)
-            local reference_short=$(echo "$reference_sha" | head -c 7)
-            
-            if [ "$current_short" != "$reference_short" ]; then
-                debug_log "DEBUG" "Different file hash in direct mode: Update required"
-                return 0  # 異なるハッシュ
-            else
-                debug_log "DEBUG" "Same file hash in direct mode: No update needed"
-                return 1  # 同一ハッシュ
-            fi
-        elif [ "$current_sha" != "$reference_sha" ]; then
-            debug_log "DEBUG" "Different SHA: Update required"
-            return 0  # 異なるコミット
-        fi
-    fi
-    
-    debug_log "DEBUG" "Same version or unable to compare: No update needed"
-    return 1  # 同一バージョン
-}
-
 detect_wget_capabilities() {
     debug_log "DEBUG" "Detecting wget capabilities for current environment"
 
@@ -1299,37 +1226,6 @@ detect_wget_capabilities() {
         rm -f "$temp_file"
         echo "limited"
         return 1
-    fi
-}
-
-
-clean_version_string() {
-    local version_str="$1"
-    
-    # 1. 改行と復帰を削除
-    local cleaned=$(printf "%s" "$version_str" | tr -d '\n\r')
-    
-    # 2. 角括弧を削除
-    cleaned=$(printf "%s" "$cleaned" | sed 's/\[//g; s/\]//g')
-    
-    # 3. ANSIエスケープコードを削除
-    cleaned=$(printf "%s" "$cleaned" | sed 's/\x1b\[[0-9;]*[mK]//g')
-    
-    # 4. バージョン番号の抽出（シンプルな方法）
-    if echo "$cleaned" | grep -q '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]'; then
-        # 年.月.日 形式のバージョンを抽出
-        local date_part=$(printf "%s" "$cleaned" | grep -o '20[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]')
-        
-        # バージョン文字列の残りの部分があれば追加
-        if echo "$cleaned" | grep -q "${date_part}-"; then
-            local remainder=$(printf "%s" "$cleaned" | sed "s/.*${date_part}-//; s/[^0-9a-zA-Z-].*//")
-            printf "%s-%s" "$date_part" "$remainder"
-        else
-            printf "%s" "$date_part"
-        fi
-    else
-        # バージョンが見つからない場合は元の文字列をクリーニングしたものを返す
-        printf "%s" "$cleaned"
     fi
 }
 
@@ -1982,9 +1878,6 @@ check_option() {
             -cl|--cl|-ocommon_light|--ocommon_light)
                 MODE="light"
                 ;;
-            -cd|--cd|-common_debug|--common_debug|--common_debug)
-                MODE="debug"
-                ;;
             -r|--r|-resrt|--resrt)
                 MODE="reset"
                 RESET="true"
@@ -2098,27 +1991,6 @@ check_common() {
             printf "%s%s%s\n" "$(color yellow "$(get_message "MSG_DELETE_COMPLETE")")"
             exit 0
             ;;
-        debug)
-            download "common-system.sh" "hidden" "chmod" "load"
-            download "common-information.sh" "hidden" "chmod" "load"
-            download "common-color.sh" "hidden" "chmod" "load"
-            download "common-country.sh" "hidden" "chmod" "load"
-            download "common-menu.sh" "hidden" "chmod" "load"
-            download "common-package.sh" "hidden" "chmod" "load"
-            download "common-package-feed.sh" "hidden" "chmod" "load"
-            download "menu.db" "hidden"
-            download "country.db" "hidden"
-            download "message_${DEFAULT_LANGUAGE}.db" "hidden"
-            download "package-local.db" "hidden"
-            # download "package-custom.db" "hidden"
-            print_information
-            information_main
-            country_main "$lang_code"
-            translate_main
-            install_package update
-            selector "$MAIN_MENU" 
-            return
-            ;;
         full)
             download_parallel
             print_information
@@ -2130,10 +2002,6 @@ check_common() {
             return
             ;;
         light)
-            ;;
-        test_api)
-            download "github_api_test.sh" "chmod" "load"
-            exit 0
             ;;
         *)
             ;;
