@@ -56,8 +56,9 @@ en|MSG_LOCATION_RESULT=Location information retrieved {s}
 en|MSG_TIMEZONE_API=Zone Source{:} {a}
 
 # common-translation.sh
-en|MSG_TRANSLATING_CURRENTLY=Currently translating: {api}
-en|MSG_TRANSLATING_CREATED=Language file created successfully{:} {s} seconds
+en|MSG_TRANSLATION_ELAPSED_TIME=Translation time{:} {s} seconds
+en|MSG_TRANSLATING_CURRENTLY=Currently translating{:} {api}
+en|MSG_TRANSLATING_CREATED=Language file created successfully
 en|MSG_TRANSLATION_FAILED=Translation process failed
 en|MSG_TRANSLATING=Translating messages{:} {api}
 en|MSG_TRANSLATION_SOURCE_ORIGINAL=Original Language file{:} {i}
