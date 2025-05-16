@@ -2,7 +2,7 @@
 
 Supported since version 19.07
 
-New config software is being tested.
+New config software is being tested
 
 Dedicated configuration software for OpenWrt
 
@@ -30,12 +30,12 @@ wget -O /tmp/aios.apk "https://github.com/site-u2023/aios-package/releases/downl
 ```
 
 ### How to use
-Command from the console.
+Command from the console
 ```sh
 aios
 ```
 
-### To specify a country code.
+### Specify a country code
 Example: JP
 ```sh
 aios JP
