@@ -587,6 +587,8 @@ get_country_code() {
     fi
 }
 
+# common-information.sh の process_location_info 関数
+
 process_location_info() {
     local skip_retrieval=0
 
@@ -596,22 +598,17 @@ process_location_info() {
         debug_log "DEBUG: Using already retrieved location information"
     fi
 
-    # デバイス情報の表示とキャッシュ
     debug_log "DEBUG: process_location_info() called"
-    # ★★★ 変更点: 変数確認のデバッグログを get_country_code 後に移動 ★★★
 
-    # 位置情報取得処理（スキップフラグが0の場合）
     if [ $skip_retrieval -eq 0 ]; then
         debug_log "DEBUG: Starting IP-based location information retrieval"
         get_country_code || {
             debug_log "ERROR: get_country_code failed to retrieve location information"
             return 1
         }
-        # get_country_code() の戻り値
         local result=$?
         debug_log "DEBUG: get_country_code() returned: $result"
 
-        # ★★★ 追加: get_country_code 後の変数確認 ★★★
         debug_log "DEBUG: After get_country_code - SELECT_COUNTRY: $SELECT_COUNTRY"
         debug_log "DEBUG: After get_country_code - SELECT_TIMEZONE: $SELECT_TIMEZONE"
         debug_log "DEBUG: After get_country_code - SELECT_ZONENAME: $SELECT_ZONENAME"
@@ -619,86 +616,57 @@ process_location_info() {
         debug_log "DEBUG: After get_country_code - ISP_AS: $ISP_AS"
         debug_log "DEBUG: After get_country_code - SELECT_REGION_NAME: $SELECT_REGION_NAME"
 
-        # ★★★ 変更点: get_country_code が失敗したら即時リターン ★★★
         if [ $result -ne 0 ]; then
             debug_log "ERROR: get_country_code failed, cannot process location info"
             return 1
         fi
     else
-        # スキップした場合も変数確認
         debug_log "DEBUG: Using skipped/cached - SELECT_COUNTRY: $SELECT_COUNTRY"
         debug_log "DEBUG: Using skipped/cached - SELECT_TIMEZONE: $SELECT_TIMEZONE"
         debug_log "DEBUG: Using skipped/cached - SELECT_ZONENAME: $SELECT_ZONENAME"
-        # Skip/cache does not guarantee ISP/Region info is present, check specifically if needed
         debug_log "DEBUG: Using skipped/cached - ISP_NAME: ${ISP_NAME:-[Not available in cache]}"
         debug_log "DEBUG: Using skipped/cached - ISP_AS: ${ISP_AS:-[Not available in cache]}"
         debug_log "DEBUG: Using skipped/cached - SELECT_REGION_NAME: ${SELECT_REGION_NAME:-[Not available in cache]}"
     fi
 
-    # 必須情報（国、タイムゾーン、ゾーン名）が揃っているか最終確認
     debug_log "DEBUG: Processing location data - Country: $SELECT_COUNTRY, ZoneName: $SELECT_ZONENAME, Timezone: $SELECT_TIMEZONE"
 
-    # ★★★ 削除: 一時キャッシュファイルパスの定義 ★★★
-    # (No longer needed)
-
-    # 必須情報が空でないかチェック
     if [ -z "$SELECT_COUNTRY" ] || [ -z "$SELECT_TIMEZONE" ] || [ -z "$SELECT_ZONENAME" ]; then
         debug_log "ERROR: Incomplete location data - required information missing (Country, Timezone, or ZoneName)"
-        # ★★★ 削除: 古い一時キャッシュファイルの削除 ★★★
-        # (No longer needed)
-
-        # ★★★ 削除: 一時キャッシュからのフォールバック処理 ★★★
-        # (No longer needed)
-
-        # 必須情報がない場合はエラーで終了
         return 1
     fi
 
-    # ★★★ 削除: 一時キャッシュへの書き込み処理 ★★★
-    # (No longer needed)
+    # ISP名のキャッシュ (isp_info.ch)
+    local isp_cache_file="${CACHE_DIR}/isp_info.ch"
+    if [ -n "$ISP_NAME" ]; then
+        [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
+        echo "$ISP_NAME" > "$isp_cache_file" # ISP名のみを書き込む
+        debug_log "DEBUG" "Saved ISP Name to permanent cache: $isp_cache_file"
+    else
+        rm -f "$isp_cache_file" 2>/dev/null
+        debug_log "DEBUG" "ISP_NAME is empty, removed ISP Name cache file (if it existed)"
+    fi
 
-    # --- START MODIFICATION (AS Cache) ---
-    # Save AS number to its own persistent cache file
+    # AS番号のキャッシュ (isp_as.ch) - この部分は変更なし (元のロジックで正しく動作)
     local as_cache_file="${CACHE_DIR}/isp_as.ch"
     if [ -n "$ISP_AS" ]; then
-        # Ensure CACHE_DIR exists before writing
         [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
         echo "$ISP_AS" > "$as_cache_file"
         debug_log "DEBUG" "Saved AS number to persistent cache: $as_cache_file"
     else
-        # If ISP_AS is empty, remove the cache file if it exists
         rm -f "$as_cache_file" 2>/dev/null
         debug_log "DEBUG" "ISP_AS is empty, removed AS number cache file (if it existed): $as_cache_file"
     fi
-    # --- END MODIFICATION (AS Cache) ---
 
-    # --- START NEW MODIFICATION (Region Name Cache) ---
-    # Save Region Name to its own persistent cache file
+    # Region Name のキャッシュ (region_name.ch) - この部分は変更なし (元のロジックで正しく動作)
     local region_cache_file="${CACHE_DIR}/region_name.ch"
     if [ -n "$SELECT_REGION_NAME" ]; then
-        # Ensure CACHE_DIR exists before writing
         [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
         echo "$SELECT_REGION_NAME" > "$region_cache_file"
         debug_log "DEBUG" "Saved Region Name to persistent cache: $region_cache_file"
     else
-        # If SELECT_REGION_NAME is empty, remove the cache file if it exists
         rm -f "$region_cache_file" 2>/dev/null
         debug_log "DEBUG" "SELECT_REGION_NAME is empty, removed Region Name cache file (if it existed): $region_cache_file"
-    fi
-    # --- END NEW MODIFICATION (Region Name Cache) ---
-
-    # ★★★ 維持: ISP情報の永続キャッシュへの書き込み (isp_info.ch) ★★★
-    # (common-information.sh 内で行うのが自然なため維持)
-    if [ -n "$ISP_NAME" ] || [ -n "$ISP_AS" ]; then
-        local isp_cache_file="${CACHE_DIR}/isp_info.ch"
-        # Ensure CACHE_DIR exists before writing
-        [ -d "$CACHE_DIR" ] || mkdir -p "$CACHE_DIR"
-        echo "$ISP_NAME" > "$isp_cache_file"
-        echo "$ISP_AS" >> "$isp_cache_file"
-        # ★★★ 修正: ISP_ORG は ISP_NAME と同じ値が入るので不要 ★★★
-        debug_log "DEBUG" "Saved ISP information to permanent cache: $isp_cache_file"
-    else
-        rm -f "${CACHE_DIR}/isp_info.ch" 2>/dev/null
     fi
 
     debug_log "DEBUG: Location information processing completed successfully in process_location_info"
