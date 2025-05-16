@@ -19,7 +19,7 @@ FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
 
 # set_wifi_ssid_password: Wi-Fi の SSID とパスワードを設定する
-set_wifi_ssid_password() {
+setup_wifi_ssid_password() {
     local devices wifi_country_code
     local devices_to_enable=""
 
@@ -56,7 +56,7 @@ set_wifi_ssid_password() {
 }
 
 # WiFiデバイス個別設定
-configure_wifi_device() {
+config_wifi_device() {
     local device="$1"
     local wifi_country_code="$2"
     local band htmode ssid password enable_band confirm iface_num iface
@@ -167,40 +167,8 @@ set_device() {
     reboot
 }
 
-# システム基本設定
-configure_system() {
-    local description notes zonename timezone
-    description=$(cat /etc/openwrt_version) || description="Unknown"
-    notes=$(date) || notes="No date"
-    
-    zonename=$(cat "${CACHE_DIR}/zonename.ch" 2>/dev/null || echo "Unknown")
-    timezone=$(cat "${CACHE_DIR}/timezone.ch" 2>/dev/null || echo "UTC")
-
-    echo "$(color yellow "$(get_message "MSG_APPLYING_ZONENAME" "zone=$zonename")")"
-    echo "$(color yellow "$(get_message "MSG_APPLYING_TIMEZONE" "timezone=$timezone")")"
-
-    apply_system_settings "$description" "$notes" "$zonename" "$timezone"
-    configure_ntp
-}
-
-# システム設定の適用
-apply_system_settings() {
-    local description="$1" notes="$2" zonename="$3" timezone="$4"
-
-    uci set system.@system[0]=system
-    uci set system.@system[0].description="$description"
-    uci set system.@system[0].zonename="$zonename"
-    uci set system.@system[0].timezone="$timezone"
-    uci set system.@system[0].conloglevel='6'
-    uci set system.@system[0].cronloglevel='9'
-    uci set system.@system[0].notes="$notes"
-    uci commit system
-
-    /etc/init.d/system reload
-}
-
 # ネットワーク設定
-configure_network() {
+config_network() {
     # ファイアウォール設定
     uci set firewall.@defaults[0].flow_offloading='1'
     
@@ -217,7 +185,7 @@ configure_network() {
 }
 
 # DNS設定
-configure_dns() {
+config_dns() {
     # 既存のDNS設定をクリア
     uci -q delete dhcp.lan.dhcp_option
     uci -q delete dhcp.lan.dns
@@ -240,10 +208,9 @@ configure_dns() {
 
 # メイン処理
 wifi_main() {
-    #information
-    #set_device_name_password
-    #set_wifi_ssid_password
-    #set_device
+
+    set_wifi_ssid_password
+    
     packages
 }
 
