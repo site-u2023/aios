@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.03.14-00-00"
+SCRIPT_VERSION="2025.05.16-00-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
@@ -17,69 +17,6 @@ CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
 LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
 FEED_DIR="${FEED_DIR:-$BASE_DIR/feed}"
 DEBUG_MODE="${DEBUG_MODE:-false}"
-
-# information: country_zone で取得済みのゾーン情報を元にシステム情報を表示
-information() {
-    local lang_code=$(cat "${CACHE_DIR}/language.ch")
-    local zonename_code=$(cat "${CACHE_DIR}/zonename.ch")
-    local timezone_code=$(cat "${CACHE_DIR}/timezone.ch")
-
-    echo "$(color green "$(get_message "MSG_INFO_LANG_CODE" "code=$lang_code")")"
-    echo "$(color green "$(get_message "MSG_INFO_ZONENAME_CODE" "code=$zonename_code")")"
-    echo "$(color green "$(get_message "MSG_INFO_TIMEZONE_CODE" "code=$timezone_code")")"
-}
-
-# set_device_name_password: デバイス名とパスワードの設定を行う
-set_device_name_password() {
-    local device_name password confirmation
-
-    while true; do
-        echo "$(color yellow "$(get_message "MSG_ENTER_DEVICE_NAME")")"
-        read device_name
-        [ -n "$device_name" ] && break
-        echo "$(color red "$(get_message "MSG_ERROR_EMPTY_INPUT")")"
-    done
-
-    while true; do
-        echo "$(color yellow "$(get_message "MSG_ENTER_NEW_PASSWORD")")"
-        read password
-        echo
-        [ ${#password} -ge 8 ] && break
-        echo "$(color red "$(get_message "MSG_ERROR_PASSWORD_LENGTH")")"
-    done
-
-
-    echo "$(color yellow "$(get_message "MSG_CONFIRM_SETTINGS_PREVIEW")")"
-    echo "$(color green "$(get_message "MSG_PREVIEW_DEVICE_NAME" "name=$device_name")")"
-    echo "$(color green "$(get_message "MSG_PREVIEW_PASSWORD" "password=$password")")"
-    
-    echo "$(color yellow "$(get_message "MSG_CONFIRM_DEVICE_SETTINGS")")"
-    read confirmation
-    
-    if ! confirm "MSG_CONFIRM_DEVICE_SETTINGS" "yn"; then
-        echo "$(color red "$(get_message "MSG_UPDATE_CANCELLED")")"
-        return 1
-    fi
-
-    # 設定の適用
-    if ! ubus call luci setPassword "{ \"username\": \"root\", \"password\": \"$password\" }"; then
-        echo "$(color red "$(get_message "MSG_UPDATE_FAILED_PASSWORD")")"
-        return 1
-    fi
-
-    if ! uci set system.@system[0].hostname="$device_name"; then
-        echo "$(color red "$(get_message "MSG_UPDATE_FAILED_DEVICE")")"
-        return 1
-    fi
-
-    if ! uci commit system; then
-        echo "$(color red "$(get_message "MSG_UPDATE_FAILED_COMMIT")")"
-        return 1
-    fi
-
-    echo "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-    return 0
-}
 
 # set_wifi_ssid_password: Wi-Fi の SSID とパスワードを設定する
 set_wifi_ssid_password() {
@@ -230,12 +167,6 @@ set_device() {
     reboot
 }
 
-# SSH設定
-configure_ssh() {
-    uci set dropbear.@dropbear[0].Interface='lan'
-    uci commit dropbear
-}
-
 # システム基本設定
 configure_system() {
     local description notes zonename timezone
@@ -266,23 +197,6 @@ apply_system_settings() {
     uci commit system
 
     /etc/init.d/system reload
-}
-
-# NTP設定
-configure_ntp() {
-    uci set system.ntp.enable_server='1'
-    uci set system.ntp.use_dhcp='0'
-    uci set system.ntp.interface='lan'
-    uci -q delete system.ntp.server
-
-    # NTPサーバーの追加
-    uci add_list system.ntp.server='0.pool.ntp.org'
-    uci add_list system.ntp.server='1.pool.ntp.org'
-    uci add_list system.ntp.server='2.pool.ntp.org'
-    uci add_list system.ntp.server='3.pool.ntp.org'
-
-    uci commit system
-    /etc/init.d/sysntpd restart
 }
 
 # ネットワーク設定
@@ -324,35 +238,8 @@ configure_dns() {
     uci commit dhcp
 }
 
-# パッケージのインストール (オプション)
-packages() {
-    # パッケージのインストール
-    #install_package luci yn hidden
-    install_package ttyd yn hidden
-    install_package luci-app-ttyd yn hidden
-    install_package luci-i18n-ttyd yn hidden
-    install_package openssh-sftp-server yn hidden
-    install_package luci-mod-dashboard yn hidden
-    #install_package coreutils yn hidden
-    install_package irqbalance yn hidden
-    install_package jq yn hidden
-
-    #feed_package gSpotx2f packages-openwrt current luci-app-cpu-perf yn hidden
-    #feed_package gSpotx2f packages-openwrt current luci-app-cpu-status yn hidden
-    #feed_package gSpotx2f packages-openwrt current luci-app-temp-status yn hidden
-    #feed_package gSpotx2f packages-openwrt current luci-app-log-viewer yn hidden
-    #feed_package gSpotx2f packages-openwrt current luci-app-log yn hidden
-    #feed_package gSpotx2f packages-openwrt current internet-detector yn hidden disabled
-
-    #feed_package_release lisaac luci-app-diskman yn hidden disabled
-
-    #feed_package_release jerrykuku luci-theme-argon yn hidden disabled
-    
-    # install_package list
-}
-
 # メイン処理
-system_config_main() {
+wifi_main() {
     #information
     #set_device_name_password
     #set_wifi_ssid_password
@@ -361,4 +248,4 @@ system_config_main() {
 }
 
 # スクリプトの実行
-system_config_main "$@"
+wifi_main "$@"
