@@ -592,7 +592,6 @@ create_language_db_parallel() {
 
     # --- OS Version Detection (Original Logic) ---
     local osversion
-    # osversion.ch から読み込み、最初の '.' より前の部分を抽出
     osversion=$(cat "${CACHE_DIR}/osversion.ch" 2>/dev/null || echo "unknown")
     osversion="${osversion%%.*}"
     debug_log "DEBUG" "create_language_db_parallel: Detected OS major version: '$osversion'"
@@ -609,86 +608,67 @@ create_language_db_parallel() {
         return 1 # 致命的エラー
     fi
 
-    # --- Calculate total lines (for final message) (Original Logic) ---
-    # コメント行と空行を除いた行数をカウント
     total_lines=$(awk 'NR>1 && !/^#/ && !/^$/ {c++} END{print c}' "$base_db")
     debug_log "DEBUG" "create_language_db_parallel: Total valid lines to translate: $total_lines"
 
-    # --- Start Timing and Spinner (Original Logic) ---
     start_time=$(date +%s)
     local spinner_msg_key="MSG_TRANSLATING_CURRENTLY"
     local spinner_default_msg="Currently translating: $domain_name"
-    # スピナーを開始
     start_spinner "$(color blue "$(get_message "$spinner_msg_key" "api=$domain_name" "default=$spinner_default_msg")")"
     spinner_started="true"
 
-    # --- OS バージョンに基づいた分岐と関数呼び出し (MODIFIED Section) ---
-    # This section now passes the appropriate global variable as the last argument
     if [ "$osversion" = "19" ]; then
-        # OpenWrt 19 の場合は _19 関数を呼び出す
-        # Use global $CORE_COUNT calculated outside this function
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19 with limit from global CORE_COUNT ($CORE_COUNT)"
-        # Pass original arguments ("$@") and the global CORE_COUNT as the last argument
         create_language_db_19 "$@" "$CORE_COUNT"
-        exit_status=$? # _19 関数の終了ステータスを取得
+        exit_status=$?
     else
-        # OpenWrt 19 以外の場合は _all 関数を呼び出す
-        # Use global $MAX_PARALLEL_TASKS calculated outside this function
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion' with limit from global MAX_PARALLEL_TASKS ($MAX_PARALLEL_TASKS)"
-        # Pass original arguments ("$@") and the global MAX_PARALLEL_TASKS as the last argument
         create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
-        exit_status=$? # _all 関数の終了ステータスを取得
+        exit_status=$?
     fi
     debug_log "DEBUG" "create_language_db_parallel: Worker function finished with status: $exit_status"
 
-    # --- Stop Timing and Spinner (Original Logic) ---
     end_time=$(date +%s)
-    # start_time が空でないことを確認 (Original Logic)
     [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time)) || elapsed_seconds=0
-    # グローバル変数に処理時間を設定
-    LAST_ELAPSED_SECONDS_TRANSLATION="$elapsed_seconds"
+    LAST_ELAPSED_SECONDS_TRANSLATION="$elapsed_seconds" # グローバル変数に処理時間を設定
 
-
-    # スピナーが開始されていた場合のみ停止処理 (Original Logic)
     if [ "$spinner_started" = "true" ]; then
         local final_message=""
-        local spinner_status="success" # デフォルトは成功
+        local spinner_status="success"
 
-        # 終了ステータスに基づいて最終メッセージとスピナーステータスを決定 (Original Logic)
         if [ "$exit_status" -eq 0 ]; then
-             # 成功した場合
-             if [ "$total_lines" -gt 0 ]; then
-                 # 翻訳行があった場合 - 秒数情報を含まない汎用メッセージに変更
-                 final_message=$(get_message "MSG_TRANSLATION_SUCCESS" "default=Translation completed successfully")
-             else
-                 # 翻訳行がなかった場合 (total_lines が 0)
+             if [ "$total_lines" -le 0 ]; then # 翻訳対象がなかった場合のみメッセージ表示
                  final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
+             else
+                 final_message="" # 翻訳成功時はメッセージなし (display_detected_translationで表示)
              fi
         elif [ "$exit_status" -eq 2 ]; then
-            # 部分的成功の場合
             final_message=$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")
-            spinner_status="warning" # ステータスを警告に
-        else # exit_status が 1 (致命的エラー) またはその他の場合
-            # 失敗した場合
+            spinner_status="warning"
+        else
             final_message=$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")
-            spinner_status="error" # ステータスをエラーに
+            spinner_status="error"
         fi
-        # スピナーを停止 (Original Logic)
-        stop_spinner "$final_message" "$spinner_status"
+        
+        if [ -n "$final_message" ]; then
+            stop_spinner "$final_message" "$spinner_status"
+        else
+            stop_spinner "" "$spinner_status" # メッセージなしでスピナー停止
+        fi
         debug_log "DEBUG" "create_language_db_parallel: Task completed in ${elapsed_seconds} seconds. Overall Status: ${exit_status}"
     else
-        # スピナーが開始されていなかった場合 (フォールバック表示) (Original Logic)
          if [ "$exit_status" -eq 0 ]; then
-             # 秒数情報を含まない汎用メッセージに変更
-             printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_SUCCESS" "default=Translation completed successfully")")"
+             if [ "$total_lines" -gt 0 ]; then
+                : # 成功かつ翻訳行があった場合は、ここでは何も表示しない
+             else
+                printf "%s\n" "$(color green "$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")")"
+             fi
          elif [ "$exit_status" -eq 2 ]; then
              printf "%s\n" "$(color yellow "$(get_message "MSG_TRANSLATION_PARTIAL" "s=$elapsed_seconds" "default=Translation partially completed (${elapsed_seconds}s)")")"
          else
              printf "%s\n" "$(color red "$(get_message "MSG_TRANSLATION_FAILED" "s=$elapsed_seconds" "default=Translation process failed after ${elapsed_seconds}s.")")"
          fi
     fi
-
-    # 最終的な終了ステータスを返す (Original Logic)
     return "$exit_status"
 }
 
@@ -881,6 +861,7 @@ translate_package_description() {
 
 # 翻訳情報を表示する関数
 display_detected_translation() {
+    local elapsed_seconds_for_creation="$1" # 翻訳処理時間を受け取る
     local lang_code=""
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang_code=$(cat "${CACHE_DIR}/message.ch")
@@ -892,7 +873,12 @@ display_detected_translation() {
     local source_db="message_${source_lang}.db"
     local target_db="message_${lang_code}.db" # This might not exist if creation failed
 
-    debug_log "DEBUG" "Displaying translation information for language code: ${lang_code}"
+    debug_log "DEBUG" "display_detected_translation: Called with elapsed_seconds: '$elapsed_seconds_for_creation', lang_code: '$lang_code'"
+
+    # 最初に翻訳処理時間を表示 (MSG_TRANSLATING_CREATED を使用)
+    if [ -n "$elapsed_seconds_for_creation" ] && [ "$elapsed_seconds_for_creation" -ne 0 ]; then
+        printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATING_CREATED" "s=$elapsed_seconds_for_creation")")"
+    fi
 
     printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
     if [ -f "${BASE_DIR}/${target_db}" ]; then
@@ -906,6 +892,7 @@ display_detected_translation() {
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 }
 
+
 # @FUNCTION: translate_main
 # @DESCRIPTION: Entry point for translation. Reads target language from cache (message.ch),
 #               checks if the translation DB already exists (simple file existence check).
@@ -916,7 +903,6 @@ display_detected_translation() {
 #          propagates create_language_db_parallel exit code on failure.
 translate_main() {
     # --- Initialization ---
-    # (Wget detection logic remains the same)
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
         debug_log "DEBUG" "translate_main: Wget capability detected: ${WGET_CAPABILITY_DETECTED}"
@@ -944,25 +930,19 @@ translate_main() {
     # 2. Check if it's the default language
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
-        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed or display from this function."
-        # Default language: display nothing and exit successfully
+        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
         return 0
     fi
 
     debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
-
     # 3. Check if target DB exists (Simple file existence check)
     target_db="${BASE_DIR}/message_${lang_code}.db"
     debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
 
     if [ -f "$target_db" ]; then
-        debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Assuming valid and displaying info."
-        # If file exists, display info and return success
-        # 既存DB表示時は処理時間0を渡すか、あるいは引数なしで呼び出すよう display_detected_translation を調整する。
-        # ここでは処理時間情報がないため、空文字列を渡すか、引数を渡さない古い呼び出し方を想定。
-        # → display_detected_translation側で引数の有無をチェックするように修正
+        debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Displaying info."
         display_detected_translation "" # 既存DBの場合は処理時間なし
-        return 0 # <<< Early return: DB exists
+        return 0 
     else
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
@@ -988,7 +968,7 @@ translate_main() {
     fi
     debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
 
-    # 5. Determine API URL and Domain Name (for context, currently unused in called functions)
+    # 5. Determine API URL and Domain Name (for context)
     local api_endpoint_url=""
     local domain_name=""
     case "$selected_func" in
@@ -998,30 +978,22 @@ translate_main() {
     esac
     debug_log "DEBUG" "translate_main: Using API info context: URL='${api_endpoint_url}', Domain='${domain_name}'"
 
-
-    # 6. Call create_language_db_parallel (MODIFIED)
+    # 6. Call create_language_db_parallel
     debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
-    create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code" # MODIFIED: Call the parallel control function
+    create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code"
     db_creation_result=$?
-    debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}"
+    debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}. LAST_ELAPSED_SECONDS_TRANSLATION: '$LAST_ELAPSED_SECONDS_TRANSLATION'"
 
     # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
-        debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}."
-        # Display info only after successful creation, passing the stored elapsed time
+        debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}. Calling display_detected_translation."
         display_detected_translation "$LAST_ELAPSED_SECONDS_TRANSLATION"
-        return 0 # Success
+        return 0 
     else
-        debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result})."
-        # Propagate specific create_language_db errors if possible (e.g., base DB missing),
-        # otherwise show general failure. create_language_db_parallel returns 0 or 2.
-        # create_language_db returns 1 if base DB missing. Parallel wrapper doesn't pass this up.
-        # So we only check for the overall failure (status 2) from the parallel function.
-        if [ "$db_creation_result" -eq 2 ]; then
+        debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result}). Not calling display_detected_translation."
+        if [ "$db_creation_result" -eq 2 ]; then # 部分的成功の場合のみメッセージ表示
              printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
-        # else: Could add handling for other potential non-zero codes if the parallel function changes
         fi
-        # Do not display info on failure
-        return "$db_creation_result" # Propagate error code (likely 2 from parallel func)
+        return "$db_creation_result"
     fi
 }
