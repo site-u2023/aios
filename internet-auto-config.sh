@@ -106,6 +106,7 @@ internet_auto_config_main() {
     asn=$(cat "${CACHE_DIR}/isp_as.ch")
     if [ -z "$asn" ]; then
         debug_log "DEBUG" "Failed to retrieve AS number from cache, or cache file is empty."
+        # 同上
         echo "unknown||"
         return 1
     fi
@@ -150,7 +151,13 @@ internet_auto_config_main() {
             debug_log "DEBUG" "No command string defined for connection type '$connection_type' with key '$provider_key'."
         fi
     else 
-        printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$display_isp_name")")"
+        local unknown_display_name_for_msg="$display_isp_name"
+        if [ "$unknown_display_name_for_msg" = "Unknown Provider" ] && [ -n "$asn" ]; then
+            unknown_display_name_for_msg="AS$asn"
+        elif [ -z "$unknown_display_name_for_msg" ]; then
+             unknown_display_name_for_msg="N/A"
+        fi
+        printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$unknown_display_name_for_msg")")"
         exit_code=1
     fi
 
