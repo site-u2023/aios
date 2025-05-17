@@ -1,6 +1,6 @@
 #!/bin/ash
 
-# Based on script from https://github.com/missing233/map-e, with appreciation.
+# Based on script from https://ipv4.web.fc2.com/map-e.html, with appreciation.
 
 SCRIPT_VERSION="2025.05.12-05-00"
 
@@ -1432,7 +1432,7 @@ display_mape() {
     fi
 
     printf "\n"
-    printf "%s\n" "$(color magenta "(config-softwire)# missing233")"
+    printf "%s\n" "$(color white "Powered by config-softwire"
     printf "\n"
     printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
