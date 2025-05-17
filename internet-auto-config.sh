@@ -135,18 +135,10 @@ internet_auto_config_main() {
                 final_display_name_for_msg="Unknown Provider"
              fi
         fi
-        if command -v get_message >/dev/null 2>&1 && command -v color >/dev/null 2>&1; then
-            printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name_for_msg" tp="$connection_type")")"
-        else
-            debug_log "INFO" "get_message or color command not available for result display."
-        fi
+        printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name_for_msg" tp="$connection_type")")"
         exit_code=0
     else
-        if command -v get_message >/dev/null 2>&1 && command -v color >/dev/null 2>&1; then
-            printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$display_isp_name")")"
-        else
-            debug_log "WARN" "get_message or color command not available for 'unknown' type display."
-        fi
+        printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$display_isp_name")")"
         exit_code=1
     fi
 
