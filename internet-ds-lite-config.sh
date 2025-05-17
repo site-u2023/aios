@@ -362,7 +362,7 @@ internet_dslite_main() {
     fi
     
     if ! install_package dslite hidden; then
-        debug_log "DEBUG" "internet_map_main: Failed to install 'dslite' package or it was already installed. Continuing."
+        debug_log "DEBUG" "internet_dslite_main: Failed to install 'dslite' package or it was already installed. Continuing."
         return 1
     fi
 
@@ -375,7 +375,10 @@ internet_dslite_main() {
         return 1
     fi
 
-    display_dslite
+    if ! display_dslite; then
+        debug_log "DEBUG" "internet_dslite_main: display_dslite function failed. Aborting reboot."
+        return 1
+    fi
     
     debug_log "DEBUG" "internet_dslite_main: Configuration complete. Rebooting system."
     reboot
