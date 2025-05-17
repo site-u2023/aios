@@ -1432,7 +1432,7 @@ display_mape() {
     fi
 
     printf "\n"
-    printf "%s\n" "$(color white "Powered by config-softwire"
+    printf "%s\n" "$(color white "Powered by config-softwire")"
     printf "\n"
     printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
