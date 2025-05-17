@@ -164,3 +164,5 @@ internet_auto_config_main() {
     echo "${connection_type}|${provider_key}|${display_isp_name}" 
     return $exit_code
 }
+
+internet_auto_config_main
