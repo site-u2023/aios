@@ -213,6 +213,7 @@ replace_dslite_sh() {
 }
 
 config_dslite() {
+    local DSLITE="ds_lite"
     local ZONE_NO='1'
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
@@ -225,7 +226,7 @@ config_dslite() {
     cp /etc/config/dhcp /etc/config/dhcp.dslite.bak 2>/dev/null
     cp /etc/config/firewall /etc/config/firewall.dslite.bak 2>/dev/null
 
-    debug_log "DEBUG" "config_dslite: Applying UCI settings. AFTR: '$DSLITE_AFTR_IP', FW Zone Index: '${ZONE_NO}'"
+    debug_log "DEBUG" "config_dslite: Applying UCI settings for network interface '${DSLITE}' and dhcp. AFTR: '$DSLITE_AFTR_IP'."
 
     uci -q set network.wan.auto='0'
     uci -q set dhcp.lan.ra='relay'
@@ -241,36 +242,33 @@ config_dslite() {
     uci -q set dhcp.wan6.dhcpv6='relay'
     uci -q set dhcp.wan6.ndp='relay'
 
-    uci -q delete network.ds_lite
-    uci -q set network.ds_lite=interface
-    uci -q set network.ds_lite.proto='dslite'
-    uci -q set network.ds_lite.peeraddr="$DSLITE_AFTR_IP"
-    uci -q set network.ds_lite.mtu='1460'
+    debug_log "DEBUG" "config_dslite: Deleting and recreating network interface '${DSLITE}'."
+    uci -q delete network.${DSLITE}
+    uci -q set network.${DSLITE}=interface
+    uci -q set network.${DSLITE}.proto='dslite'
+    uci -q set network.${DSLITE}.peeraddr="$DSLITE_AFTR_IP"
+    uci -q set network.${DSLITE}.mtu='1460'
 
-    local current_networks
-    current_networks=$(uci -q get firewall.@zone["${ZONE_NO}"].network 2>/dev/null)
-    local found_in_fw=0
-    local net_fw=""
-    for net_fw in $current_networks; do
-        if [ "$net_fw" = "ds_lite" ]; then
-            found_in_fw=1
-            break
-        fi
-    done
-    if [ "$found_in_fw" -eq 0 ]; then
-        uci -q add_list firewall.@zone["${ZONE_NO}"].network='ds_lite'
-    fi
+    debug_log "DEBUG" "config_dslite: Applying firewall UCI settings for interface '${DSLITE}' in zone index '${ZONE_NO}'."
+
+    debug_log "DEBUG" "config_dslite: Attempting to remove '${DSLITE}' from firewall zone '${ZONE_NO}' network list."
+    uci -q del_list firewall.@zone["${ZONE_NO}"].network="${DSLITE}"
+
+    debug_log "DEBUG" "config_dslite: Adding '${DSLITE}' to firewall zone '${ZONE_NO}' network list."
+    uci -q add_list firewall.@zone["${ZONE_NO}"].network="${DSLITE}"
+    
+    debug_log "DEBUG" "config_dslite: Setting masq='1' and mtu_fix='1' for firewall zone '${ZONE_NO}'."
     uci -q set firewall.@zone["${ZONE_NO}"].masq='1'
     uci -q set firewall.@zone["${ZONE_NO}"].mtu_fix='1'
 
-
     local commit_failed=0
+    debug_log "DEBUG" "config_dslite: Committing UCI changes for dhcp, network, and firewall."
     uci -q commit dhcp || commit_failed=1
     uci -q commit network || commit_failed=1
     uci -q commit firewall || commit_failed=1
 
     if [ "$commit_failed" -eq 1 ]; then
-        debug_log "DEBUG" "config_dslite: Failed to commit one or more UCI sections."
+        debug_log "ERROR" "config_dslite: Failed to commit one or more UCI sections."
         return 1
     fi
 
