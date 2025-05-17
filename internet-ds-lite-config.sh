@@ -146,7 +146,6 @@ determine_dslite() {
     local aftr_info_from_db="$DETECTED_AFTR_INFO"
     local provider_display_name_from_db="$DETECTED_PROVIDER_DISPLAY_NAME"
     local provider_key="$DETECTED_PROVIDER_KEY"
-    local exit_status=0
 
     DSLITE_AFTR_IP=""
     DSLITE_DISPLAY_NAME="$provider_display_name_from_db"
@@ -155,45 +154,37 @@ determine_dslite() {
 
     if [ -z "$provider_key" ]; then
         debug_log "DEBUG" "determine_dslite: Provider key (from global) is empty."
-        exit_status=1
+        return 1
     fi
 
-    if [ "$exit_status" -eq 0 ] && [ -z "$aftr_info_from_db" ]; then
+    if [ -z "$aftr_info_from_db" ]; then
         debug_log "DEBUG" "determine_dslite: AFTR information (from global) is empty for Provider Key '$provider_key'."
-        exit_status=1
+        return 1
     fi
 
-    if [ "$exit_status" -eq 0 ]; then
-        if [ "$provider_key" = "transix" ]; then
+    if [ "$provider_key" = "transix" ]; then
+        DSLITE_AFTR_IP="$aftr_info_from_db"
+        debug_log "DEBUG" "determine_dslite: [Transix] Using AFTR IP determined by get_dslite: $DSLITE_AFTR_IP, Display: $DSLITE_DISPLAY_NAME"
+    else
+        if is_ipv6_address_dslite "$aftr_info_from_db"; then
             DSLITE_AFTR_IP="$aftr_info_from_db"
-            debug_log "DEBUG" "determine_dslite: [Transix] Using AFTR IP determined by get_dslite: $DSLITE_AFTR_IP, Display: $DSLITE_DISPLAY_NAME"
         else
-            if is_ipv6_address_dslite "$aftr_info_from_db"; then
-                DSLITE_AFTR_IP="$aftr_info_from_db"
-            else
-                DSLITE_AFTR_IP=$(get_aaaa_record_dslite "$aftr_info_from_db")
-                if [ -z "$DSLITE_AFTR_IP" ]; then
-                    debug_log "DEBUG" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
-                    exit_status=1
-                fi
+            DSLITE_AFTR_IP=$(get_aaaa_record_dslite "$aftr_info_from_db")
+            if [ -z "$DSLITE_AFTR_IP" ]; then
+                debug_log "DEBUG" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
+                return 1
             fi
-
-            if [ "$exit_status" -eq 0 ]; then
-                if ! check_ipv6_reachability_dslite "$DSLITE_AFTR_IP"; then
-                    debug_log "DEBUG" "determine_dslite: AFTR IP '$DSLITE_AFTR_IP' for '$provider_key' is not reachable."
-                    exit_status=1
-                fi
-            fi
+        fi
+        
+        if ! check_ipv6_reachability_dslite "$DSLITE_AFTR_IP"; then
+            debug_log "DEBUG" "determine_dslite: AFTR IP '$DSLITE_AFTR_IP' for '$provider_key' is not reachable."
+            DSLITE_AFTR_IP=""
+            return 1
         fi
     fi
 
-    if [ "$exit_status" -eq 0 ] && [ -z "$DSLITE_AFTR_IP" ]; then
-        debug_log "DEBUG" "determine_dslite: Final DSLITE_AFTR_IP could not be determined for Provider Key '$provider_key' (e.g. Transix resolution failed in get_dslite)."
-        exit_status=1
-    fi
-
-    if [ "$exit_status" -ne 0 ]; then
-        printf "\n%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
+    if [ -z "$DSLITE_AFTR_IP" ]; then
+        debug_log "DEBUG" "determine_dslite: Final DSLITE_AFTR_IP could not be determined for Provider Key '$provider_key'."
         return 1
     fi
 
