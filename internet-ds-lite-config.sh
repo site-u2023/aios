@@ -195,7 +195,6 @@ display_dslite() {
     printf "  %-25s %s\n" "AFTR (Border Relay):" "$DSLITE_AFTR_IP"
     printf "  %-25s %s\n" "Interface MTU (expected):" "1460"
     
-    printf "%s\n" "$(color green "$(get_message MSG_DSLITE_APPLY_ISP "sp=$DSLITE_DISPLAY_NAME")")"
     printf "%s\n" "$(color green "$(get_message MSG_DSLITE_APPLY_SUCCES)")"
     read -r -n 1 -s
     
