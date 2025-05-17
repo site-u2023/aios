@@ -8,6 +8,88 @@ DSLITE_DISPLAY_NAME=""
 DSLITE_PROTO_SCRIPT_PATH="/lib/netifd/proto/dslite.sh"
 DSLITE_PROTO_SCRIPT_BACKUP_PATH="${DSLITE_PROTO_SCRIPT_PATH}.bak"
 
+DETECTED_AFTR_INFO=""
+DETECTED_PROVIDER_DISPLAY_NAME=""
+DETECTED_PROVIDER_KEY=""
+
+get_dslite() {
+    local wan_ifname="$1"
+    local lease_file="/tmp/hosts/odhcp6c"
+    local aftr_name_option_code="24"
+    local raw_aftr_name=""
+
+    debug_log "DEBUG" "get_dslite: Starting AFTR detection for interface '$wan_ifname'."
+
+    DETECTED_AFTR_INFO=""
+    DETECTED_PROVIDER_DISPLAY_NAME=""
+    DETECTED_PROVIDER_KEY=""
+
+    if [ -z "$wan_ifname" ]; then
+        debug_log "ERROR" "get_dslite: WAN interface name is not provided."
+        return 1
+    fi
+
+    if [ ! -f "$lease_file" ]; then
+        debug_log "ERROR" "get_dslite: Lease file '$lease_file' not found."
+        return 1
+    fi
+
+    raw_aftr_name=$(grep "^${wan_ifname} .*aftr-name" "$lease_file" | awk '{print $NF}' 2>/dev/null)
+
+    if [ -z "$raw_aftr_name" ]; then
+        local hex_encoded_aftr_name
+        hex_encoded_aftr_name=$(grep "^${wan_ifname} ${aftr_name_option_code} " "$lease_file" | awk '{print $3}' 2>/dev/null)
+
+        if [ -n "$hex_encoded_aftr_name" ]; then
+            debug_log "DEBUG" "get_dslite: Found HEX encoded AFTR name '$hex_encoded_aftr_name'. Decoding is required."
+            debug_log "ERROR" "get_dslite: HEX encoded AFTR name found, but decoding function is not implemented."
+            raw_aftr_name=""
+        fi
+    fi
+
+    if [ -z "$raw_aftr_name" ]; then
+        debug_log "ERROR" "get_dslite: Could not retrieve AFTR name from lease file for interface '$wan_ifname'."
+        return 1
+    fi
+
+    debug_log "INFO" "get_dslite: Retrieved raw AFTR name: '$raw_aftr_name' for interface '$wan_ifname'."
+
+    case "$raw_aftr_name" in
+        "gw.transix.jp")
+            DETECTED_AFTR_INFO="$raw_aftr_name"
+            DETECTED_PROVIDER_DISPLAY_NAME="Transix"
+            DETECTED_PROVIDER_KEY="transix"
+            debug_log "INFO" "get_dslite: Detected provider as Transix based on AFTR name '$raw_aftr_name'."
+            ;;
+        "dgw.xpass.jp")
+            DETECTED_AFTR_INFO="$raw_aftr_name"
+            DETECTED_PROVIDER_DISPLAY_NAME="Cross Path"
+            DETECTED_PROVIDER_KEY="cross_path"
+            debug_log "INFO" "get_dslite: Detected provider as Cross Path based on AFTR name '$raw_aftr_name'."
+            ;;
+        "gw.example.v6option.ne.jp")
+            DETECTED_AFTR_INFO="$raw_aftr_name"
+            DETECTED_PROVIDER_DISPLAY_NAME="v6 Option"
+            DETECTED_PROVIDER_KEY="v6option"
+            debug_log "INFO" "get_dslite: Detected provider as v6 Option based on AFTR name '$raw_aftr_name'."
+            ;;
+        *)
+            DETECTED_AFTR_INFO="$raw_aftr_name"
+            DETECTED_PROVIDER_DISPLAY_NAME="Unknown (AFTR: $raw_aftr_name)"
+            DETECTED_PROVIDER_KEY="unknown"
+            debug_log "WARNING" "get_dslite: Unknown provider for AFTR name '$raw_aftr_name'. Using raw AFTR info."
+            ;;
+    esac
+
+    if [ -z "$DETECTED_PROVIDER_KEY" ] || [ "$DETECTED_PROVIDER_KEY" = "unknown" ]; then
+        debug_log "ERROR" "get_dslite: Failed to determine a known provider for AFTR '$raw_aftr_name'."
+        return 1
+    fi
+    
+    debug_log "DEBUG" "get_dslite: Detection complete. Key: '$DETECTED_PROVIDER_KEY', Display: '$DETECTED_PROVIDER_DISPLAY_NAME', AFTR Info: '$DETECTED_AFTR_INFO'."
+    return 0
+}
+
 mold_dslite() {
     local aftr_info_from_db="$1"
     local provider_display_name_from_db="$2"
