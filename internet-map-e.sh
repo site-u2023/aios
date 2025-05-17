@@ -1343,6 +1343,7 @@ replace_map_sh() {
 # MAP-E設定情報を表示する関数
 display_mape() {
 
+    printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
     printf "  IPv6 Prefix: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     printf "  CE IPv6 Address: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
