@@ -134,7 +134,7 @@ get_dslite() {
     fi
 
     if [ "$exit_status" -ne 0 ]; then
-        printf "\n%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
+        printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
         return 1
     fi
 
