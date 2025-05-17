@@ -1553,8 +1553,11 @@ internet_map_main() {
         debug_log "DEBUG" "internet_map_main: config_mape function failed. UCI settings might be inconsistent."
         return 1
     fi
-    
-    display_mape
+
+    if ! display_mape; then
+        debug_log "DEBUG" "internet_map_main: display_mape function failed. Aborting reboot."
+        return 1
+    fi
     
     # 再起動
     debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
