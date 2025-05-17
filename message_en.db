@@ -43,7 +43,7 @@ en|MENU_INTERNET_RESTORE=Restore
 # internet-auto-config.sh
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {sp} ({tp})
 en|MSG_AUTO_CONFIG_CONFIRM=Apply these settings {yn}{;}
-en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as} unsupported{:} Manual setup required
+en|MSG_AUTO_CONFIG_UNKNOWN=ASN {as}{:} Manual setup required
 
 # common-information.sh
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
