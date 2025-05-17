@@ -44,19 +44,19 @@ get_provider_data_by_as() {
     # --- Provider Database (Here Document) ---
     # Format: AS_NUM|INTERNAL_KEY|DISPLAY_NAME|CONNECTION_TYPE|AFTR_ADDRESS
     # AFTR_ADDRESS is empty for MAP-E. DISPLAY_NAME does NOT need quotes.
+    # For DS-Lite, AFTR_ADDRESS can be a domain name or an IP address.
     local provider_db=$(cat <<-'EOF'
 4713|ocn|OCN Virtual Connect|map-e|
 2518|v6plus|v6 Plus|map-e|
 2519|transix|transix|ds-lite|gw.transix.jp
 2527|cross|Cross Pass|ds-lite|2001:f60:0:200::1:1
 4737|v6connect|v6 Connect|ds-lite|gw.v6connect.net
+2515|nuro|NURO Hikari|map-e|
 EOF
 )
     # --- End of Database ---
 
-    # Search for the AS number in the database (first column match using pipe delimiter)
-    # Use grep and head -n 1 to find the first matching line
-    result=$(echo "$provider_db" | grep "^${search_asn}|" | head -n 1) # Use pipe in grep
+    result=$(echo "$provider_db" | grep "^${search_asn}|" | head -n 1)
 
     if [ -n "$result" ]; then
         debug_log "DEBUG" "get_provider_data_by_as: Found data for ASN $search_asn: $result"
@@ -116,187 +116,206 @@ determine_connection_by_as() {
 }
 
 internet_auto_config_main() {
-    local network_status=""
     local asn=""
     local connection_info=""
     local connection_type=""
     local provider_key=""
-    local aftr_address=""
+    local aftr_address_from_db="" # AFTR from provider_db (domain or IP)
+    local display_isp_name=""     # Display name from provider_db, possibly updated
     local exit_code=0
 
     debug_log "DEBUG" "Starting automatic internet configuration process..."
 
     # --- 1. Prerequisite Checks & Downloads ---
     debug_log "DEBUG" "Checking prerequisites..."
+    print_section_title # Assumed to be available
 
-    print_section_title
-    
-    # Check for required cache files
     local ip_type_file="${CACHE_DIR}/ip_type.ch"
     if [ ! -f "$ip_type_file" ]; then
-        debug_log "DEBUG" "IP type cache file not found: ${ip_type_file}"
+        debug_log "ERROR" "IP type cache file not found: ${ip_type_file}"
         printf "%s\n" "$(color red "Error: Required cache file 'ip_type.ch' not found.")" >&2
         return 1
     fi
     if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/isp_as.ch"
+        debug_log "ERROR" "AS number cache file not found: ${CACHE_DIR}/isp_as.ch"
         printf "%s\n" "$(color red "Error: Required cache file 'isp_as.ch' not found.")" >&2
         return 1
     fi
 
     # Check and download dependent scripts if missing
+    # General MAP-E script
     if [ ! -f "$MAP_E_SCRIPT" ]; then
-        debug_log "DEBUG" "MAP-E script not found, attempting download..."
+        debug_log "INFO" "MAP-E script ($MAP_E_SCRIPT_NAME) not found, attempting download..."
         download "$MAP_E_SCRIPT_NAME" "chmod" "hidden"
         if [ ! -f "$MAP_E_SCRIPT" ]; then
-            debug_log "DEBUG" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME"
+            debug_log "ERROR" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME"
             printf "%s\n" "$(color red "Error: Failed to download required script '$MAP_E_SCRIPT_NAME'.")" >&2
-            return 1
+            return 1 # Essential for non-NURO MAP-E
         fi
     fi
+    # NURO MAP-E script
+    if [ ! -f "$MAP_E_NURO_SCRIPT" ]; then
+        debug_log "INFO" "NURO MAP-E script ($MAP_E_NURO_SCRIPT_NAME) not found, attempting download..."
+        download "$MAP_E_NURO_SCRIPT_NAME" "chmod" "hidden"
+        if [ ! -f "$MAP_E_NURO_SCRIPT" ]; then
+            debug_log "ERROR" "Failed to download NURO MAP-E script: $MAP_E_NURO_SCRIPT_NAME"
+            printf "%s\n" "$(color red "Error: Failed to download required script '$MAP_E_NURO_SCRIPT_NAME'.")" >&2
+            # This might only be an error if provider_key is "nuro" later.
+            # For now, let's assume it's needed if we proceed with NURO.
+        fi
+    fi
+    # DS-Lite script
     if [ ! -f "$DS_LITE_SCRIPT" ]; then
-        debug_log "DEBUG" "DS-Lite script not found, attempting download..."
+        debug_log "INFO" "DS-Lite script ($DS_LITE_SCRIPT_NAME) not found, attempting download..."
         download "$DS_LITE_SCRIPT_NAME" "chmod" "hidden"
         if [ ! -f "$DS_LITE_SCRIPT" ]; then
-            debug_log "DEBUG" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME"
+            debug_log "ERROR" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME"
             printf "%s\n" "$(color red "Error: Failed to download required script '$DS_LITE_SCRIPT_NAME'.")" >&2
-            return 1
+            return 1 # Essential for DS-Lite
         fi
     fi
 
     # --- 2. Network Connectivity Check (ip_type.ch利用) ---
-    debug_log "DEBUG" "Checking network connectivity..."
-    # ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-    # IPタイプによる判定・ブロックをコメントアウト（機能停止）
-    # network_status=$(cat "$ip_type_file" 2>/dev/null)
-    # if [ -z "$network_status" ] || [ "$network_status" = "unknown" ]; then
-    #     debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
-    #     printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2
-    #     return 1
-    # fi
-    # case "$network_status" in
-    #     v6|v4v6)
-    #         debug_log "DEBUG" "IPv6 connectivity confirmed ($network_status)."
-    #         ;;
-    #     *)
-    #         debug_log "DEBUG" "IPv6 connectivity not available ($network_status). Cannot proceed with IPoE configuration."
-    #         printf "%s\n" "$(color red "Error: IPv6 connectivity not available. Cannot proceed with IPoE auto-configuration.")" >&2
-    #         return 1
-    #         ;;
-    # esac
-    # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+    # (Commented out as per original script state)
+    # ...
 
     # --- 3. Get AS Number ---
     debug_log "DEBUG" "Retrieving AS number..."
     asn=$(cat "${CACHE_DIR}/isp_as.ch")
     if [ -z "$asn" ]; then
-        debug_log "DEBUG" "Failed to retrieve AS number from cache."
+        debug_log "ERROR" "Failed to retrieve AS number from cache."
         printf "%s\n" "$(color red "Error: Could not retrieve AS number for automatic detection.")" >&2
         return 1
     fi
-    debug_log "DEBUG" "Detected AS Number: $asn"
+    debug_log "INFO" "Detected AS Number: $asn"
 
     # --- 4. Determine Connection Type ---
     debug_log "DEBUG" "Determining connection type using ASN..."
     connection_info=$(determine_connection_by_as "$asn")
     connection_type=$(echo "$connection_info" | cut -d'|' -f1)
     provider_key=$(echo "$connection_info" | cut -d'|' -f2)
-    aftr_address=$(echo "$connection_info" | cut -d'|' -f3)
+    aftr_address_from_db=$(echo "$connection_info" | cut -d'|' -f3)
+    display_isp_name=$(echo "$connection_info" | cut -d'|' -f4)
 
-    debug_log "DEBUG" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR: $aftr_address"
+    debug_log "INFO" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR (from DB): $aftr_address_from_db, Display Name: $display_isp_name"
 
-    # --- 4a. Get Display Info and Confirm with User (Skip for 'unknown') ---
+    # --- 4a. Confirm with User (Skip for 'unknown') ---
     if [ "$connection_type" != "unknown" ]; then
-        local provider_data=""
-        local display_isp_name=""
-        local display_conn_type=""
-        local numeric_asn=$(echo "$asn" | sed 's/^AS//i')
-
-        provider_data=$(get_provider_data_by_as "$numeric_asn")
-        if [ $? -eq 0 ] && [ -n "$provider_data" ]; then
-            display_isp_name=$(echo "$provider_data" | cut -d'|' -f3)
-            display_conn_type=$(echo "$provider_data" | cut -d'|' -f4)
+        local final_display_name="$display_isp_name"
+        if [ -z "$final_display_name" ]; then
+            final_display_name="$provider_key"
         fi
 
-        if [ -z "$display_isp_name" ]; then
-            debug_log "DEBUG" "Could not get valid display info for ASN '$numeric_asn'. Using key/type as fallback."
-            display_isp_name="$provider_key"
-            display_conn_type="$connection_type"
-        fi
-
-        printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$display_isp_name" tp="$display_conn_type")")"
+        printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name" tp="$connection_type")")"
 
         local confirm_apply=1
         confirm "MSG_AUTO_CONFIG_CONFIRM"
         confirm_apply=$?
 
         if [ $confirm_apply -ne 0 ]; then
-            debug_log "DEBUG" "User declined to apply the automatically detected settings."
+            debug_log "INFO" "User declined to apply the automatically detected settings."
             return 0
         fi
-        debug_log "DEBUG" "User confirmed applying settings for $display_isp_name ($display_conn_type)."
+        debug_log "INFO" "User confirmed applying settings for $final_display_name ($connection_type)."
     fi
 
     # --- 5. Execute Configuration Based on Type ---
     case "$connection_type" in
         "map-e")
-            debug_log "DEBUG" "MAP-E connection confirmed. Sourcing MAP-E script..." # ★変更箇所: メッセージ修正
-            if . "$MAP_E_SCRIPT"; then
-                debug_log "DEBUG" "MAP-E script ($MAP_E_SCRIPT_NAME) sourced successfully." # ★変更箇所: メッセージ修正
-                if command -v internet_map_main >/dev/null 2>&1; then # ★変更箇所: internet_map_main 関数の存在確認
-                    debug_log "DEBUG" "Executing internet_map_main function from $MAP_E_SCRIPT_NAME" # ★変更箇所: 実行前ログ
-                    internet_map_main # ★変更箇所: internet_map_main 関数を明示的に呼び出す
-                    # internet_map_main 関数内で exit 0 が呼ばれるため、通常はこの後の処理には到達しない
+            if [ "$provider_key" = "nuro" ]; then
+                debug_log "DEBUG" "NURO MAP-E connection confirmed. Sourcing NURO MAP-E script..."
+                if [ ! -f "$MAP_E_NURO_SCRIPT" ]; then # Re-check if download failed earlier but user confirmed
+                    debug_log "ERROR" "NURO MAP-E script ($MAP_E_NURO_SCRIPT_NAME) is missing and required."
+                    printf "%s\n" "$(color red "Error: Required script '$MAP_E_NURO_SCRIPT_NAME' is missing.")" >&2
+                    exit_code=1
+                elif . "$MAP_E_NURO_SCRIPT"; then
+                    debug_log "DEBUG" "NURO MAP-E script ($MAP_E_NURO_SCRIPT_NAME) sourced successfully."
+                    if command -v internet_map_nuro_main >/dev/null 2>&1; then # NURO script specific main function
+                        debug_log "DEBUG" "Executing internet_map_nuro_main function from $MAP_E_NURO_SCRIPT_NAME"
+                        internet_map_nuro_main
+                    else
+                        debug_log "ERROR" "Function 'internet_map_nuro_main' not found in $MAP_E_NURO_SCRIPT_NAME."
+                        printf "%s\n" "$(color red "Error: Required function 'internet_map_nuro_main' not found in script '$MAP_E_NURO_SCRIPT_NAME'.")" >&2
+                        exit_code=1
+                    fi
                 else
-                    debug_log "DEBUG" "Function 'internet_map_main' not found in $MAP_E_SCRIPT_NAME." # ★変更箇所: エラーログ
-                    printf "%s\n" "$(color red "Error: Required function 'internet_map_main' not found in script '$MAP_E_SCRIPT_NAME'.")" >&2
+                    debug_log "ERROR" "Failed to source NURO MAP-E script: $MAP_E_NURO_SCRIPT_NAME"
+                    printf "%s\n" "$(color red "Error: Failed to load script '$MAP_E_NURO_SCRIPT_NAME'.")" >&2
                     exit_code=1
                 fi
-            else
-                debug_log "DEBUG" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME"
-                printf "%s\n" "$(color red "Error: Failed to load script '$MAP_E_SCRIPT_NAME'.")" >&2
-                exit_code=1 
+            else # Other MAP-E providers
+                debug_log "DEBUG" "Generic MAP-E connection confirmed. Sourcing MAP-E script..."
+                if [ ! -f "$MAP_E_SCRIPT" ]; then # Re-check
+                    debug_log "ERROR" "MAP-E script ($MAP_E_SCRIPT_NAME) is missing and required."
+                    printf "%s\n" "$(color red "Error: Required script '$MAP_E_SCRIPT_NAME' is missing.")" >&2
+                    exit_code=1
+                elif . "$MAP_E_SCRIPT"; then
+                    debug_log "DEBUG" "MAP-E script ($MAP_E_SCRIPT_NAME) sourced successfully."
+                    if command -v internet_map_main >/dev/null 2>&1; then
+                        debug_log "DEBUG" "Executing internet_map_main function from $MAP_E_SCRIPT_NAME"
+                        internet_map_main
+                    else
+                        debug_log "ERROR" "Function 'internet_map_main' not found in $MAP_E_SCRIPT_NAME."
+                        printf "%s\n" "$(color red "Error: Required function 'internet_map_main' not found in script '$MAP_E_SCRIPT_NAME'.")" >&2
+                        exit_code=1
+                    fi
+                else
+                    debug_log "ERROR" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME"
+                    printf "%s\n" "$(color red "Error: Failed to load script '$MAP_E_SCRIPT_NAME'.")" >&2
+                    exit_code=1
+                fi
             fi
             ;;
         "ds-lite")
             debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..."
-            if . "$DS_LITE_SCRIPT"; then
-                if command -v apply_dslite_settings >/dev/null 2>&1; then
-                    debug_log "DEBUG" "Executing apply_dslite_settings function from $DS_LITE_SCRIPT_NAME with AFTR: $aftr_address, Key: $provider_key"
-                    if apply_dslite_settings "$aftr_address" "$provider_key"; then
-                        debug_log "DEBUG" "DS-Lite script executed successfully."
+            if [ -z "$aftr_address_from_db" ] && [ "$provider_key" != "transix" ]; then
+                debug_log "ERROR" "AFTR address is empty for DS-Lite (Provider: $provider_key) and not Transix. Cannot proceed."
+                printf "%s\n" "$(color red "$(get_message "MSG_DSLITE_AFTR_EMPTY" pk="$provider_key")")" >&2
+                exit_code=1
+            fi
+
+            if [ "$exit_code" -eq 0 ]; then
+                if [ ! -f "$DS_LITE_SCRIPT" ]; then # Re-check
+                    debug_log "ERROR" "DS-Lite script ($DS_LITE_SCRIPT_NAME) is missing and required."
+                    printf "%s\n" "$(color red "Error: Required script '$DS_LITE_SCRIPT_NAME' is missing.")" >&2
+                    exit_code=1
+                elif . "$DS_LITE_SCRIPT"; then
+                    if command -v apply_dslite_settings >/dev/null 2>&1; then
+                        debug_log "INFO" "Executing apply_dslite_settings from $DS_LITE_SCRIPT_NAME with AFTR (from DB): $aftr_address_from_db, Provider Display: $display_isp_name, Provider Key: $provider_key"
+                        if apply_dslite_settings "$aftr_address_from_db" "$display_isp_name" "$provider_key"; then
+                            debug_log "INFO" "DS-Lite script executed successfully."
+                        else
+                            debug_log "ERROR" "DS-Lite script execution failed."
+                            exit_code=1
+                        fi
                     else
-                        debug_log "DEBUG" "DS-Lite script execution failed."
-                        printf "%s\n" "$(color red "Error: Execution of script '$DS_LITE_SCRIPT_NAME' failed.")" >&2
+                        debug_log "ERROR" "Function 'apply_dslite_settings' not found in $DS_LITE_SCRIPT_NAME."
+                        printf "%s\n" "$(color red "Error: Required function 'apply_dslite_settings' not found in script '$DS_LITE_SCRIPT_NAME'.")" >&2
                         exit_code=1
                     fi
                 else
-                    debug_log "DEBUG" "Function 'apply_dslite_settings' not found in $DS_LITE_SCRIPT_NAME."
-                    printf "%s\n" "$(color red "Error: Required function 'apply_dslite_settings' not found in script '$DS_LITE_SCRIPT_NAME'.")" >&2
+                    debug_log "ERROR" "Failed to source DS-Lite script: $DS_LITE_SCRIPT_NAME"
+                    printf "%s\n" "$(color red "Error: Failed to load script '$DS_LITE_SCRIPT_NAME'.")" >&2
                     exit_code=1
                 fi
-            else
-                debug_log "DEBUG" "Failed to source DS-Lite script: $DS_LITE_SCRIPT_NAME"
-                printf "%s\n" "$(color red "Error: Failed to load script '$DS_LITE_SCRIPT_NAME'.")" >&2
-                exit_code=1
             fi
             ;;
         "unknown")
-            debug_log "DEBUG" "Could not automatically determine the IPoE connection type for ASN $asn."
+            debug_log "WARN" "Could not automatically determine the IPoE connection type for ASN $asn."
             printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn")")"
-            exit_code=1 
+            exit_code=1
             ;;
         *)
-            debug_log "DEBUG" "Unexpected connection type returned: $connection_type"
+            debug_log "ERROR" "Unexpected connection type returned: $connection_type"
             printf "%s\n" "$(color red "Error: Unexpected value encountered: $connection_type")" >&2
-            exit_code=1 
+            exit_code=1
             ;;
     esac
 
     if [ "$exit_code" -eq 0 ]; then
-        debug_log "DEBUG" "Automatic internet configuration process completed or handed over to a sub-script that exited."
+        debug_log "INFO" "Automatic internet configuration process completed or handed over to a sub-script."
     else
-        debug_log "DEBUG" "Automatic internet configuration process finished with errors or was unable to complete."
+        debug_log "ERROR" "Automatic internet configuration process finished with errors."
     fi
 
     return $exit_code
