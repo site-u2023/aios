@@ -48,7 +48,7 @@ get_provider_data_by_as() {
     fi
 }
 
-determine_connection_by_as() {
+determine_connection_as() {
     local input_asn="$1"
     local numeric_asn=""
     local provider_data=""
@@ -117,7 +117,7 @@ internet_auto_config_main() {
     debug_log "INFO" "Detected AS Number: $asn"
 
     debug_log "DEBUG" "Determining connection type using ASN..."
-    connection_info=$(determine_connection_by_as "$asn")
+    connection_info=$(determine_connection_as "$asn")
     
     connection_type=$(echo "$connection_info" | cut -d'|' -f1)
     provider_key=$(echo "$connection_info" | cut -d'|' -f2)
