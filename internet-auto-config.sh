@@ -163,7 +163,7 @@ internet_auto_config_main() {
         elif [ -z "$unknown_display_name_for_msg" ]; then
              unknown_display_name_for_msg="N/A"
         fi
-        printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$unknown_display_name_for_msg")")"
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" a="$asn" sp="$unknown_display_name_for_msg")")"
         exit_code=1
     fi
 
