@@ -16,7 +16,7 @@ provider_data_definitions() {
 
 add_provider_record() {
     if [ -n "$1" ]; then
-        PROVIDER_DATABASE_CONTENT="${PROVIDER_DATABASE_CONTENT}$1"$'\n'
+        PROVIDER_DATABASE_CONTENT="${PROVIDER_DATABASE_CONTENT}${1}
     fi
 }
 
