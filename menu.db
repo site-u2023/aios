@@ -25,7 +25,7 @@ MENU_INTERNET_MAPE download "internet-map-e.sh" "chmod" "load"; internet_map_mai
 MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
 
 [MENU_INTERNET_DSLITE]
-MENU_DSLITE_AUTO download "internet-ds-lite-config.sh" "chmod" "load"; auto_detect_and_apply
+MENU_DSLITE_AUTO download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main
 # MENU_DSLITE_MANUAL selector MENU_INTERNET_DSLITE_MANUAL
 MENU_INTERNET_RESTORE download "internet-ds-lite-config.sh" "chmod" "load"; restore_dslite
 
