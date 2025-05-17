@@ -183,10 +183,10 @@ config_dslite() {
 }
 
 display_dslite() {
-    debug_log "DEBUG" "display_dslite: Displaying DS-Lite configuration summary."
+    debug_log "DEBUG" "display_dslite: Displaying DS-Lite configuration summary and status."
 
     if [ -z "$DSLITE_AFTR_IP" ] || [ -z "$DSLITE_DISPLAY_NAME" ]; then
-        printf "\n%s\n" "$(color yellow "DS-Lite information is not fully available to display.")"
+        printf "\n%s\n" "$(color red "$(get_message MSG_DSLITE_AUTO_DETECT_FAILED)")"
         return 1
     fi
 
@@ -195,11 +195,14 @@ display_dslite() {
     printf "  %-25s %s\n" "AFTR (Border Relay):" "$DSLITE_AFTR_IP"
     printf "  %-25s %s\n" "Interface MTU (expected):" "1460"
     
+    printf "%s\n" "$(color green "$(get_message MSG_DSLITE_APPLY_ISP "sp=$DSLITE_DISPLAY_NAME")")"
+    printf "%s\n" "$(color green "$(get_message MSG_DSLITE_APPLY_SUCCES)")"
+    read -r -n 1 -s
+    
     return 0
 }
 
 restore_dslite_settings() {
-    local proto_script="/lib/netifd/proto/dslite.sh"
     local msg_prefix=""
 
     debug_log "DEBUG" "Restoring DS-Lite settings from backups."
@@ -210,6 +213,7 @@ restore_dslite_settings() {
     local file_base
     local original_file
     local backup_file
+    local all_restored_successfully=1
 
     for file_base in $files_to_restore; do
         original_file="${config_dir}/${file_base}"
@@ -217,26 +221,35 @@ restore_dslite_settings() {
         if [ -f "$backup_file" ]; then
             if cp "$backup_file" "$original_file"; then
                 rm "$backup_file"
+                debug_log "DEBUG" "Restored $original_file from $backup_file."
+            else
+                debug_log "ERROR" "Failed to restore $original_file from $backup_file."
+                all_restored_successfully=0
             fi
+        else
+            debug_log "DEBUG" "Backup $backup_file not found for $original_file. No action taken for this file."
         fi
     done
 
-    if [ -f "$PROTO_BACKUP" ]; then
-        if cp "$PROTO_BACKUP" "$proto_script"; then
-            rm "$PROTO_BACKUP"
+    if [ -f "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" ]; then
+        if cp "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" "$DSLITE_PROTO_SCRIPT_PATH"; then
+            rm "$DSLITE_PROTO_SCRIPT_BACKUP_PATH"
+            debug_log "DEBUG" "Restored $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
+        else
+            debug_log "ERROR" "Failed to restore $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
+            all_restored_successfully=0
         fi
+    else
+        debug_log "DEBUG" "Backup $DSLITE_PROTO_SCRIPT_BACKUP_PATH not found for $DSLITE_PROTO_SCRIPT_PATH. No action taken for this file."
     fi
 
-    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)"
-    msg_prefix=$(color blue "- ") 
-    local confirm_reboot=1
-    confirm "MSG_CONFIRM_REBOOT"
-    confirm_reboot=$?
-    if [ $confirm_reboot -eq 0 ]; then
-        debug_log "DEBUG" "User confirmed reboot. Rebooting system."
-        reboot; exit 0
+    if [ "$all_restored_successfully" -eq 1 ]; then
+        printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
+    else
+        debug_log "ERROR" "One or more files may not have been restored successfully. Please check logs."
     fi
 
+    debug_log "DEBUG" "DS-Lite settings restoration process completed."
     return 0
 }
 
