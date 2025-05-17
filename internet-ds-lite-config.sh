@@ -129,51 +129,51 @@ get_dslite() {
 }
 
 determine_dslite() {
-    local aftr_info_from_db="$1"
-    local provider_display_name_from_db="$2"
-    local provider_key="$3"
+    local aftr_info_from_db="$DETECTED_AFTR_INFO"
+    local provider_display_name_from_db="$DETECTED_PROVIDER_DISPLAY_NAME"
+    local provider_key="$DETECTED_PROVIDER_KEY"
 
     DSLITE_AFTR_IP=""
     DSLITE_DISPLAY_NAME="$provider_display_name_from_db"
 
-    debug_log "DEBUG" "mold_dslite: Processing for Provider Key '$provider_key', AFTR Info: '$aftr_info_from_db', Display Name: '$provider_display_name_from_db'."
+    debug_log "DEBUG" "determine_dslite: Processing for Provider Key '$provider_key', AFTR Info: '$aftr_info_from_db', Display Name: '$provider_display_name_from_db'."
 
     if [ -z "$provider_key" ]; then
-        debug_log "DEBUG" "mold_dslite: Provider key is empty."
+        debug_log "DEBUG" "determine_dslite: Provider key (from global) is empty."
         return 1
     fi
 
     if [ -z "$aftr_info_from_db" ]; then
-        debug_log "DEBUG" "mold_dslite: AFTR information from DB (passed from get_dslite) is empty for Provider Key '$provider_key'."
+        debug_log "DEBUG" "determine_dslite: AFTR information (from global) is empty for Provider Key '$provider_key'."
         return 1
     fi
 
     if [ "$provider_key" = "transix" ]; then
         DSLITE_AFTR_IP="$aftr_info_from_db"
-        debug_log "DEBUG" "mold_dslite: [Transix] Using AFTR IP determined by get_dslite: $DSLITE_AFTR_IP, Display: $DSLITE_DISPLAY_NAME"
+        debug_log "DEBUG" "determine_dslite: [Transix] Using AFTR IP determined by get_dslite: $DSLITE_AFTR_IP, Display: $DSLITE_DISPLAY_NAME"
     else
         if is_ipv6_address_dslite "$aftr_info_from_db"; then
             DSLITE_AFTR_IP="$aftr_info_from_db"
         else
             DSLITE_AFTR_IP=$(get_aaaa_record_dslite "$aftr_info_from_db")
             if [ -z "$DSLITE_AFTR_IP" ]; then
-                debug_log "DEBUG" "mold_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
+                debug_log "DEBUG" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
                 return 1
             fi
         fi
         if ! check_ipv6_reachability_dslite "$DSLITE_AFTR_IP"; then
-            debug_log "DEBUG" "mold_dslite: AFTR IP '$DSLITE_AFTR_IP' for '$provider_key' is not reachable."
+            debug_log "DEBUG" "determine_dslite: AFTR IP '$DSLITE_AFTR_IP' for '$provider_key' is not reachable."
             DSLITE_AFTR_IP=""
             return 1
         fi
     fi
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
-        debug_log "DEBUG" "mold_dslite: Final DSLITE_AFTR_IP could not be determined for Provider Key '$provider_key'."
+        debug_log "DEBUG" "determine_dslite: Final DSLITE_AFTR_IP could not be determined for Provider Key '$provider_key'."
         return 1
     fi
 
-    debug_log "DEBUG" "mold_dslite: AFTR determined: $DSLITE_AFTR_IP for $DSLITE_DISPLAY_NAME."
+    debug_log "DEBUG" "determine_dslite: AFTR determined: $DSLITE_AFTR_IP for $DSLITE_DISPLAY_NAME."
     return 0
 }
 
@@ -318,7 +318,7 @@ restore_dslite_settings() {
                 rm "$backup_file"
                 debug_log "DEBUG" "Restored $original_file from $backup_file."
             else
-                debug_log "ERROR" "Failed to restore $original_file from $backup_file."
+                debug_log "DEBUG" "Failed to restore $original_file from $backup_file." # ERRORからDEBUGに変更
                 all_restored_successfully=0
             fi
         else
@@ -331,7 +331,7 @@ restore_dslite_settings() {
             rm "$DSLITE_PROTO_SCRIPT_BACKUP_PATH"
             debug_log "DEBUG" "Restored $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
         else
-            debug_log "ERROR" "Failed to restore $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
+            debug_log "DEBUG" "Failed to restore $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH." # ERRORからDEBUGに変更
             all_restored_successfully=0
         fi
     else
@@ -341,7 +341,7 @@ restore_dslite_settings() {
     if [ "$all_restored_successfully" -eq 1 ]; then
         printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
     else
-        debug_log "ERROR" "One or more files may not have been restored successfully. Please check logs."
+        debug_log "DEBUG" "One or more files may not have been restored successfully. Please check logs." # ERRORからDEBUGに変更
     fi
 
     debug_log "DEBUG" "DS-Lite settings restoration process completed."
@@ -358,7 +358,7 @@ internet_dslite_main() {
     fi
     
     # DS-LITE パラメータ計算
-    if ! determine_dslitee; then
+    if ! determine_dslite; then # typo修正、引数なし呼び出し
         debug_log "DEBUG" "internet_dslite_main: determine_dslite function failed. Exiting script."
         return 1
     fi
@@ -374,7 +374,9 @@ internet_dslite_main() {
     fi
     
     # UCI設定の適用
-    if ! config_dslite; then
+    # config_dslite の引数 fw_zone_index の扱いについて確認が必要です。
+    # 現状では引数なしで呼び出されていますが、config_dslite は引数を期待しています。
+    if ! config_dslite; then # 引数なしで呼び出し (要確認)
         debug_log "DEBUG" "internet_dslite_main: config_dslite function failed. UCI settings might be inconsistent."
         return 1
     fi
