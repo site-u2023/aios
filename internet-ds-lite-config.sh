@@ -361,7 +361,7 @@ internet_dslite_main() {
         return 1
     fi
     
-    if ! install_package dslite hidden; then
+    if ! install_package ds-lite hidden; then
         debug_log "DEBUG" "internet_dslite_main: Failed to install 'dslite' package or it was already installed. Continuing."
         return 1
     fi
