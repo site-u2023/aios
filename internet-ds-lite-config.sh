@@ -213,10 +213,10 @@ replace_dslite_sh() {
 }
 
 config_dslite() {
-    local fw_zone_index="$1"
+    local ZONE_NO='1'
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
-        debug_log "ERROR" "config_dslite: DSLITE_AFTR_IP is not set. Cannot apply UCI settings."
+        debug_log "DEBUG" "config_dslite: DSLITE_AFTR_IP is not set. Cannot apply UCI settings."
         return 1
     fi
 
@@ -225,7 +225,7 @@ config_dslite() {
     cp /etc/config/dhcp /etc/config/dhcp.dslite.bak 2>/dev/null
     cp /etc/config/firewall /etc/config/firewall.dslite.bak 2>/dev/null
 
-    debug_log "DEBUG" "config_dslite: Applying UCI settings. AFTR: '$DSLITE_AFTR_IP', FW Zone Index: '$fw_zone_index'"
+    debug_log "DEBUG" "config_dslite: Applying UCI settings. AFTR: '$DSLITE_AFTR_IP', FW Zone Index: '${ZONE_NO}'"
 
     uci -q set network.wan.auto='0'
     uci -q set dhcp.lan.ra='relay'
@@ -248,7 +248,7 @@ config_dslite() {
     uci -q set network.ds_lite.mtu='1460'
 
     local current_networks
-    current_networks=$(uci -q get firewall.@zone["$fw_zone_index"].network 2>/dev/null)
+    current_networks=$(uci -q get firewall.@zone["${ZONE_NO}"].network 2>/dev/null)
     local found_in_fw=0
     local net_fw=""
     for net_fw in $current_networks; do
@@ -258,10 +258,10 @@ config_dslite() {
         fi
     done
     if [ "$found_in_fw" -eq 0 ]; then
-        uci -q add_list firewall.@zone["$fw_zone_index"].network='ds_lite'
+        uci -q add_list firewall.@zone["${ZONE_NO}"].network='ds_lite'
     fi
-    uci -q set firewall.@zone["$fw_zone_index"].masq='1'
-    uci -q set firewall.@zone["$fw_zone_index"].mtu_fix='1'
+    uci -q set firewall.@zone["${ZONE_NO}"].masq='1'
+    uci -q set firewall.@zone["${ZONE_NO}"].mtu_fix='1'
 
 
     local commit_failed=0
@@ -298,9 +298,7 @@ display_dslite() {
 }
 
 restore_dslite_settings() {
-    local msg_prefix=""
-
-    debug_log "DEBUG" "Restoring DS-Lite settings from backups."
+    debug_log "DEBUG" "restore_dslite_settings: Restoring DS-Lite settings from backups."
 
     local files_to_restore="network dhcp firewall"
     local config_dir="/etc/config"
@@ -316,35 +314,35 @@ restore_dslite_settings() {
         if [ -f "$backup_file" ]; then
             if cp "$backup_file" "$original_file"; then
                 rm "$backup_file"
-                debug_log "DEBUG" "Restored $original_file from $backup_file."
+                debug_log "DEBUG" "restore_dslite_settings: Restored $original_file from $backup_file."
             else
-                debug_log "DEBUG" "Failed to restore $original_file from $backup_file." # ERRORからDEBUGに変更
+                debug_log "DEBUG" "restore_dslite_settings: Failed to restore $original_file from $backup_file."
                 all_restored_successfully=0
             fi
         else
-            debug_log "DEBUG" "Backup $backup_file not found for $original_file. No action taken for this file."
+            debug_log "DEBUG" "restore_dslite_settings: Backup $backup_file not found for $original_file. No action taken for this file."
         fi
     done
 
     if [ -f "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" ]; then
         if cp "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" "$DSLITE_PROTO_SCRIPT_PATH"; then
             rm "$DSLITE_PROTO_SCRIPT_BACKUP_PATH"
-            debug_log "DEBUG" "Restored $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
+            debug_log "DEBUG" "restore_dslite_settings: Restored $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
         else
-            debug_log "DEBUG" "Failed to restore $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH." # ERRORからDEBUGに変更
+            debug_log "DEBUG" "restore_dslite_settings: Failed to restore $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
             all_restored_successfully=0
         fi
     else
-        debug_log "DEBUG" "Backup $DSLITE_PROTO_SCRIPT_BACKUP_PATH not found for $DSLITE_PROTO_SCRIPT_PATH. No action taken for this file."
+        debug_log "DEBUG" "restore_dslite_settings: Backup $DSLITE_PROTO_SCRIPT_BACKUP_PATH not found for $DSLITE_PROTO_SCRIPT_PATH. No action taken for this file."
     fi
 
     if [ "$all_restored_successfully" -eq 1 ]; then
         printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
     else
-        debug_log "DEBUG" "One or more files may not have been restored successfully. Please check logs." # ERRORからDEBUGに変更
+        debug_log "DEBUG" "restore_dslite_settings: One or more files may not have been restored successfully. Please check logs."
     fi
 
-    debug_log "DEBUG" "DS-Lite settings restoration process completed."
+    debug_log "DEBUG" "restore_dslite_settings: DS-Lite settings restoration process completed."
     return 0
 }
 
@@ -352,20 +350,17 @@ internet_dslite_main() {
 
     print_section_title "MENU_INTERNET_DSLITE"
 
-    # DS-LITE ISP判定
     if ! get_dslite; then
         return 1
     fi
     
-    # DS-LITE パラメータ計算
-    if ! determine_dslite; then # typo修正、引数なし呼び出し
+    if ! determine_dslite; then
         debug_log "DEBUG" "internet_dslite_main: determine_dslite function failed. Exiting script."
         return 1
     fi
     
-    # `dslite` パッケージのインストール 
     if ! install_package dslite hidden; then
-        debug_log "DEBUG" "internet_dslite_main: Failed to install 'dslite' package or it was already installed. Continuing."
+        debug_log "DEBUG" "internet_map_main: Failed to install 'dslite' package or it was already installed. Continuing."
         return 1
     fi
 
@@ -373,22 +368,15 @@ internet_dslite_main() {
         return 1
     fi
     
-    # UCI設定の適用
-    # config_dslite の引数 fw_zone_index の扱いについて確認が必要です。
-    # 現状では引数なしで呼び出されていますが、config_dslite は引数を期待しています。
-    if ! config_dslite; then # 引数なしで呼び出し (要確認)
+    if ! config_dslite; then
         debug_log "DEBUG" "internet_dslite_main: config_dslite function failed. UCI settings might be inconsistent."
         return 1
     fi
 
     display_dslite
     
-    # 再起動
     debug_log "DEBUG" "internet_dslite_main: Configuration complete. Rebooting system."
     reboot
 
-    return 0 # Explicitly exit with success status
-
+    return 0
 }
-
-# internet_dslite_main
