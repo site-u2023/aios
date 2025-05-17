@@ -251,15 +251,19 @@ config_dslite() {
 
     debug_log "DEBUG" "config_dslite: Applying firewall UCI settings for interface '${DSLITE}' in zone index '${ZONE_NO}'."
 
-    debug_log "DEBUG" "config_dslite: Attempting to remove '${DSLITE}' from firewall zone '${ZONE_NO}' network list."
-    uci -q del_list firewall.@zone["${ZONE_NO}"].network="${DSLITE}"
+    local current_networks
+    current_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null)
 
-    debug_log "DEBUG" "config_dslite: Adding '${DSLITE}' to firewall zone '${ZONE_NO}' network list."
-    uci -q add_list firewall.@zone["${ZONE_NO}"].network="${DSLITE}"
+    if ! echo "$current_networks" | grep -q "\b${DSLITE}\b"; then
+        uci -q add_list firewall.@zone[${ZONE_NO}].network="${DSLITE}"
+        debug_log "DEBUG" "config_dslite: Added '${DSLITE}' to firewall zone ${ZONE_NO} network list."
+    else
+        debug_log "DEBUG" "config_dslite: '${DSLITE}' already in firewall zone ${ZONE_NO} network list."
+    fi
     
     debug_log "DEBUG" "config_dslite: Setting masq='1' and mtu_fix='1' for firewall zone '${ZONE_NO}'."
-    uci -q set firewall.@zone["${ZONE_NO}"].masq='1'
-    uci -q set firewall.@zone["${ZONE_NO}"].mtu_fix='1'
+    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
+    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
 
     local commit_failed=0
     debug_log "DEBUG" "config_dslite: Committing UCI changes for dhcp, network, and firewall."
