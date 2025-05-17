@@ -1225,7 +1225,7 @@ config_mape() {
     if echo "$osversion" | grep -q "^19"; then
         debug_log "DEBUG" "config_mape: Applying settings for OpenWrt 19.x compatible version."
         uci -q delete network.${WANMAP}.tunlink
-        uci add_list network.${WANMAP}.tunlink='wan6'
+        uci -q add_list network.${WANMAP}.tunlink='wan6'
         uci -q delete network.${WANMAP}.legacymap
     else
         debug_log "DEBUG" "config_mape: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
@@ -1237,11 +1237,11 @@ config_mape() {
     local current_wan_networks
     current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network)
     if echo "$current_wan_networks" | grep -q "\bwan\b"; then
-        uci del_list firewall.@zone[${ZONE_NO}].network='wan'
+        uci -q del_list firewall.@zone[${ZONE_NO}].network='wan'
         debug_log "DEBUG" "config_mape: Removed 'wan' from firewall zone ${ZONE_NO} network list."
     fi
     if ! echo "$current_wan_networks" | grep -q "\b${WANMAP}\b"; then
-        uci add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
+        uci -q add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
         debug_log "DEBUG" "config_mape: Added '${WANMAP}' to firewall zone ${ZONE_NO} network list."
     else
         debug_log "DEBUG" "config_mape: '${WANMAP}' already in firewall zone ${ZONE_NO} network list."
