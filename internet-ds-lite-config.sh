@@ -1,301 +1,471 @@
+
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.17-06-15" # Version for this script reflecting simplified DS-Lite handling
+SCRIPT_VERSION="2025.04.21-10:35" # Reflecting final error handling, message key usage, and POSIX compliance
 
-# =========================================================
-# 📌 OpenWrt / Alpine Linux POSIX-Compliant Shell Script
-# 🚀 Last Update: 2025-05-17
-#
-# Description: Automatically detects IPoE connection type (MAP-E/DS-Lite)
-#              based on AS number and passes relevant info to sub-scripts.
-#
-# ... (Header comments omitted for brevity) ...
-#
-# 🛠️ Keep it simple, POSIX-compliant, and lightweight for OpenWrt!
-### =========================================================
+# --- Assume aios environment variables and functions are loaded ---
+# BASE_DIR, CACHE_DIR, LOG_DIR are assumed to be set by aios main script.
+# Functions like debug_log, get_message, color, confirm, is_east_japan, install_package
+# are assumed to be available in the environment. No checks performed here.
 
-# --- Basic Constants ---
-SCRIPT_NAME=$(basename "$0")
-# Assuming BASE_DIR, CACHE_DIR, LOG_DIR are inherited or defined by the calling environment (aios)
-BASE_DIR="${BASE_DIR:-/tmp/aios}"
-CACHE_DIR="${CACHE_DIR:-$BASE_DIR/cache}"
-LOG_DIR="${LOG_DIR:-$BASE_DIR/logs}"
-DEBUG_LEVEL="${DEBUG_LEVEL:-INFO}" # Inherit or default
+# --- Constants ---
+# AFTR Addresses (still needed for Transix regional logic)
+AFTR_TRANS_EAST="2404:8e00::feed:100"
+AFTR_TRANS_WEST="2404:8e01::feed:100"
+# AFTR_XPASS and AFTR_V6CONNECT are now managed in get_dslite_provider_data_by_as
 
-# --- Dependent Script Paths ---
-MAP_E_SCRIPT_NAME="internet-map-e.sh"
-DS_LITE_SCRIPT_NAME="internet-ds-lite-config.sh"
-MAP_E_SCRIPT="${BASE_DIR}/${MAP_E_SCRIPT_NAME}"
-DS_LITE_SCRIPT="${BASE_DIR}/${DS_LITE_SCRIPT_NAME}"
+# Backup file names
+NETWORK_BACKUP="/etc/config/network.dslite.old"
+PROTO_BACKUP="/lib/netifd/proto/dslite.sh.dslite.old"
 
-# --- Common Script Paths (needed for standalone debugging or if aios doesn't load them) ---
-AIOS_COMMON_COUNTRY="${BASE_DIR}/common-country.sh" # Needed for confirm()
-AIOS_COMMON_COLOR="${BASE_DIR}/common-color.sh" # Needed for color()
-# AIOS_COMMON_MESSAGE, AIOS_COMMON_DEBUG, AIOS_COMMON_DOWNLOAD are assumed to be loaded
+# Firewall zone index (Assuming WAN is zone 1, adjust if necessary)
+FW_ZONE_INDEX=1
 
-# --- Function to retrieve provider data based on AS Number ---
+# --- Function Definitions ---
+
+# --- Function to retrieve DS-Lite provider data based on AS Number ---
 # Arguments: $1: AS Number (numeric, without "AS" prefix)
-# Output: Pipe-separated string: AS_NUM|INTERNAL_KEY|DISPLAY_NAME|CONNECTION_TYPE|AFTR_ADDRESS
-#         (e.g., 4713|ocn|OCN Virtual Connect|map-e|)
-# Returns: 0 if found, 1 if not found.
-get_provider_data_by_as() {
+# Output: Space-separated string: AS_NUM INTERNAL_KEY "DISPLAY_NAME" AFTR_ADDRESS
+# Returns: 0 if found, 1 if not found. Logs failure to debug log.
+get_dslite_provider_data_by_as() {
     local search_asn="$1"
     local result=""
 
-    # --- Provider Database (Here Document) ---
-    # Format: AS_NUM|INTERNAL_KEY|DISPLAY_NAME|CONNECTION_TYPE|AFTR_ADDRESS
-    # AFTR_ADDRESS is empty for MAP-E. DISPLAY_NAME does NOT need quotes.
-    # For DS-Lite, AFTR_ADDRESS can be a domain name or an IP address.
-    local provider_db=$(cat <<-'EOF'
-4713|ocn|OCN Virtual Connect|map-e|
-2518|v6plus|v6 Plus|map-e|
-2519|transix|transix|ds-lite|gw.transix.jp
-2527|cross|Cross Pass|ds-lite|2001:f60:0:200::1:1
-4737|v6connect|v6 Connect|ds-lite|gw.v6connect.net
+    # --- DS-Lite Provider Database (Here Document) ---
+    # POSIX compliant way to define multi-line string
+    provider_db=$(cat <<-'EOF'
+2519 transix "transix" "USE_REGION"
+2527 cross "Cross Pass" "2001:f60:0:200::1:1"
+4737 v6connect "v6 Connect" "2001:c28:5:301::11"
 EOF
 )
     # --- End of Database ---
 
-    result=$(echo "$provider_db" | grep "^${search_asn}|" | head -n 1)
+    # POSIX compliant grep and head
+    result=$(echo "$provider_db" | grep "^${search_asn} " | head -n 1)
 
     if [ -n "$result" ]; then
-        debug_log "DEBUG" "get_provider_data_by_as: Found data for ASN $search_asn: $result"
+        debug_log "DEBUG" "get_dslite_provider_data_by_as: Found data for ASN $search_asn: $result"
         echo "$result"
         return 0
     else
-        debug_log "DEBUG" "get_provider_data_by_as: No data found for ASN $search_asn"
+        debug_log "DEBUG" "get_dslite_provider_data_by_as: No data found for ASN $search_asn"
         return 1
     fi
 }
 
-# --- Function to determine connection type and details based on AS Number ---
-# Retrieves data using get_provider_data_by_as and formats the output.
-# Arguments: $1: AS Number (string, potentially with "AS" prefix)
-# Output: "CONNECTION_TYPE|INTERNAL_KEY|AFTR_ADDRESS_FROM_DB|DISPLAY_NAME"
-#         (e.g., "map-e|ocn||OCN Virtual Connect", "ds-lite|transix|gw.transix.jp|transix")
-#         or "unknown|||" if not found.
-# Returns: 0 on success (found or not found), 1 on error (e.g., empty ASN).
-determine_connection_by_as() {
-    local input_asn="$1"
-    local numeric_asn=""
+# --- Auto Detection Provider Function (Internal) ---
+# Outputs:
+#   Success: "Provider Display Name|AFTR Address|Region Text" to stdout, returns 0.
+#   Failure: Reason string (e.g., "AS cache missing", "ISP AS 12345") to stdout, returns 1.
+#            Logs detailed error to debug log. No stderr output.
+detect_provider_internal() {
+    local isp_as="" region="" reason_str=""
     local provider_data=""
-    local conn_type="unknown"
     local internal_key=""
-    local aftr_addr_from_db="" # AFTR from provider_db (domain or IP)
-    local display_name=""      # Display name from provider_db
+    local display_name=""
+    local aftr_address=""
+    local region_text="" # Keep region_text for output consistency
 
-    debug_log "DEBUG" "Determining connection type for Input ASN: $input_asn"
+    # --- START MODIFICATION (Cache File Paths) ---
+    # Use persistent cache file for AS number
+    local cache_as_file="${CACHE_DIR}/isp_as.ch"
+    # Use persistent cache file for Region Name
+    local cache_region_file="${CACHE_DIR}/region_name.ch"
+    # Remove old temporary cache file definitions
+    # local cache_region_code_file="${CACHE_DIR}/ip_region_code.tmp" # REMOVED
+    # local cache_region_name_file="${CACHE_DIR}/ip_region_name.tmp" # REMOVED
+    # --- END MODIFICATION (Cache File Paths) ---
 
-    if [ -z "$input_asn" ]; then
-        debug_log "DEBUG" "ASN is empty, cannot determine connection type."
-        echo "unknown|||"
+    # Read AS number from cache (POSIX compliant checks)
+    if [ ! -f "$cache_as_file" ]; then
+        reason_str="AS cache missing"
+        # --- START MODIFICATION (Error Message) ---
+        # Update file name in error log
+        debug_log "DEBUG" "detect_provider_internal: Error - AS Number cache file not found: $cache_as_file"
+        # --- END MODIFICATION (Error Message) ---
+        echo "$reason_str"
+        return 1
+    fi
+    # POSIX compliant read and sed
+    isp_as=$(cat "$cache_as_file" | sed 's/^AS//i')
+    # Handle empty isp_as after sed or read failure (POSIX compliant check)
+    if [ -z "$isp_as" ]; then
+        reason_str="AS cache read error"
+        # --- START MODIFICATION (Error Message) ---
+        # Update file name in error log
+        debug_log "DEBUG" "detect_provider_internal: Error - Failed to read AS Number from cache file: $cache_as_file"
+        # --- END MODIFICATION (Error Message) ---
+        echo "$reason_str"
+        return 1
+    fi
+    debug_log "DEBUG" "detect_provider_internal: Using AS Number $isp_as"
+
+    # Get provider data
+    provider_data=$(get_dslite_provider_data_by_as "$isp_as")
+    # POSIX compliant check for function success and non-empty result
+    if [ $? -ne 0 ] || [ -z "$provider_data" ]; then
+        reason_str="ISP AS $isp_as" # Reason is the unsupported AS number
+        debug_log "DEBUG" "detect_provider_internal: Error - Could not find DS-Lite provider data for AS $isp_as."
+        echo "$reason_str"
         return 1
     fi
 
-    numeric_asn=$(echo "$input_asn" | sed 's/^AS//i')
-    provider_data=$(get_provider_data_by_as "$numeric_asn")
+    # Parse provider data (handle quoted display name) - POSIX awk
+    internal_key=$(echo "$provider_data" | awk '{print $2}')
+    display_name=$(echo "$provider_data" | awk -F '"' '{print $2}')
+    aftr_address=$(echo "$provider_data" | awk '{print $4}') # Could be "USE_REGION"
 
-    if [ $? -eq 0 ] && [ -n "$provider_data" ]; then
-        # Fields: 1:AS, 2:KEY, 3:DISPLAY_NAME, 4:TYPE, 5:AFTR
-        conn_type=$(echo "$provider_data" | cut -d'|' -f4)
-        internal_key=$(echo "$provider_data" | cut -d'|' -f2)
-        display_name=$(echo "$provider_data" | cut -d'|' -f3) # Get display name
-        aftr_addr_from_db=$(echo "$provider_data" | cut -d'|' -f5)
+    debug_log "DEBUG" "detect_provider_internal: Parsed data - Key=$internal_key, Name=$display_name, AFTR=$aftr_address"
 
-        debug_log "DEBUG" "Parsed data: Type=$conn_type, Key=$internal_key, AFTR_DB=$aftr_addr_from_db, Name=$display_name"
-    else
-        debug_log "DEBUG" "ASN $numeric_asn not found in provider database."
+    # Handle Transix region check if needed (POSIX compliant checks)
+    if [ "$internal_key" = "transix" ] && [ "$aftr_address" = "USE_REGION" ]; then
+        debug_log "DEBUG" "detect_provider_internal: Transix detected, checking region."
+        # --- START MODIFICATION (Region Reading) ---
+        # Read region from persistent cache - POSIX compliant
+        if [ -f "$cache_region_file" ]; then
+            region=$(cat "$cache_region_file")
+        fi
+        # Remove old region reading logic
+        # if [ -z "$region" ] && [ -f "$cache_region_name_file" ]; then region=$(cat "$cache_region_name_file"); fi # REMOVED
+        # --- END MODIFICATION (Region Reading) ---
+
+        if [ -z "$region" ]; then
+            reason_str="No region info for Transix"
+            debug_log "DEBUG" "detect_provider_internal: Error - Required region information not found in cache for Transix detection."
+            echo "$reason_str"
+            return 1
+        fi
+        debug_log "DEBUG" "detect_provider_internal: Using region info '$region' for Transix."
+
+        # is_east_japan function is assumed to be loaded
+        is_east_japan "$region"
+        local region_result=$?
+        # POSIX compliant check for return status
+        if [ $region_result -eq 0 ]; then
+            display_name="Transix (East Japan)"
+            aftr_address="$AFTR_TRANS_EAST"
+            region_text="East Japan"
+        elif [ $region_result -eq 1 ]; then
+            display_name="Transix (West Japan)"
+            aftr_address="$AFTR_TRANS_WEST"
+            region_text="West Japan"
+        else
+            reason_str="Region determination failed for Transix"
+            debug_log "DEBUG" "detect_provider_internal: Error - Failed to determine required region (East/West) for Transix using '$region'."
+            echo "$reason_str"
+            return 1
+        fi
+        debug_log "DEBUG" "detect_provider_internal: Transix region resolved - Name=$display_name, AFTR=$aftr_address, Region=$region_text"
     fi
 
-    echo "${conn_type}|${internal_key}|${aftr_addr_from_db}|${display_name}"
+    # Output in the unified format on success - POSIX echo/printf
+    echo "${display_name}|${aftr_address}|${region_text}"
     return 0
 }
 
-internet_auto_config_main() {
-    local asn=""
-    local connection_info=""
-    local connection_type=""
-    local provider_key=""
-    local aftr_address_from_db="" # AFTR from provider_db (domain or IP)
-    local display_isp_name=""     # Display name from provider_db, possibly updated
-    local exit_code=0
+# --- Auto Detect and Apply DS-Lite Settings ---
+# Called by menu.db or internet-auto-config.sh
+# Uses get_message for success/unsupported messages. Logs errors to debug log.
+# No stderr output.
+auto_detect_and_apply() {
+    debug_log "DEBUG" "Starting DS-Lite auto-detection and application process."
 
-    debug_log "DEBUG" "Starting automatic internet configuration process..."
+    # Perform internal detection
+    local detection_result
+    local detection_status # Store return status
 
-    # --- 1. Prerequisite Checks & Downloads ---
-    debug_log "DEBUG" "Checking prerequisites..."
-    print_section_title # Assumed to be available
+    # Capture stdout and check status separately - POSIX compliant
+    detection_result=$(detect_provider_internal)
+    detection_status=$?
 
-    local ip_type_file="${CACHE_DIR}/ip_type.ch"
-    if [ ! -f "$ip_type_file" ]; then
-        debug_log "ERROR" "IP type cache file not found: ${ip_type_file}"
-        printf "%s\n" "$(color red "Error: Required cache file 'ip_type.ch' not found.")" >&2
+    if [ $detection_status -ne 0 ]; then
+        # Failure reason already logged by detect_provider_internal
+        # Display unsupported message using the reason from stdout
+        # POSIX printf
+        printf "\n%s\n" "$(color red "$(get_message "MSG_DSLITE_AUTO_DETECT_UNSUPPORTED" rsn="$detection_result")")"
+        return 1 # Return failure to menu handler
+    fi
+
+    # Parse detection result - POSIX cut
+    local detected_provider=$(echo "$detection_result" | cut -d'|' -f1)
+    local detected_aftr=$(echo "$detection_result" | cut -d'|' -f2)
+    # local detected_region_text=$(echo "$detection_result" | cut -d'|' -f3) # Region text not used
+
+    # Display detected provider result using MSG_AUTO_CONFIG_RESULT (assuming this key exists and is desired)
+    # If only success/failure is needed, this can be removed. POSIX printf
+    printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$detected_provider" tp="DS-Lite")")"
+
+    # Confirm with the user (hardcoded English question - consider message key if localization needed)
+    local confirm_auto=1
+    confirm "Apply these settings? {ynr}" # Assumes confirm function is POSIX compliant
+    confirm_auto=$?
+
+    # POSIX compliant check for return status
+    if [ $confirm_auto -eq 0 ]; then # Yes
+        debug_log "DEBUG" "User confirmed applying DS-Lite settings for $detected_provider."
+        printf "\n" # Newline before potential success message
+        # Pass AFTR and Provider Name to apply_dslite_settings
+        apply_dslite_settings "$detected_aftr" "$detected_provider"
+        local apply_status=$?
+        # apply_dslite_settings handles its own success message.
+        # Return its status directly.
+        return $apply_status
+    else # No or Return
+         debug_log "DEBUG" "User declined to apply DS-Lite settings."
+         # No cancellation message to user, return failure to menu handler
         return 1
     fi
-    if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        debug_log "ERROR" "AS number cache file not found: ${CACHE_DIR}/isp_as.ch"
-        printf "%s\n" "$(color red "Error: Required cache file 'isp_as.ch' not found.")" >&2
-        return 1
-    fi
-
-    if [ ! -f "$MAP_E_SCRIPT" ]; then
-        debug_log "INFO" "MAP-E script not found, attempting download..."
-        download "$MAP_E_SCRIPT_NAME" "chmod" "hidden"
-        if [ ! -f "$MAP_E_SCRIPT" ]; then
-            debug_log "ERROR" "Failed to download MAP-E script: $MAP_E_SCRIPT_NAME"
-            printf "%s\n" "$(color red "Error: Failed to download required script '$MAP_E_SCRIPT_NAME'.")" >&2
-            return 1
-        fi
-    fi
-    if [ ! -f "$DS_LITE_SCRIPT" ]; then
-        debug_log "INFO" "DS-Lite script not found, attempting download..."
-        download "$DS_LITE_SCRIPT_NAME" "chmod" "hidden"
-        if [ ! -f "$DS_LITE_SCRIPT" ]; then
-            debug_log "ERROR" "Failed to download DS-Lite script: $DS_LITE_SCRIPT_NAME"
-            printf "%s\n" "$(color red "Error: Failed to download required script '$DS_LITE_SCRIPT_NAME'.")" >&2
-            return 1
-        fi
-    fi
-
-    # --- 2. Network Connectivity Check (ip_type.ch利用) ---
-    # (Commented out as per original script state)
-    # ...
-
-    # --- 3. Get AS Number ---
-    debug_log "DEBUG" "Retrieving AS number..."
-    asn=$(cat "${CACHE_DIR}/isp_as.ch")
-    if [ -z "$asn" ]; then
-        debug_log "ERROR" "Failed to retrieve AS number from cache."
-        printf "%s\n" "$(color red "Error: Could not retrieve AS number for automatic detection.")" >&2
-        return 1
-    fi
-    debug_log "INFO" "Detected AS Number: $asn"
-
-    # --- 4. Determine Connection Type ---
-    debug_log "DEBUG" "Determining connection type using ASN..."
-    connection_info=$(determine_connection_by_as "$asn") # Now returns display_name as 4th field
-    connection_type=$(echo "$connection_info" | cut -d'|' -f1)
-    provider_key=$(echo "$connection_info" | cut -d'|' -f2)
-    aftr_address_from_db=$(echo "$connection_info" | cut -d'|' -f3)
-    display_isp_name=$(echo "$connection_info" | cut -d'|' -f4) # Get display_name from determine_connection_by_as
-
-    debug_log "INFO" "Determined connection type: $connection_type, Provider key: $provider_key, AFTR (from DB): $aftr_address_from_db, Display Name: $display_isp_name"
-
-    # --- 4a. Confirm with User (Skip for 'unknown') ---
-    if [ "$connection_type" != "unknown" ]; then
-        # display_isp_name is already populated from determine_connection_by_as
-        # If display_isp_name was empty from DB, determine_connection_by_as would have kept it empty.
-        # We can use provider_key as a fallback if display_isp_name is truly empty.
-        local final_display_name="$display_isp_name"
-        if [ -z "$final_display_name" ]; then
-            final_display_name="$provider_key" # Fallback to key if name is empty
-        fi
-
-        printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name" tp="$connection_type")")"
-
-        local confirm_apply=1
-        confirm "MSG_AUTO_CONFIG_CONFIRM" # Assumes confirm function is available
-        confirm_apply=$?
-
-        if [ $confirm_apply -ne 0 ]; then
-            debug_log "INFO" "User declined to apply the automatically detected settings."
-            return 0 # User cancelled, not an error
-        fi
-        debug_log "INFO" "User confirmed applying settings for $final_display_name ($connection_type)."
-    fi
-
-    # --- 5. Execute Configuration Based on Type ---
-    case "$connection_type" in
-        "map-e")
-            debug_log "DEBUG" "MAP-E connection confirmed. Sourcing MAP-E script..."
-            if . "$MAP_E_SCRIPT"; then
-                debug_log "DEBUG" "MAP-E script ($MAP_E_SCRIPT_NAME) sourced successfully."
-                if command -v internet_map_main >/dev/null 2>&1; then
-                    debug_log "DEBUG" "Executing internet_map_main function from $MAP_E_SCRIPT_NAME"
-                    internet_map_main
-                else
-                    debug_log "ERROR" "Function 'internet_map_main' not found in $MAP_E_SCRIPT_NAME."
-                    printf "%s\n" "$(color red "Error: Required function 'internet_map_main' not found in script '$MAP_E_SCRIPT_NAME'.")" >&2
-                    exit_code=1
-                fi
-            else
-                debug_log "ERROR" "Failed to source MAP-E script: $MAP_E_SCRIPT_NAME"
-                printf "%s\n" "$(color red "Error: Failed to load script '$MAP_E_SCRIPT_NAME'.")" >&2
-                exit_code=1
-            fi
-            ;;
-        "ds-lite")
-            debug_log "DEBUG" "DS-Lite connection confirmed. Loading DS-Lite script..."
-            if [ -z "$aftr_address_from_db" ] && [ "$provider_key" != "transix" ]; then # Transix might get AFTR dynamically
-                debug_log "ERROR" "AFTR address is empty for DS-Lite (Provider: $provider_key) and not Transix. Cannot proceed."
-                printf "%s\n" "$(color red "$(get_message "MSG_DSLITE_AFTR_EMPTY" pk="$provider_key")")" >&2
-                exit_code=1
-            fi
-
-            if [ "$exit_code" -eq 0 ]; then
-                if . "$DS_LITE_SCRIPT"; then
-                    if command -v apply_dslite_settings >/dev/null 2>&1; then
-                        debug_log "INFO" "Executing apply_dslite_settings from $DS_LITE_SCRIPT_NAME with AFTR (from DB): $aftr_address_from_db, Provider Display: $display_isp_name, Provider Key: $provider_key"
-                        # Pass the AFTR from DB, display name, and provider key.
-                        # internet-ds-lite-config.sh will handle resolution and region if needed.
-                        if apply_dslite_settings "$aftr_address_from_db" "$display_isp_name" "$provider_key"; then
-                            debug_log "INFO" "DS-Lite script executed successfully."
-                        else
-                            debug_log "ERROR" "DS-Lite script execution failed."
-                            # Error message should be handled by apply_dslite_settings
-                            exit_code=1
-                        fi
-                    else
-                        debug_log "ERROR" "Function 'apply_dslite_settings' not found in $DS_LITE_SCRIPT_NAME."
-                        printf "%s\n" "$(color red "Error: Required function 'apply_dslite_settings' not found in script '$DS_LITE_SCRIPT_NAME'.")" >&2
-                        exit_code=1
-                    fi
-                else
-                    debug_log "ERROR" "Failed to source DS-Lite script: $DS_LITE_SCRIPT_NAME"
-                    printf "%s\n" "$(color red "Error: Failed to load script '$DS_LITE_SCRIPT_NAME'.")" >&2
-                    exit_code=1
-                fi
-            fi
-            ;;
-        "unknown")
-            debug_log "WARN" "Could not automatically determine the IPoE connection type for ASN $asn."
-            printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn")")"
-            exit_code=1 # Considered an error for auto-config flow
-            ;;
-        *)
-            debug_log "ERROR" "Unexpected connection type returned: $connection_type"
-            printf "%s\n" "$(color red "Error: Unexpected value encountered: $connection_type")" >&2
-            exit_code=1
-            ;;
-    esac
-
-    if [ "$exit_code" -eq 0 ]; then
-        debug_log "INFO" "Automatic internet configuration process completed or handed over to a sub-script."
-    else
-        debug_log "ERROR" "Automatic internet configuration process finished with errors."
-    fi
-
-    return $exit_code
 }
 
-# --- Script Execution ---
-# This script primarily defines functions to be called by other parts of aios (e.g., a menu).
-# Example test (uncomment to run directly after sourcing, ensure common scripts are available):
-# SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-# . "${SCRIPT_DIR}/../common/common-color.sh" # Adjust path as needed
-# . "${SCRIPT_DIR}/../common/common-debug.sh"
-# . "${SCRIPT_DIR}/../common/common-message.sh"
-# . "${SCRIPT_DIR}/../common/common-country.sh"
-# . "${SCRIPT_DIR}/../common/common-download.sh"
-# print_section_title() { printf "\n--- %s ---\n" "$1"; } # Dummy for testing
-# # Mock dependent scripts and functions for testing if needed
-# touch "${BASE_DIR}/${MAP_E_SCRIPT_NAME}"
-# touch "${BASE_DIR}/${DS_LITE_SCRIPT_NAME}"
-# # Mock apply_dslite_settings in the test environment if DS_LITE_SCRIPT is complex
-# # echo 'apply_dslite_settings() { echo "Mock DS-Lite Apply Called with: $@"; return 0; }' > "${BASE_DIR}/${DS_LITE_SCRIPT_NAME}"
-# # mkdir -p "$CACHE_DIR"
-# # echo "AS12345" > "${CACHE_DIR}/isp_as.ch"
-# # echo "v6" > "${CACHE_DIR}/ip_type.ch"
-# internet_auto_config_main
+# Apply DS-Lite settings using UCI and sed
+# $1: AFTR Address
+# $2: Service Name/Key (used for logging)
+# Uses get_message for success and reboot messages. Logs errors to debug log.
+# No stderr output. No starting message. Returns 0 on success, 1 on failure.
+apply_dslite_settings() {
+    local aftr_address="$1"
+    local service_key="$2" # Used for logging
+    local proto_script="/lib/netifd/proto/dslite.sh"
+    local msg_prefix="" # For reboot messages
 
-: # Ensure script can be sourced without error if no main execution at the end
+    debug_log "DEBUG" "Applying DS-Lite settings for AFTR: $aftr_address (Key: $service_key)"
+    # No starting message to stdout
+
+    # 1. Install ds-lite package silently (Assumes install_package is POSIX compliant)
+    if ! install_package ds-lite silent; then
+        debug_log "DEBUG" "Error: Failed to install ds-lite package."
+        return 1
+    fi
+    debug_log "DEBUG" "ds-lite package installed or already present."
+
+    # 2. Backup original files (Log errors only) - POSIX cp
+    debug_log "DEBUG" "Backing up /etc/config/network to $NETWORK_BACKUP"
+    cp /etc/config/network "$NETWORK_BACKUP" 2>/dev/null # Ignore cp error for backup
+    if [ -f "$proto_script" ]; then
+        if [ ! -f "$PROTO_BACKUP" ]; then
+            debug_log "DEBUG" "Backing up $proto_script to $PROTO_BACKUP"
+            cp "$proto_script" "$PROTO_BACKUP" 2>/dev/null # Ignore cp error for backup
+        else
+            debug_log "DEBUG" "Protocol script backup $PROTO_BACKUP already exists."
+        fi
+    else
+         debug_log "DEBUG" "Protocol script $proto_script not found, cannot back up."
+         # Continue without backup
+    fi
+
+    # 3. Configure UCI settings (Log errors, return 1 on failure) - Assumes uci is POSIX compliant
+    debug_log "DEBUG" "Applying UCI settings for DS-Lite."
+    # POSIX compliant here-document for uci batch
+    uci -q batch <<EOF
+set network.wan.auto='0'
+set dhcp.lan.ra='relay'
+set dhcp.lan.dhcpv6='server'
+set dhcp.lan.ndp='relay'
+set dhcp.lan.force='1'
+set dhcp.wan6=dhcp
+set dhcp.wan6.interface='wan6'
+set dhcp.wan6.ignore='1'
+set dhcp.wan6.master='1'
+set dhcp.wan6.ra='relay'
+set dhcp.wan6.dhcpv6='relay'
+set dhcp.wan6.ndp='relay'
+delete network.ds_lite
+set network.ds_lite=interface
+set network.ds_lite.proto='dslite'
+set network.ds_lite.peeraddr='$aftr_address'
+set network.ds_lite.mtu='1460'
+# Add ds_lite to wan firewall zone if not already present - POSIX compliant loop
+local current_networks=\$(uci -q get firewall.@zone[$FW_ZONE_INDEX].network 2>/dev/null)
+local found=0
+local net="" # POSIX variable declaration
+for net in \$current_networks; do if [ "\$net" = "ds_lite" ]; then found=1; break; fi; done
+if [ "\$found" -eq 0 ]; then add_list firewall.@zone[$FW_ZONE_INDEX].network='ds_lite'; fi
+commit dhcp
+commit network
+commit firewall
+EOF
+    # POSIX compliant check for return status
+    if [ $? -ne 0 ]; then
+         debug_log "DEBUG" "Error: Failed to apply UCI settings."
+         return 1
+    fi
+    debug_log "DEBUG" "UCI settings applied successfully."
+
+    # 4. Modify proto script MTU (Log errors only, non-fatal) - POSIX grep, sed, mv, rm
+    if [ -f "$proto_script" ]; then
+        debug_log "DEBUG" "Checking MTU in $proto_script"
+        if grep -q "mtu:-1280" "$proto_script"; then
+            debug_log "DEBUG" "Modifying MTU from 1280 to 1460 in $proto_script"
+            # Use temporary file for sed to handle potential errors better
+            sed "s/mtu:-1280/mtu:-1460/g" "$proto_script" > "${proto_script}.tmp"
+            # POSIX compliant check for sed success and non-empty temp file
+            if [ $? -eq 0 ] && [ -s "${proto_script}.tmp" ]; then
+                mv "${proto_script}.tmp" "$proto_script"
+                debug_log "DEBUG" "Successfully modified MTU in $proto_script."
+            else
+                debug_log "DEBUG" "Error: Failed to modify protocol script MTU (sed failed or produced empty file). Continuing."
+                rm -f "${proto_script}.tmp"
+                # Non-fatal error, continue
+            fi
+        else
+            debug_log "DEBUG" "MTU in $proto_script does not need modification or was already changed."
+        fi
+    else
+        debug_log "DEBUG" "Protocol script $proto_script not found after package install. Cannot modify MTU."
+    fi
+
+    # 5. Success Message (using get_message) to stdout - POSIX printf
+    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_APPLY_SUCCESS")")"
+
+    # 6. Reboot Confirmation (using common get_message keys) - POSIX printf
+    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing common key
+
+    # Setup msg_prefix for confirm messages if color is available - POSIX command -v
+    if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
+
+    local confirm_reboot=1
+    confirm "MSG_CONFIRM_REBOOT" # Use existing common key
+    confirm_reboot=$?
+    # POSIX compliant check for return status
+    if [ $confirm_reboot -eq 0 ]; then # Yes
+        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" # Use existing common key
+        reboot; exit 0 # Exit script after initiating reboot (Assumes reboot is available)
+    # No messages needed for "No" or "Return" cases here.
+    # The calling function (menu.db) should handle the return status.
+    fi
+
+    return 0 # Return success if reboot not chosen or confirm failed
+}
+
+# Restore original settings
+# Uses get_message for success and reboot messages. Logs errors to debug log.
+# No stderr output. No starting message. Returns 0 on success, 1 on failure.
+restore_dslite_settings() {
+    local proto_script="/lib/netifd/proto/dslite.sh"
+    local msg_prefix="" # For reboot messages
+
+    debug_log "DEBUG" "Restoring settings before DS-Lite configuration."
+    # No starting message to stdout
+
+    # 1. Restore network config (Log errors only, non-fatal) - POSIX cp, rm
+    debug_log "DEBUG" "Checking for network backup: $NETWORK_BACKUP"
+    if [ -f "$NETWORK_BACKUP" ]; then
+        debug_log "DEBUG" "Restoring /etc/config/network from $NETWORK_BACKUP"
+        # Ensure copy succeeds before removing backup
+        if cp "$NETWORK_BACKUP" /etc/config/network; then
+            rm "$NETWORK_BACKUP"
+        else
+             debug_log "DEBUG" "Warning: Failed to restore /etc/config/network from backup. Backup not removed."
+             # Continue restoration attempt (non-fatal)
+        fi
+    else
+        debug_log "DEBUG" "Network configuration backup $NETWORK_BACKUP not found."
+    fi
+
+    # 2. Restore proto script (Log errors only, non-fatal) - POSIX cp, rm, grep, sed, mv
+    debug_log "DEBUG" "Checking for protocol script backup: $PROTO_BACKUP"
+    if [ -f "$PROTO_BACKUP" ]; then
+        debug_log "DEBUG" "Restoring $proto_script from $PROTO_BACKUP"
+        # Ensure copy succeeds before removing backup
+        if cp "$PROTO_BACKUP" "$proto_script"; then
+            rm "$PROTO_BACKUP"
+        else
+             debug_log "DEBUG" "Warning: Failed to restore $proto_script from backup. Backup not removed."
+             # Continue restoration attempt (non-fatal)
+        fi
+    elif [ -f "$proto_script" ]; then
+         # Attempt to revert MTU change if backup doesn't exist
+         debug_log "DEBUG" "Protocol backup not found. Attempting to revert MTU change in $proto_script."
+         if grep -q "mtu:-1460" "$proto_script"; then
+              # Use temporary file for sed
+              sed "s/mtu:-1460/mtu:-1280/g" "$proto_script" > "${proto_script}.tmp"
+              # POSIX compliant check for sed success and non-empty temp file
+              if [ $? -eq 0 ] && [ -s "${proto_script}.tmp" ]; then
+                  mv "${proto_script}.tmp" "$proto_script"
+                  debug_log "DEBUG" "Reverted MTU change in $proto_script."
+              else
+                  debug_log "DEBUG" "Warning: Failed to revert MTU change in $proto_script (sed failed or produced empty file)."
+                  rm -f "${proto_script}.tmp"
+                  # Non-fatal
+              fi
+         else
+              debug_log "DEBUG" "MTU in $proto_script does not appear to need reverting."
+         fi
+    else
+         debug_log "DEBUG" "Protocol script $proto_script not found, cannot restore or revert."
+    fi
+
+    # 3. Remove ds_lite interface and firewall entry (Log errors, return 1 on failure) - Assumes uci is POSIX compliant
+    debug_log "DEBUG" "Removing ds_lite interface and firewall entries via UCI."
+    # POSIX compliant here-document and loop for uci batch
+    uci -q batch <<EOF
+delete network.ds_lite
+# Iterate through firewall zones to remove ds_lite from network list
+local zone_count=\$(uci show firewall | grep -c "@zone\[")
+local i=0
+while [ \$i -lt \$zone_count ]; do
+    local current_networks=\$(uci -q get firewall.@zone[\$i].network 2>/dev/null)
+    local updated_networks=""
+    local changed=0
+    local net="" # POSIX variable declaration
+    for net in \$current_networks; do
+        if [ "\$net" = "ds_lite" ]; then
+             changed=1
+        else
+             # Append with space only if updated_networks is not empty - POSIX compliant string building
+             if [ -n "\$updated_networks" ]; then updated_networks="\$updated_networks \$net"; else updated_networks="\$net"; fi
+        fi
+    done
+    if [ "\$changed" -eq 1 ]; then
+         if [ -z "\$updated_networks" ]; then
+              # If list becomes empty, delete the option
+              delete firewall.@zone[\$i].network
+         else
+              # Otherwise, set the cleaned list
+              set firewall.@zone[\$i].network="\$updated_networks"
+         fi
+    fi
+    # POSIX compliant arithmetic
+    i=\$((\$i + 1))
+done
+commit network
+commit firewall
+EOF
+    # POSIX compliant check for return status
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "Error: UCI commands to remove ds_lite interface/firewall entries failed."
+        return 1
+    fi
+    debug_log "DEBUG" "UCI commands for removal executed successfully."
+
+    # 4. Success Message (using get_message) to stdout - POSIX printf
+    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_RESTORE_SUCCESS")")"
+
+    # 5. Reboot Confirmation (using common get_message keys) - POSIX printf
+    printf "%s\n" "$(get_message MSG_REBOOT_REQUIRED)" # Use existing common key
+
+    # Setup msg_prefix for confirm messages if color is available - POSIX command -v
+    if command -v color >/dev/null 2>&1; then msg_prefix=$(color blue "- "); fi
+
+    local confirm_reboot=1
+    confirm "MSG_CONFIRM_REBOOT" # Use existing common key
+    confirm_reboot=$?
+    # POSIX compliant check for return status
+    if [ $confirm_reboot -eq 0 ]; then # Yes
+        printf "%s%s\n" "$msg_prefix" "$(get_message MSG_REBOOTING)" # Use existing common key
+        reboot; exit 0 # Exit script after initiating reboot
+    # No messages needed for "No" or "Return" cases here.
+    fi
+
+    return 0 # Return success if reboot not chosen or confirm failed
+}
+
+# --- is_east_japan function (assumed loaded from common-country.sh) ---
+# Function definition is not needed here as it's assumed to be loaded.
+
+# --- Script Execution ---
+# This script defines functions to be called from menu.db or other scripts.
+# It does not run main logic automatically when sourced.
+
+: # No-op to ensure the script sourcing doesn't cause unexpected output or errors
