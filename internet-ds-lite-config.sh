@@ -231,6 +231,11 @@ config_dslite() {
     uci -q set network.wan.disabled='1'
     uci -q set network.wan.auto='0'
 
+    uci -q set dhcp.lan.ra='relay'
+    uci -q set dhcp.lan.dhcpv6='server'
+    uci -q set dhcp.lan.ndp='relay'
+    uci -q set dhcp.lan.force='1'
+    
     uci -q set dhcp.wan6=dhcp
     uci -q set dhcp.wan6.interface='wan6'
     uci -q set dhcp.wan6.ignore='1'
