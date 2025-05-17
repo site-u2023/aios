@@ -131,7 +131,7 @@ internet_auto_config_main() {
                 final_display_name_for_msg="Unknown Provider"
              fi
         fi
-        printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name_for_msg" tp="$connection_type")")"
+        printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name_for_msg" tp="$connection_type")")"
 
         if [ -n "$command_to_execute" ]; then
             debug_log "DEBUG" "Preparing to execute command: $command_to_execute"
@@ -157,7 +157,7 @@ internet_auto_config_main() {
         elif [ -z "$unknown_display_name_for_msg" ]; then
              unknown_display_name_for_msg="N/A"
         fi
-        printf "%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$unknown_display_name_for_msg")")"
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" as="$asn" sp="$unknown_display_name_for_msg")")"
         exit_code=1
     fi
 
