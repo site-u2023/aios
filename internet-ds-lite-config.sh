@@ -228,11 +228,8 @@ config_dslite() {
 
     debug_log "DEBUG" "config_dslite: Applying UCI settings for network interface '${DSLITE}' and dhcp. AFTR: '$DSLITE_AFTR_IP'."
 
+    uci -q set network.wan.disabled='1'
     uci -q set network.wan.auto='0'
-    uci -q set dhcp.lan.ra='relay'
-    uci -q set dhcp.lan.dhcpv6='server'
-    uci -q set dhcp.lan.ndp='relay'
-    uci -q set dhcp.lan.force='1'
 
     uci -q set dhcp.wan6=dhcp
     uci -q set dhcp.wan6.interface='wan6'
