@@ -262,16 +262,16 @@ internet_dslite_main() {
         return 1
     fi
     
-    if ! replace_dslite_sh; then
-        return 1
-    fi
-    
     # `dslite` パッケージのインストール 
     if ! install_package dslite hidden; then
         debug_log "DEBUG" "internet_map_main: Failed to install 'dslite' package or it was already installed. Continuing."
         return 1
     fi
 
+    if ! replace_dslite_sh; then
+        return 1
+    fi
+    
     # UCI設定の適用
     if ! config_dslite; then
         debug_log "DEBUG" "internet_map_main: config_dslite function failed. UCI settings might be inconsistent."
