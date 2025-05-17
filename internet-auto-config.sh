@@ -106,7 +106,6 @@ internet_auto_config_main() {
     asn=$(cat "${CACHE_DIR}/isp_as.ch")
     if [ -z "$asn" ]; then
         debug_log "DEBUG" "Failed to retrieve AS number from cache, or cache file is empty."
-        # 同上
         echo "unknown||"
         return 1
     fi
@@ -132,6 +131,13 @@ internet_auto_config_main() {
              fi
         fi
         printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name_for_msg" tp="$connection_type")")"
+        confirm "MSG_AUTO_CONFIG_CONFIRM"
+        local confirm_status=$?
+        if [ $confirm_status -ne 0 ]; then
+            debug_log "DEBUG" "User declined to apply settings or confirmation failed (status: $confirm_status). Returning."
+            exit_code=1
+            return $exit_code
+        fi
 
         if [ -n "$command_to_execute" ]; then
             debug_log "DEBUG" "Preparing to execute command: $command_to_execute"
@@ -161,7 +167,6 @@ internet_auto_config_main() {
         exit_code=1
     fi
 
-    echo "${connection_type}|${provider_key}|${display_isp_name}" 
     return $exit_code
 }
 
