@@ -301,7 +301,7 @@ display_dslite() {
     return 0
 }
 
-restore_dslite_settings() {
+restore_dslite() {
     debug_log "DEBUG" "restore_dslite_settings: Restoring DS-Lite settings from backups."
 
     local files_to_restore="network dhcp firewall"
