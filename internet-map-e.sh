@@ -1153,12 +1153,11 @@ EOF
 # It sets a global variable reflecting the user's choice.
 config_mape() {
 
-    local WANMAP='wanmap' # 設定セクション名
+    local WANMAP='wanmap'
     local ZONE_NO='1'
     local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
     
-    # 設定のバックアップ作成
     debug_log "DEBUG" "config_mape: Backing up configuration files..."
     cp /etc/config/network /etc/config/network.map-e.bak && debug_log "DEBUG" "config_mape: network backup created." || debug_log "DEBUG" "config_mape: Failed to backup network config."
     cp /etc/config/dhcp /etc/config/dhcp.map-e.bak && debug_log "DEBUG" "config_mape: dhcp backup created." || debug_log "DEBUG" "config_mape: Failed to backup dhcp config."
@@ -1166,35 +1165,30 @@ config_mape() {
 
     debug_log "DEBUG" "config_mape: Applying MAP-E configuration using UCI."
 
-    # 既存のwanインターフェースの自動起動を停止
-    uci set network.wan.disabled='1'
-    uci set network.wan.auto='0'
+    uci -q set network.wan.disabled='1'
+    uci -q set network.wan.auto='0'
 
-    # --- DHCP LAN 設定 ---
-    uci set dhcp.lan.ra='relay'
-    uci set dhcp.lan.dhcpv6='relay'
-    uci set dhcp.lan.ndp='relay'
-    uci set dhcp.lan.force='1'
+    uci -q set dhcp.lan.ra='relay'
+    uci -q set dhcp.lan.dhcpv6='relay'
+    uci -q set dhcp.lan.ndp='relay'
+    uci -q set dhcp.lan.force='1'
 
-    # --- DHCP WAN6 設定 ---
-    uci set dhcp.wan6=dhcp
-    uci set dhcp.wan6.interface='wan6'
-    uci set dhcp.wan6.master='1'
-    uci set dhcp.wan6.ra='relay'
-    uci set dhcp.wan6.dhcpv6='relay'
-    uci set dhcp.wan6.ndp='relay'
+    uci -q set dhcp.wan6=dhcp
+    uci -q set dhcp.wan6.interface='wan6'
+    uci -q set dhcp.wan6.master='1'
+    uci -q set dhcp.wan6.ra='relay'
+    uci -q set dhcp.wan6.dhcpv6='relay'
+    uci -q set dhcp.wan6.ndp='relay'
 
-    # --- WAN6 インターフェース設定 ---
-    uci set network.wan6.proto='dhcpv6'
-    uci set network.wan6.reqaddress='try'
-    uci set network.wan6.reqprefix='auto'
-
-    # Conditional setting of network.wan6.ip6prefix based on acquisition method
+    uci -q set network.wan6.proto='dhcpv6'
+    uci -q set network.wan6.reqaddress='try'
+    uci -q set network.wan6.reqprefix='auto'
+    
     debug_log "DEBUG" "config_mape: IPv6 acquisition method is '${MAPE_IPV6_ACQUISITION_METHOD}'."
     if [ "$MAPE_IPV6_ACQUISITION_METHOD" = "gua" ]; then
         if [ -n "$IPV6PREFIX" ]; then
             debug_log "DEBUG" "config_mape: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
-            uci set network.wan6.ip6prefix="${IPV6PREFIX}/64"
+            uci -q set network.wan6.ip6prefix="${IPV6PREFIX}/64"
         else
             debug_log "DEBUG" "config_mape: IPV6PREFIX is empty, cannot set network.wan6.ip6prefix for GUA method."
             uci -q delete network.wan6.ip6prefix
@@ -1206,23 +1200,21 @@ config_mape() {
         debug_log "DEBUG" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.wan6.ip6prefix."
         uci -q delete network.wan6.ip6prefix
     fi
-        
-    # --- WANMAP (MAP-E) インターフェース設定 ---
-    uci set network.${WANMAP}=interface
-    uci set network.${WANMAP}.proto='map'
-    uci set network.${WANMAP}.maptype='map-e'
-    uci set network.${WANMAP}.peeraddr="${BR}"
-    uci set network.${WANMAP}.ipaddr="${IPV4}"
-    uci set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci set network.${WANMAP}.ip6prefix="${IP6PFX}::"
-    uci set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
-    uci set network.${WANMAP}.ealen="${EALEN}"
-    uci set network.${WANMAP}.psidlen="${PSIDLEN}"
-    uci set network.${WANMAP}.offset="${OFFSET}"
-    uci set network.${WANMAP}.mtu='1460'
-    uci set network.${WANMAP}.encaplimit='ignore'
+
+    uci -q set network.${WANMAP}=interface
+    uci -q set network.${WANMAP}.proto='map'
+    uci -q set network.${WANMAP}.maptype='map-e'
+    uci -q set network.${WANMAP}.peeraddr="${BR}"
+    uci -q set network.${WANMAP}.ipaddr="${IPV4}"
+    uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
+    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
+    uci -q set network.${WANMAP}.ealen="${EALEN}"
+    uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
+    uci -q set network.${WANMAP}.offset="${OFFSET}"
+    uci -q set network.${WANMAP}.mtu='1460'
+    uci -q set network.${WANMAP}.encaplimit='ignore'
     
-    # --- バージョン固有設定 ---
     if [ -f "$osversion_file" ]; then
         osversion=$(cat "$osversion_file")
         debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
@@ -1237,13 +1229,11 @@ config_mape() {
         uci -q delete network.${WANMAP}.legacymap
     else
         debug_log "DEBUG" "config_mape: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
-        # dhcp.wan6.interface は既に上で設定済み
-        uci set dhcp.wan6.ignore='1'
-        uci set network.${WANMAP}.legacymap='1'
-        uci set network.${WANMAP}.tunlink='wan6' 
+        uci -q set dhcp.wan6.ignore='1'
+        uci -q set network.${WANMAP}.legacymap='1'
+        uci -q set network.${WANMAP}.tunlink='wan6'
     fi
     
-    # --- ファイアウォール設定 ---
     local current_wan_networks
     current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network)
     if echo "$current_wan_networks" | grep -q "\bwan\b"; then
@@ -1256,10 +1246,9 @@ config_mape() {
     else
         debug_log "DEBUG" "config_mape: '${WANMAP}' already in firewall zone ${ZONE_NO} network list."
     fi
-    uci set firewall.@zone[${ZONE_NO}].masq='1'
-    uci set firewall.@zone[${ZONE_NO}].mtu_fix='1'
-
-    # 設定の保存
+    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
+    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
+    
     debug_log "DEBUG" "config_mape: Committing UCI changes..."
     local commit_ok=1
     if ! uci commit network; then debug_log "DEBUG" "config_mape: Failed to commit network."; commit_ok=0; fi
