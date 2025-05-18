@@ -33,10 +33,10 @@ en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
 en|MSG_DSLITE_AUTO_DETECT_FAILED=Provider detection failed
 en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {r}
 en|MSG_DSLITE_UNSUPPORTED=Not supported{:} DS-Lite
-en|MENU_DSLITE_TRANS_EAST=DS-Lite{:} Transix (East Japan)
-en|MENU_DSLITE_TRANS_WEST=DS-Lite{:} Transix (West Japan)
-en|MENU_DSLITE_XPASS=DS-Lite{:} Cross Pass
-en|MENU_DSLITE_V6CONNECT=DS-Lite{:} v6 Connect
+en|MENU_DSLITE_TRANS_EAST=Transix (East Japan)
+en|MENU_DSLITE_TRANS_WEST=Transix (West Japan)
+en|MENU_DSLITE_XPASS=Cross Pass
+en|MENU_DSLITE_V6CONNECT=v6 Connect
 
 # menu.db
 en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE / NURO Hikari
