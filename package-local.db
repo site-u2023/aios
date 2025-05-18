@@ -54,6 +54,9 @@ install_package luci-i18n-wol hidden
 [luci-app-watchcat]
 install_package luci-i18n-watchcat hidden
 
+[luci-app-filebrowser]
+install_package luci-i18n-filebrowser hidden
+
 [internet-detector]
 install_package luci-compat hidden
 install_package luci-lib-ipkg hidden
