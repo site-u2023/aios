@@ -14,7 +14,7 @@ DETECTED_AFTR_INFO=""
 DETECTED_PROVIDER_DISPLAY_NAME=""
 DETECTED_PROVIDER_KEY=""
 
-get_dslite() {
+OK_get_dslite() {
     local logical_wan6_ifname=""
     local physical_wan_ifname=""
     local lease_file="/tmp/hosts/odhcp6c"
@@ -139,6 +139,203 @@ get_dslite() {
     fi
 
     debug_log "DEBUG" "get_dslite: Detection complete. Key: '$DETECTED_PROVIDER_KEY', Display: '$DETECTED_PROVIDER_DISPLAY_NAME', AFTR Info: '$DETECTED_AFTR_INFO'."
+    return 0
+}
+
+get_dslite() {
+    local manual_input_specifier="$1"
+
+    DHCP_AFTR_NAME=""
+
+    if [ -n "$manual_input_specifier" ]; then
+        debug_log "DEBUG" "get_dslite: Manual mode (input specifier present: '$manual_input_specifier'), skipping DHCP detection."
+        return 0
+    fi
+    
+    debug_log "DEBUG" "get_dslite: Automatic mode. Starting AFTR name detection from DHCP."
+    
+    local logical_wan6_ifname=""
+    local physical_wan_ifname=""
+    local lease_file="/tmp/hosts/odhcp6c"
+    local aftr_name_option_code="24"
+    local raw_aftr_name=""
+    local exit_status=0
+
+    if command -v network_find_wan6 >/dev/null 2>&1; then
+        network_find_wan6 logical_wan6_ifname
+    else
+        debug_log "ERROR" "get_dslite: network_find_wan6 command not found."
+        exit_status=1
+    fi
+
+    if [ "$exit_status" -eq 0 ] && [ -z "$logical_wan6_ifname" ]; then
+        debug_log "DEBUG" "get_dslite: Could not find logical IPv6 WAN interface (wan6)."
+        exit_status=1
+    fi
+
+    if [ "$exit_status" -eq 0 ]; then
+        if command -v network_get_physdev >/dev/null 2>&1; then
+            network_get_physdev physical_wan_ifname "$logical_wan6_ifname"
+        else
+            debug_log "ERROR" "get_dslite: network_get_physdev command not found."
+            exit_status=1
+        fi
+    fi
+    
+    if [ "$exit_status" -eq 0 ] && [ -z "$physical_wan_ifname" ]; then
+        debug_log "DEBUG" "get_dslite: Could not find physical device for $logical_wan6_ifname."
+        exit_status=1
+    fi
+    
+    if [ "$exit_status" -eq 0 ]; then
+        debug_log "DEBUG" "get_dslite: Found logical IPv6 WAN interface: $logical_wan6_ifname, Physical device: $physical_wan_ifname" 
+        if [ ! -f "$lease_file" ]; then
+            debug_log "DEBUG" "get_dslite: Lease file '$lease_file' not found."
+            exit_status=1
+        fi
+    fi
+
+    if [ "$exit_status" -eq 0 ]; then
+        raw_aftr_name=$(grep "^${physical_wan_ifname} .*aftr-name" "$lease_file" | awk '{print $NF}' 2>/dev/null)
+
+        if [ -z "$raw_aftr_name" ]; then
+            local hex_encoded_aftr_name
+            hex_encoded_aftr_name=$(grep "^${physical_wan_ifname} ${aftr_name_option_code} " "$lease_file" | awk '{print $3}' 2>/dev/null)
+
+            if [ -n "$hex_encoded_aftr_name" ]; then
+                debug_log "DEBUG" "get_dslite: Found HEX encoded AFTR name '$hex_encoded_aftr_name' for $physical_wan_ifname. Decoding is required." 
+                debug_log "DEBUG" "get_dslite: HEX encoded AFTR name found, but decoding function is not implemented." 
+                raw_aftr_name=""
+            fi
+        fi
+
+        if [ -z "$raw_aftr_name" ]; then
+            debug_log "DEBUG" "get_dslite: Could not retrieve AFTR name from lease file for interface '$physical_wan_ifname'." 
+            exit_status=1
+        fi
+    fi
+    
+    if [ "$exit_status" -ne 0 ]; then
+        debug_log "DEBUG" "get_dslite: Failed to retrieve AFTR name from DHCP."
+        printf "%s\n" "$(color red "$(get_message MSG_DSLITE_AUTO_DETECT_FAILED)")"
+        return 1
+    fi
+
+    DHCP_AFTR_NAME="$raw_aftr_name"
+    debug_log "DEBUG" "get_dslite: Automatic AFTR detection successful. DHCP_AFTR_NAME set to '$DHCP_AFTR_NAME'."
+    return 0
+}
+
+map_dslite() {
+    local manual_input_specifier="$1"
+    local source_specifier=""
+    local func_exit_status=0
+
+    local AFTR_TRANS_EAST="2403:7f00:4000:2000::126"
+    local AFTR_TRANS_WEST="2403:7f00:c000:1000::126"
+    local determined_aftr_ip_transix=""
+    local determined_region_name_transix="Unknown"
+
+    DETECTED_AFTR_INFO=""
+    DETECTED_PROVIDER_DISPLAY_NAME=""
+    DETECTED_PROVIDER_KEY=""
+
+    if [ -n "$manual_input_specifier" ]; then
+        source_specifier="$manual_input_specifier"
+        debug_log "DEBUG" "map_dslite: Manual mode. Using input specifier: '$source_specifier'"
+    else
+        if [ -n "$DHCP_AFTR_NAME" ]; then
+            source_specifier="$DHCP_AFTR_NAME"
+            debug_log "DEBUG" "map_dslite: Automatic mode. Using DHCP_AFTR_NAME: '$source_specifier'"
+        else
+            debug_log "ERROR" "map_dslite: Automatic mode but DHCP_AFTR_NAME is not set."
+            printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
+            return 1
+        fi
+    fi
+
+    if [ -z "$source_specifier" ]; then
+        debug_log "ERROR" "map_dslite: source_specifier is empty before mapping."
+        printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
+        return 1 
+    fi
+
+    debug_log "DEBUG" "map_dslite: Retrieved raw AFTR name (source_specifier): '$source_specifier'."
+
+    if is_ipv6_address_dslite "$source_specifier"; then
+        DETECTED_AFTR_INFO="$source_specifier"
+        if [ "$source_specifier" = "$AFTR_TRANS_EAST" ]; then
+            DETECTED_PROVIDER_KEY="transix"
+            DETECTED_PROVIDER_DISPLAY_NAME="Transix (East Japan)"
+        elif [ "$source_specifier" = "$AFTR_TRANS_WEST" ]; then
+            DETECTED_PROVIDER_KEY="transix"
+            DETECTED_PROVIDER_DISPLAY_NAME="Transix (West Japan)"
+        else
+            DETECTED_PROVIDER_KEY="manual_ip" 
+            DETECTED_PROVIDER_DISPLAY_NAME="Manual IP ($source_specifier)"
+            debug_log "DEBUG" "map_dslite: Manual IP detected. Key set to 'manual_ip'."
+        fi
+    else
+        if [ "$source_specifier" = "gw.transix.jp" ]; then
+            debug_log "DEBUG" "map_dslite: [Transix] Starting AFTR determination using hardcoded IPs." 
+            if [ -n "$AFTR_TRANS_EAST" ] && check_ipv6_reachability_dslite "$AFTR_TRANS_EAST"; then
+                determined_aftr_ip_transix="$AFTR_TRANS_EAST"
+                determined_region_name_transix="Transix (East)"
+                debug_log "DEBUG" "map_dslite: [Transix] Using hardcoded East AFTR: $determined_aftr_ip_transix" 
+            elif [ -n "$AFTR_TRANS_WEST" ] && check_ipv6_reachability_dslite "$AFTR_TRANS_WEST"; then
+                determined_aftr_ip_transix="$AFTR_TRANS_WEST"
+                determined_region_name_transix="Transix (West)"
+                debug_log "DEBUG" "map_dslite: [Transix] Using hardcoded West AFTR: $determined_aftr_ip_transix" 
+            else
+                debug_log "DEBUG" "map_dslite: [Transix] Failed to determine AFTR using hardcoded IPs. Both are unreachable or undefined." 
+            fi
+
+            if [ -n "$determined_aftr_ip_transix" ] && [ "$determined_region_name_transix" != "Unknown" ]; then
+                DETECTED_AFTR_INFO="$determined_aftr_ip_transix"
+                DETECTED_PROVIDER_DISPLAY_NAME="$determined_region_name_transix"
+                DETECTED_PROVIDER_KEY="transix"
+                debug_log "DEBUG" "map_dslite: Detected provider as Transix. AFTR: $DETECTED_AFTR_INFO, Display: $DETECTED_PROVIDER_DISPLAY_NAME" 
+            else
+                debug_log "DEBUG" "map_dslite: [Transix] Failed to determine Transix region or AFTR. No valid AFTR IP." 
+                DETECTED_PROVIDER_DISPLAY_NAME="Transix (Resolution Failed)"
+                DETECTED_PROVIDER_KEY="transix"
+            fi
+        elif [ "$source_specifier" = "dgw.xpass.jp" ]; then
+            DETECTED_AFTR_INFO="$source_specifier"
+            DETECTED_PROVIDER_DISPLAY_NAME="Cross Path"
+            DETECTED_PROVIDER_KEY="cross_path"
+            debug_log "DEBUG" "map_dslite: Detected provider as Cross Path based on AFTR name '$source_specifier'." 
+        elif [ "$source_specifier" = "gw.example.v6option.ne.jp" ]; then
+            DETECTED_AFTR_INFO="$source_specifier"
+            DETECTED_PROVIDER_DISPLAY_NAME="v6 Option"
+            DETECTED_PROVIDER_KEY="v6option"
+            debug_log "DEBUG" "map_dslite: Detected provider as v6 Option based on AFTR name '$source_specifier'." 
+        else
+            DETECTED_AFTR_INFO="$source_specifier"
+            DETECTED_PROVIDER_DISPLAY_NAME="Unknown (AFTR: $source_specifier)"
+            DETECTED_PROVIDER_KEY="unknown"
+            debug_log "DEBUG" "map_dslite: Unknown provider for AFTR name '$source_specifier'. Using raw AFTR info." 
+        fi
+    fi
+
+    if [ -z "$DETECTED_PROVIDER_KEY" ] || [ "$DETECTED_PROVIDER_KEY" = "unknown" ]; then
+        debug_log "DEBUG" "map_dslite: Failed to determine a known provider or AFTR for '$source_specifier'." 参考
+        func_exit_status=1
+    fi
+    
+    if [ "$func_exit_status" -eq 0 ]; then
+        if [ -z "$DETECTED_AFTR_INFO" ]; then
+            debug_log "DEBUG" "map_dslite: Final AFTR_INFO is empty for Key '$DETECTED_PROVIDER_KEY'." 
+            func_exit_status=1
+        fi
+    fi
+
+    if [ "$func_exit_status" -ne 0 ]; then
+        printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
+        return 1
+    fi
+
+    debug_log "DEBUG" "map_dslite: Mapping complete. Key: '$DETECTED_PROVIDER_KEY', Display: '$DETECTED_PROVIDER_DISPLAY_NAME', AFTR Info: '$DETECTED_AFTR_INFO'." 参考
     return 0
 }
 
@@ -369,7 +566,11 @@ internet_dslite_main() {
 
     print_section_title "MENU_INTERNET_DSLITE"
 
-    if ! get_dslite; then
+    if ! get_dslite "$@"; then
+        return 1
+    fi
+    
+    if ! map_dslite "$@"; then
         return 1
     fi
     
