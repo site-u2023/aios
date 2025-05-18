@@ -10,40 +10,34 @@ install_package luci-i18n-dashboard hidden
 [ttyd]
 install_package luci-app-ttyd hidden
 install_package luci-i18n-ttyd hidden
-
 uci delete ttyd.ttyd 2>/dev/null
 uci delete ttyd.@ttyd[-1] 2>/dev/null
-
 uci commit ttyd
-
 uci set ttyd.ttyd='ttyd'
 uci set ttyd.ttyd.port='7681'
 uci set ttyd.ttyd.interface='@lan'
 uci set ttyd.ttyd.ipv6='1'
 uci set ttyd.ttyd.command='/bin/login -f root'
-
 uci del ttyd.ttyd.client_option 2>/dev/null
 uci add_list ttyd.ttyd.client_option='theme={"background": "black"}'
 uci add_list ttyd.ttyd.client_option='titleFixed=ttyd'
-
 uci commit ttyd
-
 uci add ttyd ttyd  # 新しいセクションを作成
 uci set ttyd.@ttyd[-1].port='8888'
 uci set ttyd.@ttyd[-1].interface='@lan'
 uci set ttyd.@ttyd[-1].ipv6='1'
 uci set ttyd.@ttyd[-1].command='aios'
-
 uci del ttyd.@ttyd[-1].client_option 2>/dev/null
 uci add_list ttyd.@ttyd[-1].client_option='theme={"background": "blue"}'
 uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
-
 uci commit ttyd
+
+[luci-app-commands]
+install_package luci-i18n-commands hidden
 
 [irqbalance]
 install_package luci-app-irqbalance hidden
 install_package luci-i18n-irqbalance hidden
-
 uci set irqbalance.irqbalance=irqbalance
 uci set irqbalance.irqbalance.enabled='1'
 uci commit irqbalance
