@@ -8,7 +8,6 @@ MENU_PACKAGES selector MENU_PACKAGES
 # MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
 # MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 
-
 [MENU_INTERNET]
 MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
 # MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
