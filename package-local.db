@@ -1,7 +1,6 @@
 SCRIPT_VERSION="2025.03.27-00-01"
 
-[luci-base]
-install_package luci-i18n-base hidden
+[luci-i18n-base]
 install_package luci-i18n-opkg hidden
 install_package luci-i18n-firewall hidden
 
