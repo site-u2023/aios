@@ -3,7 +3,8 @@ SCRIPT_VERSION="2025.05.10-00-00"
 [BASE_SYSTEM.COMMON]
 # === 基本システム機能 ===
 print_section_header "PKG_SECTION_BASIC"
-install_package luci-base yn hidden
+install_package luci yn hidden
+install_package luci-i18n-base hidden
 install_package ttyd yn hidden disabled
 install_package openssh-sftp-server yn hidden
 # install_package coreutils yn hidden
