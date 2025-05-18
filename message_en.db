@@ -86,6 +86,8 @@ en|PKG_SECTION_ADDITION=Additional Features
 en|PKG_SECTION_USB=USB Storage
 en|PKG_SECTION_SAMBA=File Sharing
 en|MSG_CONFIRM_PACKAGE_OPERATION=Do you want to install the packages listed above {yn}{;}
+en|MSG_PACKAGE_INSTALL_CANCELLED=Package installation cancelled
+
 
 # common-system.sh
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{:} {i}
