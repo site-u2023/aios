@@ -26,6 +26,59 @@ MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
 
 [MENU_INTERNET_DSLITE]
 MENU_DSLITE_AUTO download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main
+MENU_DSLITE_MANUAL selector MENU_INTERNET_DSLITE_MANUAL
+MENU_INTERNET_RESTORE download "internet-ds-lite-config.sh" "chmod" "load"; restore_dslite
+
+[MENU_INTERNET_DSLITE_MANUAL]
+MENU_DSLITE_TRANS selector MENU_DSLITE_TRANS_MANUAL # Select Transix East/West
+MENU_DSLITE_XPASS download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "dgw.xpass.jp"
+MENU_DSLITE_V6CONNECT download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "gw.example.v6option.ne.jp"
+
+[MENU_DSLITE_TRANS_MANUAL]
+MENU_DSLITE_TRANS_EAST download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "2403:7f00:4000:2000::126"
+MENU_DSLITE_TRANS_WEST download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "2403:7f00:c000:1000::126"
+MENU_INTERNET_RESTORE download "internet-ds-lite-config.sh" "chmod" "load"; restore_dslite
+
+[MENU_INTERNET_NURO_MAPE]
+MENU_INTERNET_NURO_MAPE download "internet-map-e-nuro.sh" "chmod" "load"; internet_map_nuro_main
+MENU_INTERNET_RESTORE download "internet-map-e-nuro.sh" "chmod" "load"; restore_mape_nuro
+
+
+[MENU_SYSTEM]
+MENU_SYSTEM printf "\n%s\n" "$(color yellow "Coming soon")"
+
+[MENU_PACKAGES]
+MENU_PACKAGES_AUTO_INSTALL export PACKAGE_INSTALL_MODE="auto"; download "package.sh" "chmod" "load"; package_main
+MENU_PACKAGES_MANUAL_INSTALL export PACKAGE_INSTALL_MODE="manual"; download "package.sh" "chmod" "load"; package_main
+MENU_PACKAGES_LIST download "package.sh" "chmod" "load"; check_install_list
+# AIOSメニュー設定データベース
+
+[MAIN_MENU_NAME]
+MENU_INTERNET selector MENU_INTERNET
+# MENU_SYSTEM selector MENU_SYSTEM
+MENU_PACKAGES selector MENU_PACKAGES
+# MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
+# MENU_ACCESSPOINT download "accesspoint-setup.sh" "chmod" "load"
+# MENU_OTHERS download "other-utilities.sh" "chmod" "load"
+
+
+[MENU_INTERNET]
+MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
+# MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
+MENU_INTERNET_MAPE selector MENU_INTERNET_MAPE
+MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
+MENU_INTERNET_NURO_MAPE selector MENU_INTERNET_NURO_MAPE
+
+[MENU_INTERNET_PPPOE]
+MENU_INTERNET_PPPOE download "internet-pppoe.sh" "chmod" "load"; internet_pppoe_main
+MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
+
+[MENU_INTERNET_MAPE]
+MENU_INTERNET_MAPE download "internet-map-e.sh" "chmod" "load"; internet_map_main
+MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
+
+[MENU_INTERNET_DSLITE]
+MENU_DSLITE_AUTO download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main
 # MENU_DSLITE_MANUAL selector MENU_INTERNET_DSLITE_MANUAL
 MENU_INTERNET_RESTORE download "internet-ds-lite-config.sh" "chmod" "load"; restore_dslite
 
