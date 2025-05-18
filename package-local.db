@@ -171,7 +171,6 @@ install_package luci-i18n-banip hidden
 
 [wireguard-tools]
 install_package luci-app-wireguard hidden
-install_package kmod-wireguard hidden
 
 [luci-app-ddns]
 install_package luci-i18n-ddns hidden
