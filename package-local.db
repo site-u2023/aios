@@ -33,7 +33,7 @@ uci add ttyd ttyd  # 新しいセクションを作成
 uci set ttyd.@ttyd[-1].port='8888'
 uci set ttyd.@ttyd[-1].interface='@lan'
 uci set ttyd.@ttyd[-1].ipv6='1'
-uci set ttyd.@ttyd[-1].command='/bin/login -f root'
+uci set ttyd.@ttyd[-1].command='aios'
 
 uci del ttyd.@ttyd[-1].client_option 2>/dev/null
 uci add_list ttyd.@ttyd[-1].client_option='theme={"background": "blue"}'
