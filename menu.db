@@ -1,7 +1,7 @@
 # AIOSメニュー設定データベース
 
 [MAIN_MENU_NAME]
-MENU_INTERNETdownload "internet-auto-config.sh" "chmod" "load"
+MENU_INTERNET download "internet-auto-config.sh" "chmod" "load"
 # MENU_INTERNET selector MENU_INTERNET
 # MENU_SYSTEM selector MENU_SYSTEM
 MENU_PACKAGES selector MENU_PACKAGES
