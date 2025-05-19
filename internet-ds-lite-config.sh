@@ -95,7 +95,10 @@ manual_dslite() {
     local aftr_value="$1"
     local isp_name="$(get_message "${SELECTED_MENU_KEY}")"
 
-    if ! confirm "$isp_name"; then
+    local yn_prompt="${isp_name}{yn}"
+    local temp_key="TMP_CONFIRM_ISP_YN"
+    
+    if ! confirm "$yn_prompt" "yn"; then
         debug_log "DEBUG" "manual_dslite: User cancelled DS-Lite manual configuration."
         return 1
     fi
