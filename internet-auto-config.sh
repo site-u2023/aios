@@ -261,37 +261,52 @@ internet_auto_config_main() {
 
 
     if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        printf "\n%s\n" "$(color yellow "AS number cache file not found.")"
+        printf "\n%s\n" "$(color yellow "AS number cache file not found.")" # Cache file not found
         manual_menu_needed=1
     else
         asn=$(cat "${CACHE_DIR}/isp_as.ch")
         if [ -z "$asn" ]; then
-            printf "\n%s\n" "$(color yellow "AS number is empty.")"
+            printf "\n%s\n" "$(color yellow "AS number is empty.")" # AS number is empty in cache
             manual_menu_needed=1
         else
-            # --- ここでPD・AFTR名も取得
-            device_info=$(get_device_network_info)
+            # --- Get PD and AFTR name here as well
+            device_info=$(get_device_network_info) # Retrieve current network info
             aftr_name=$(echo "$device_info" | cut -d'|' -f1)
             pd_prefix=$(echo "$device_info" | cut -d'|' -f2)
-            # asnは従来通り
+            # asn is used as before
             connection_info=$(determine_connection_auto "$asn" "$pd_prefix" "$aftr_name")
             connection_type=$(echo "$connection_info" | cut -d'|' -f1)
-            provider_key=$(echo "$connection_info" | cut -d'|' -f2) # $4の値がここに格納される
+            provider_key=$(echo "$connection_info" | cut -d'|' -f2) # Value from $4 is stored here
             display_isp_name=$(echo "$connection_info" | cut -d'|' -f3)
             command_to_execute=$(echo "$connection_info" | cut -d'|' -f4)
 
             if [ "$connection_type" = "unknown" ]; then
-                printf "\n%s\n" "$(color yellow "Unknown provider. Please select manually.")"
+                # Prepare diagnostic information for the {a} placeholder
+                local diagnostic_info_a=""
+                [ -n "$asn" ] && diagnostic_info_a="AS: $asn"
+                # Only add PD if it's not empty and not just "/" (which might indicate no PD)
+                if [ -n "$pd_prefix" ] && [ "$pd_prefix" != "/" ]; then
+                    [ -n "$diagnostic_info_a" ] && diagnostic_info_a="$diagnostic_info_a, "
+                    diagnostic_info_a="${diagnostic_info_a}PD: $pd_prefix"
+                fi
+                # Only add AFTR if it's not empty
+                if [ -n "$aftr_name" ]; then
+                    [ -n "$diagnostic_info_a" ] && diagnostic_info_a="$diagnostic_info_a, "
+                    diagnostic_info_a="${diagnostic_info_a}AFTR: $aftr_name"
+                fi
+                [ -z "$diagnostic_info_a" ] && diagnostic_info_a="N/A" # Fallback if no info
+
+                printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" a="$diagnostic_info_a")")"
                 manual_menu_needed=1
             else
-                printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$display_isp_name" tp="$connection_type")")"
+                printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" s="$display_isp_name" t="$connection_type")")"
                 confirm "MSG_AUTO_CONFIG_CONFIRM"
                 local confirm_status=$?
                 if [ $confirm_status -ne 0 ]; then
                     manual_menu_needed=1
                 else
                     eval "$command_to_execute"
-                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command failed.")"
+                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command execution failed.")" # Command failed
                 fi
             fi
         fi
