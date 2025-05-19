@@ -33,7 +33,7 @@ MENU_INTERNET_MAPE_NURO download "internet-map-e-nuro.sh" "chmod" "load"; intern
 MENU_INTERNET_RESTORE download "internet-map-e-nuro.sh" "chmod" "load"; restore_mape_nuro
 
 [MENU_INTERNET_MAPE_SOFTBANK]
-MENU_INTERNET_MAPE_SOFTBANK download "internet-softbank.sh" "chmod" "load"; internet_softbank_main
+MENU_INTERNET_MAPE_SOFTBANK download "nternet-mape-softbank.sh" "chmod" "load"; internet_softbank_main
 MENU_INTERNET_RESTORE download "internet-map-e-nuro.sh" "chmod" "load"; restore_softbank
 
 [MENU_SYSTEM]
