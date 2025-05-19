@@ -1,7 +1,8 @@
 # AIOSメニュー設定データベース
 
 [MAIN_MENU_NAME]
-MENU_INTERNET selector MENU_INTERNET
+MENU_INTERNETdownload "internet-auto-config.sh" "chmod" "load"
+# MENU_INTERNET selector MENU_INTERNET
 # MENU_SYSTEM selector MENU_SYSTEM
 MENU_PACKAGES selector MENU_PACKAGES
 # MENU_ADBLOCKER download "adblocker-dns.sh" "chmod" "load"
@@ -9,7 +10,6 @@ MENU_PACKAGES selector MENU_PACKAGES
 # MENU_OTHERS download "other-utilities.sh" "chmod" "load"
 
 [MENU_INTERNET]
-MENU_INTERNET_AUTO download "internet-auto-config.sh" "chmod" "load"
 # MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
 MENU_INTERNET_MAPE selector MENU_INTERNET_MAPE
 MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
