@@ -39,14 +39,24 @@ decode_hex_aftr_name_dslite() {
 }
 
 ipv6_address_dslite() {
+    # OpenWrt互換: シンプルなIPv6アドレス判定
+    # 引数: $1 IPv6アドレス文字列
     local input_string="$1"
-    local ipv6_regex_pattern='^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:)))$'
-
-    if echo "$input_string" | grep -Eq "$ipv6_regex_pattern"; then
-        return 0
-    else
+    # 1. コロンが2つ以上含まれているか判定
+    # 2. 英数字とコロン・ピリオドのみ
+    if [ -z "$input_string" ]; then
         return 1
     fi
+    case "$input_string" in
+        *::*) ;; # "::"を含む（IPv6略記あり）
+        *:*) ;;  # ":"を含む
+        *) return 1;;
+    esac
+    # 文字種チェック（英数字・:・.のみ）
+    if echo "$input_string" | grep -qv '^[0-9a-fA-F:.]*$'; then
+        return 1
+    fi
+    return 0
 }
 
 get_aaaa_record_dslite() {
@@ -60,7 +70,7 @@ get_aaaa_record_dslite() {
     fi
 
     if ! command -v getent >/dev/null 2>&1; then
-        debug_log "ERROR" "get_aaaa_record_dslite: 'getent' command not found. Cannot resolve hostname '$hostname'."
+        debug_log "DEBUG" "get_aaaa_record_dslite: 'getent' command not found. Cannot resolve hostname '$hostname'."
         echo ""
         return
     fi
@@ -102,7 +112,7 @@ get_dslite() {
     if command -v network_find_wan6 >/dev/null 2>&1; then
         network_find_wan6 logical_wan6_ifname
     else
-        debug_log "ERROR" "get_dslite: network_find_wan6 command not found."
+        debug_log "DEBUG" "get_dslite: network_find_wan6 command not found."
         exit_status=1
     fi
 
@@ -115,7 +125,7 @@ get_dslite() {
         if command -v network_get_physdev >/dev/null 2>&1; then
             network_get_physdev physical_wan_ifname "$logical_wan6_ifname"
         else
-            debug_log "ERROR" "get_dslite: network_get_physdev command not found."
+            debug_log "DEBUG" "get_dslite: network_get_physdev command not found."
             exit_status=1
         fi
     fi
@@ -187,14 +197,14 @@ map_dslite() {
             source_specifier="$DHCP_AFTR_NAME"
             debug_log "DEBUG" "map_dslite: Automatic mode. Using DHCP_AFTR_NAME: '$source_specifier'"
         else
-            debug_log "ERROR" "map_dslite: Automatic mode but DHCP_AFTR_NAME is not set."
+            debug_log "DEBUG" "map_dslite: Automatic mode but DHCP_AFTR_NAME is not set."
             printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
             return 1
         fi
     fi
 
     if [ -z "$source_specifier" ]; then
-        debug_log "ERROR" "map_dslite: source_specifier is empty before mapping."
+        debug_log "DEBUG" "map_dslite: source_specifier is empty before mapping."
         printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
         return 1 
     fi
@@ -432,7 +442,7 @@ config_dslite() {
     uci -q commit firewall || commit_failed=1
 
     if [ "$commit_failed" -eq 1 ]; then
-        debug_log "ERROR" "config_dslite: Failed to commit one or more UCI sections."
+        debug_log "DEBUG" "config_dslite: Failed to commit one or more UCI sections."
         return 1
     fi
 
