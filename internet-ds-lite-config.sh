@@ -14,134 +14,6 @@ DETECTED_AFTR_INFO=""
 DETECTED_PROVIDER_DISPLAY_NAME=""
 DETECTED_PROVIDER_KEY=""
 
-OK_get_dslite() {
-    local logical_wan6_ifname=""
-    local physical_wan_ifname=""
-    local lease_file="/tmp/hosts/odhcp6c"
-    local aftr_name_option_code="24"
-    local raw_aftr_name=""
-    local AFTR_TRANS_EAST="2403:7f00:4000:2000::126"
-    local AFTR_TRANS_WEST="2403:7f00:c000:1000::126"
-    local determined_aftr_ip_transix=""
-    local determined_region_name_transix="Unknown"
-    local exit_status=0
-
-    debug_log "DEBUG" "get_dslite: Starting AFTR detection."
-
-    DETECTED_AFTR_INFO=""
-    DETECTED_PROVIDER_DISPLAY_NAME=""
-    DETECTED_PROVIDER_KEY=""
-
-    network_find_wan6 logical_wan6_ifname
-    if [ -z "$logical_wan6_ifname" ]; then
-        debug_log "DEBUG" "get_dslite: Could not find logical IPv6 WAN interface (wan6)."
-        exit_status=1
-    fi
-
-    if [ "$exit_status" -eq 0 ]; then
-        network_get_physdev physical_wan_ifname "$logical_wan6_ifname"
-        if [ -z "$physical_wan_ifname" ]; then
-            debug_log "DEBUG" "get_dslite: Could not find physical device for $logical_wan6_ifname."
-            exit_status=1
-        fi
-    fi
-    
-    if [ "$exit_status" -eq 0 ]; then
-        debug_log "DEBUG" "get_dslite: Found logical IPv6 WAN interface: $logical_wan6_ifname, Physical device: $physical_wan_ifname"
-        if [ ! -f "$lease_file" ]; then
-            debug_log "DEBUG" "get_dslite: Lease file '$lease_file' not found."
-            exit_status=1
-        fi
-    fi
-
-    if [ "$exit_status" -eq 0 ]; then
-        raw_aftr_name=$(grep "^${physical_wan_ifname} .*aftr-name" "$lease_file" | awk '{print $NF}' 2>/dev/null)
-
-        if [ -z "$raw_aftr_name" ]; then
-            local hex_encoded_aftr_name
-            hex_encoded_aftr_name=$(grep "^${physical_wan_ifname} ${aftr_name_option_code} " "$lease_file" | awk '{print $3}' 2>/dev/null)
-
-            if [ -n "$hex_encoded_aftr_name" ]; then
-                debug_log "DEBUG" "get_dslite: Found HEX encoded AFTR name '$hex_encoded_aftr_name' for $physical_wan_ifname. Decoding is required."
-                debug_log "DEBUG" "get_dslite: HEX encoded AFTR name found, but decoding function is not implemented."
-                raw_aftr_name=""
-            fi
-        fi
-
-        if [ -z "$raw_aftr_name" ]; then
-            debug_log "DEBUG" "get_dslite: Could not retrieve AFTR name from lease file for interface '$physical_wan_ifname'."
-            exit_status=1
-        fi
-    fi
-
-    if [ "$exit_status" -eq 0 ]; then
-        debug_log "DEBUG" "get_dslite: Retrieved raw AFTR name: '$raw_aftr_name' for interface '$physical_wan_ifname'."
-
-        if [ "$raw_aftr_name" = "gw.transix.jp" ]; then
-            debug_log "DEBUG" "get_dslite: [Transix] Starting AFTR determination using hardcoded IPs."
-            if [ -n "$AFTR_TRANS_EAST" ] && check_ipv6_reachability_dslite "$AFTR_TRANS_EAST"; then
-                determined_aftr_ip_transix="$AFTR_TRANS_EAST"
-                determined_region_name_transix="Transix (East)"
-                debug_log "DEBUG" "get_dslite: [Transix] Using hardcoded East AFTR: $determined_aftr_ip_transix"
-            elif [ -n "$AFTR_TRANS_WEST" ] && check_ipv6_reachability_dslite "$AFTR_TRANS_WEST"; then
-                determined_aftr_ip_transix="$AFTR_TRANS_WEST"
-                determined_region_name_transix="Transix (West)"
-                debug_log "DEBUG" "get_dslite: [Transix] Using hardcoded West AFTR: $determined_aftr_ip_transix"
-            else
-                debug_log "DEBUG" "get_dslite: [Transix] Failed to determine AFTR using hardcoded IPs. Both are unreachable or undefined."
-            fi
-
-            if [ -n "$determined_aftr_ip_transix" ] && [ "$determined_region_name_transix" != "Unknown" ]; then
-                DETECTED_AFTR_INFO="$determined_aftr_ip_transix"
-                DETECTED_PROVIDER_DISPLAY_NAME="$determined_region_name_transix"
-                DETECTED_PROVIDER_KEY="transix"
-                debug_log "DEBUG" "get_dslite: Detected provider as Transix. AFTR: $DETECTED_AFTR_INFO, Display: $DETECTED_PROVIDER_DISPLAY_NAME"
-            else
-                debug_log "DEBUG" "get_dslite: [Transix] Failed to determine Transix region or AFTR. No valid AFTR IP."
-                DETECTED_PROVIDER_DISPLAY_NAME="Transix (Resolution Failed)"
-                DETECTED_PROVIDER_KEY="transix"
-            fi
-        elif [ "$raw_aftr_name" = "dgw.xpass.jp" ]; then
-            DETECTED_AFTR_INFO="$raw_aftr_name"
-            DETECTED_PROVIDER_DISPLAY_NAME="Cross Path"
-            DETECTED_PROVIDER_KEY="cross_path"
-            debug_log "DEBUG" "get_dslite: Detected provider as Cross Path based on AFTR name '$raw_aftr_name'."
-        elif [ "$raw_aftr_name" = "gw.example.v6option.ne.jp" ]; then
-            DETECTED_AFTR_INFO="$raw_aftr_name"
-            DETECTED_PROVIDER_DISPLAY_NAME="v6 Option"
-            DETECTED_PROVIDER_KEY="v6option"
-            debug_log "DEBUG" "get_dslite: Detected provider as v6 Option based on AFTR name '$raw_aftr_name'."
-        else
-            DETECTED_AFTR_INFO="$raw_aftr_name"
-            DETECTED_PROVIDER_DISPLAY_NAME="Unknown (AFTR: $raw_aftr_name)"
-            DETECTED_PROVIDER_KEY="unknown"
-            debug_log "DEBUG" "get_dslite: Unknown provider for AFTR name '$raw_aftr_name'. Using raw AFTR info."
-        fi
-    fi
-
-    if [ "$exit_status" -eq 0 ]; then
-        if [ -z "$DETECTED_PROVIDER_KEY" ] || [ "$DETECTED_PROVIDER_KEY" = "unknown" ]; then
-            debug_log "DEBUG" "get_dslite: Failed to determine a known provider or AFTR for '$raw_aftr_name'."
-            exit_status=1
-        fi
-    fi
-    
-    if [ "$exit_status" -eq 0 ]; then
-        if [ -z "$DETECTED_AFTR_INFO" ]; then
-            debug_log "DEBUG" "get_dslite: Final AFTR_INFO is empty for Key '$DETECTED_PROVIDER_KEY'."
-            exit_status=1
-        fi
-    fi
-
-    if [ "$exit_status" -ne 0 ]; then
-        printf "%s\n" "$(color red "$(get_message MSG_DSLITE_UNSUPPORTED)")"
-        return 1
-    fi
-
-    debug_log "DEBUG" "get_dslite: Detection complete. Key: '$DETECTED_PROVIDER_KEY', Display: '$DETECTED_PROVIDER_DISPLAY_NAME', AFTR Info: '$DETECTED_AFTR_INFO'."
-    return 0
-}
-
 check_ipv6_reachability_dslite() {
     local addr="$1"
     if [ -z "$addr" ]; then
@@ -493,7 +365,14 @@ replace_dslite_sh() {
 
 config_dslite() {
     local DSLITE="ds_lite"
-    local ZONE_NO='1'
+
+    local ZONE_NO
+    ZONE_NO=$(uci show firewall | grep "network.*'lan'" | head -n1 | sed -n "s/^firewall\.@zone\[\([0-9]*\)\].*/\1/p")
+    [ -z "$ZONE_NO" ] && ZONE_NO="1"
+
+    local WAN_IF="${WAN_IF:-wan}"
+    local WAN6_IF="${WAN6_IF:-wan6}"
+    local LAN_IF="${LAN_IF:-lan}"
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
         debug_log "DEBUG" "config_dslite: DSLITE_AFTR_IP is not set. Cannot apply UCI settings."
@@ -507,21 +386,21 @@ config_dslite() {
 
     debug_log "DEBUG" "config_dslite: Applying UCI settings for network interface '${DSLITE}' and dhcp. AFTR: '$DSLITE_AFTR_IP'."
 
-    uci -q set network.wan.disabled='1'
-    uci -q set network.wan.auto='0'
+    uci -q set network.${WAN_IF}.disabled='1'
+    uci -q set network.${WAN_IF}.auto='0'
 
-    uci -q set dhcp.lan.ra='relay'
-    uci -q set dhcp.lan.dhcpv6='server'
-    uci -q set dhcp.lan.ndp='relay'
-    uci -q set dhcp.lan.force='1'
+    uci -q set dhcp.${LAN_IF}.ra='relay'
+    uci -q set dhcp.${LAN_IF}.dhcpv6='server'
+    uci -q set dhcp.${LAN_IF}.ndp='relay'
+    uci -q set dhcp.${LAN_IF}.force='1'
     
-    uci -q set dhcp.wan6=dhcp
-    uci -q set dhcp.wan6.interface='wan6'
-    uci -q set dhcp.wan6.ignore='1'
-    uci -q set dhcp.wan6.master='1'
-    uci -q set dhcp.wan6.ra='relay'
-    uci -q set dhcp.wan6.dhcpv6='relay'
-    uci -q set dhcp.wan6.ndp='relay'
+    uci -q set dhcp.${WAN6_IF}=dhcp
+    uci -q set dhcp.${WAN6_IF}.interface='${WAN6_IF}'
+    uci -q set dhcp.${WAN6_IF}.ignore='1'
+    uci -q set dhcp.${WAN6_IF}.master='1'
+    uci -q set dhcp.${WAN6_IF}.ra='relay'
+    uci -q set dhcp.${WAN6_IF}.dhcpv6='relay'
+    uci -q set dhcp.${WAN6_IF}.ndp='relay'
 
     debug_log "DEBUG" "config_dslite: Deleting and recreating network interface '${DSLITE}'."
     uci -q delete network.${DSLITE}
