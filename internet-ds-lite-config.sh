@@ -142,6 +142,30 @@ OK_get_dslite() {
     return 0
 }
 
+check_ipv6_reachability_dslite() {
+    local addr="$1"
+    if [ -z "$addr" ]; then
+        debug_log "DEBUG" "check_ipv6_reachability_dslite: No address provided."
+        return 1
+    fi
+    if ping -6 -c 1 -w 2 "$addr" >/dev/null 2>&1; then
+        debug_log "DEBUG" "check_ipv6_reachability_dslite: IPv6 address $addr is reachable."
+        return 0
+    else
+        debug_log "DEBUG" "check_ipv6_reachability_dslite: IPv6 address $addr is NOT reachable."
+        return 1
+    fi
+}
+
+decode_hex_aftr_name_dslite() {
+    local hexstr="$1"
+    if [ -z "$hexstr" ]; then
+        echo ""
+        return
+    fi
+    echo "$hexstr" | sed 's/../& /g' | awk '{for(i=1;i<=NF;i++) printf "%c", "0x"$i; print ""}'
+}
+
 ipv6_address_dslite() {
     local input_string="$1"
     local ipv6_regex_pattern='^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:)))$'
@@ -245,9 +269,10 @@ get_dslite() {
             hex_encoded_aftr_name=$(grep "^${physical_wan_ifname} ${aftr_name_option_code} " "$lease_file" | awk '{print $3}' 2>/dev/null)
 
             if [ -n "$hex_encoded_aftr_name" ]; then
-                debug_log "DEBUG" "get_dslite: Found HEX encoded AFTR name '$hex_encoded_aftr_name' for $physical_wan_ifname. Decoding is required." 
-                debug_log "DEBUG" "get_dslite: HEX encoded AFTR name found, but decoding function is not implemented." 
-                raw_aftr_name=""
+                debug_log "DEBUG" "get_dslite: Found HEX encoded AFTR name '$hex_encoded_aftr_name' for $physical_wan_ifname. Decoding."
+                # HEXデコード部分を追加
+                raw_aftr_name=$(echo "$hex_encoded_aftr_name" | sed 's/../& /g' | awk '{for(i=1;i<=NF;i++) printf "%c", "0x"$i; print ""}')
+                debug_log "DEBUG" "get_dslite: Decoded HEX AFTR name: '$raw_aftr_name'."
             fi
         fi
 
