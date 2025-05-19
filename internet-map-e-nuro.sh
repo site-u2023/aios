@@ -171,103 +171,109 @@ EOF
 }
 
 mape_nuro_config() {
-    local wanmap_if='wanmap'
-    local firewall_zone_idx='1'
-    local openwrt_release_major
+    local WANMAP_IF="${WANMAP_IF:-wanmap}"
+    local WAN_IF="${WAN_IF:-wan}"
+    local WAN6_IF="${WAN6_IF:-wan6}"
+    local LAN_IF="${LAN_IF:-lan}"
 
-    debug_log "DEBUG" "mape_nuro_config: Backing up configuration files..."
-    cp /etc/config/network /etc/config/network.map-e-nuro.bak && debug_log "DEBUG" "mape_nuro_config: network backup created (.map-e-nuro.bak)." || debug_log "DEBUG" "mape_nuro_config: Failed to backup network config."
-    cp /etc/config/dhcp /etc/config/dhcp.map-e-nuro.bak && debug_log "DEBUG" "mape_nuro_config: dhcp backup created (.map-e-nuro.bak)." || debug_log "DEBUG" "mape_nuro_config: Failed to backup dhcp config."
-    cp /etc/config/firewall /etc/config/firewall.map-e-nuro.bak && debug_log "DEBUG" "mape_nuro_config: firewall backup created (.map-e-nuro.bak)." || debug_log "DEBUG" "mape_nuro_config: Failed to backup firewall config."
+    local FIREWALL_ZONE_IDX
+    FIREWALL_ZONE_IDX=$(uci show firewall | grep "network.*'lan'" | head -n1 | sed -n "s/^firewall\.@zone\[\([0-9]*\)\].*/\1/p")
+    [ -z "$FIREWALL_ZONE_IDX" ] && FIREWALL_ZONE_IDX="1"
 
-    debug_log "DEBUG" "mape_nuro_config: Applying NURO MAP-E UCI settings."
+    local osversion_file="${CACHE_DIR}/osversion.ch"
+    local osversion=""
+
+    debug_log "DEBUG" "mape_nuro_config: Backing up /etc/config/network, /etc/config/dhcp, /etc/config/firewall."
+    cp /etc/config/network /etc/config/network.map-e-nuro.bak 2>/dev/null
+    cp /etc/config/dhcp /etc/config/dhcp.map-e-nuro.bak 2>/dev/null
+    cp /etc/config/firewall /etc/config/firewall.map-e-nuro.bak 2>/dev/null
+
+    debug_log "DEBUG" "mape_nuro_config: Applying UCI settings for NURO MAP-E interfaces and dhcp."
 
     debug_log "DEBUG" "mape_nuro_config: Setting DHCP LAN..."
-    uci set dhcp.lan.ra='relay'
-    uci set dhcp.lan.dhcpv6='server'
-    uci set dhcp.lan.ndp='relay'
-    uci set dhcp.lan.force='1'
+    uci set dhcp.${LAN_IF}.ra='relay'
+    uci set dhcp.${LAN_IF}.dhcpv6='server'
+    uci set dhcp.${LAN_IF}.ndp='relay'
+    uci set dhcp.${LAN_IF}.force='1'
 
-    debug_log "DEBUG" "mape_nuro_config: Setting WAN interface (network.wan.auto='1')..."
-    uci set network.wan.auto='1'
+    debug_log "DEBUG" "mape_nuro_config: Setting WAN interface (network.${WAN_IF}.auto='1')..."
+    uci set network.${WAN_IF}.auto='1'
 
     debug_log "DEBUG" "mape_nuro_config: Setting DHCP WAN6..."
-    uci set dhcp.wan6=dhcp
-    uci set dhcp.wan6.interface='wan'
-    uci set dhcp.wan6.master='1'
-    uci set dhcp.wan6.ra='relay'
-    uci set dhcp.wan6.dhcpv6='relay'
-    uci set dhcp.wan6.ndp='relay'
+    uci set dhcp.${WAN6_IF}=dhcp
+    uci set dhcp.${WAN6_IF}.interface="${WAN_IF}"
+    uci set dhcp.${WAN6_IF}.master='1'
+    uci set dhcp.${WAN6_IF}.ra='relay'
+    uci set dhcp.${WAN6_IF}.dhcpv6='relay'
+    uci set dhcp.${WAN6_IF}.ndp='relay'
 
-    debug_log "DEBUG" "mape_nuro_config: Setting MAP-E interface (network.$wanmap_if)..."
-    uci set network."$wanmap_if"=interface
-    uci set network."$wanmap_if".proto='map'
-    uci set network."$wanmap_if".maptype='map-e'
-    uci set network."$wanmap_if".peeraddr="$BR"
-    uci set network."$wanmap_if".ipaddr="$IPV4"
-    uci set network."$wanmap_if".ip4prefixlen="$IP4PREFIXLEN"
-    uci set network."$wanmap_if".ip6prefix="${IP6PFX}::"
-    uci set network."$wanmap_if".ip6prefixlen="$IP6PREFIXLEN"
-    uci set network."$wanmap_if".ealen="$EALEN"
-    uci set network."$wanmap_if".psidlen="$PSIDLEN"
-    uci set network."$wanmap_if".offset="$OFFSET"
-    uci set network."$wanmap_if".mtu='1452'
-    uci set network."$wanmap_if".encaplimit='ignore'
+    debug_log "DEBUG" "mape_nuro_config: Setting MAP-E interface (network.${WANMAP_IF})..."
+    uci set network."${WANMAP_IF}"=interface
+    uci set network."${WANMAP_IF}".proto='map'
+    uci set network."${WANMAP_IF}".maptype='map-e'
+    uci set network."${WANMAP_IF}".peeraddr="$BR"
+    uci set network."${WANMAP_IF}".ipaddr="$IPV4"
+    uci set network."${WANMAP_IF}".ip4prefixlen="$IP4PREFIXLEN"
+    uci set network."${WANMAP_IF}".ip6prefix="${IP6PFX}::"
+    uci set network."${WANMAP_IF}".ip6prefixlen="$IP6PREFIXLEN"
+    uci set network."${WANMAP_IF}".ealen="$EALEN"
+    uci set network."${WANMAP_IF}".psidlen="$PSIDLEN"
+    uci set network."${WANMAP_IF}".offset="$OFFSET"
+    uci set network."${WANMAP_IF}".mtu='1452'
+    uci set network."${WANMAP_IF}".encaplimit='ignore'
 
-    openwrt_release_major=$(grep 'DISTRIB_RELEASE' /etc/openwrt_release 2>/dev/null | cut -d"'" -f2 | cut -c 1-2)
-    debug_log "DEBUG" "mape_nuro_config: Detected OpenWrt major release: '$openwrt_release_major'"
-
-    if [ -n "$openwrt_release_major" ] && \
-       ( [ "$openwrt_release_major" = "SN" ] || \
-         [ "$openwrt_release_major" -ge 21 ] && [ "$openwrt_release_major" -le 24 ] ); then
-        debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt $openwrt_release_major (21-24, SN)..."
-        uci set dhcp.wan6.ignore='1'
-        uci set network."$wanmap_if".legacymap='1'
-        uci set network."$wanmap_if".tunlink='wan6'
-    elif [ "$openwrt_release_major" = "19" ]; then
-        debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt 19..."
-        uci -q delete network."$wanmap_if".tunlink
-        uci add_list network."$wanmap_if".tunlink='wan6'
+    if [ -f "$osversion_file" ]; then
+        osversion=$(cat "$osversion_file")
+        debug_log "DEBUG" "mape_nuro_config: OS Version from '$osversion_file': $osversion"
     else
-        debug_log "DEBUG" "mape_nuro_config: OpenWrt release '$openwrt_release_major' not explicitly handled by version-specific settings. Applying defaults which might be similar to 21+."
-        uci set dhcp.wan6.ignore='1'
-        uci set network."$wanmap_if".legacymap='1'
-        uci set network."$wanmap_if".tunlink='wan6'
+        osversion="unknown"
+        debug_log "DEBUG" "mape_nuro_config: OS version file '$osversion_file' not found. Applying default/latest version settings."
     fi
 
-    debug_log "DEBUG" "mape_nuro_config: Setting Firewall rules for zone index $firewall_zone_idx..."
+    if echo "$osversion" | grep -q "^19"; then
+        debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt 19.x compatible version."
+        uci -q delete network."${WANMAP_IF}".tunlink
+        uci add_list network."${WANMAP_IF}".tunlink="${WAN6_IF}"
+    else
+        debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
+        uci set dhcp.${WAN6_IF}.ignore='1'
+        uci set network."${WANMAP_IF}".legacymap='1'
+        uci set network."${WANMAP_IF}".tunlink="${WAN6_IF}"
+    fi
+
+    debug_log "DEBUG" "mape_nuro_config: Setting Firewall rules for zone index $FIREWALL_ZONE_IDX..."
     local current_fw_networks
-    current_fw_networks=$(uci -q get firewall.@zone["$firewall_zone_idx"].network)
+    current_fw_networks=$(uci -q get firewall.@zone["$FIREWALL_ZONE_IDX"].network)
     
-    if echo "$current_fw_networks" | grep -q '\bwan\b'; then
-        uci del_list firewall.@zone["$firewall_zone_idx"].network='wan'
-        debug_log "DEBUG" "mape_nuro_config: Removed 'wan' from firewall zone $firewall_zone_idx network list."
+    if echo "$current_fw_networks" | grep -q "\b${WAN_IF}\b"; then
+        uci del_list firewall.@zone["$FIREWALL_ZONE_IDX"].network="${WAN_IF}"
+        debug_log "DEBUG" "mape_nuro_config: Removed '${WAN_IF}' from firewall zone $FIREWALL_ZONE_IDX network list."
     fi
-    if ! echo "$current_fw_networks" | grep -q "\b$wanmap_if\b"; then
-        uci add_list firewall.@zone["$firewall_zone_idx"].network="$wanmap_if"
-        debug_log "DEBUG" "mape_nuro_config: Added '$wanmap_if' to firewall zone $firewall_zone_idx network list."
+    if ! echo "$current_fw_networks" | grep -q "\b${WANMAP_IF}\b"; then
+        uci add_list firewall.@zone["$FIREWALL_ZONE_IDX"].network="${WANMAP_IF}"
+        debug_log "DEBUG" "mape_nuro_config: Added '${WANMAP_IF}' to firewall zone $FIREWALL_ZONE_IDX network list."
     else
-        debug_log "DEBUG" "mape_nuro_config: '$wanmap_if' already in firewall zone $firewall_zone_idx network list."
+        debug_log "DEBUG" "mape_nuro_config: '${WANMAP_IF}' already in firewall zone $FIREWALL_ZONE_IDX network list."
     fi
 
     debug_log "DEBUG" "mape_nuro_config: Setting DNS configurations..."
-    uci -q delete dhcp.lan.dns
-    uci -q delete dhcp.lan.dhcp_option
-    uci -q delete network.lan.dns
+    uci -q delete dhcp.${LAN_IF}.dns
+    uci -q delete dhcp.${LAN_IF}.dhcp_option
+    uci -q delete network.${LAN_IF}.dns
 
-    uci add_list network.lan.dns='118.238.201.33'
-    uci add_list network.lan.dns='152.165.245.17'
+    uci add_list network.${LAN_IF}.dns='118.238.201.33'
+    uci add_list network.${LAN_IF}.dns='152.165.245.17'
 
-    uci add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8'
-    uci add_list dhcp.lan.dhcp_option='6,1.0.0.1,8.8.4.4'
+    uci add_list dhcp.${LAN_IF}.dhcp_option='6,1.1.1.1,8.8.8.8'
+    uci add_list dhcp.${LAN_IF}.dhcp_option='6,1.0.0.1,8.8.4.4'
 
-    uci add_list network.lan.dns='240d:0010:0004:0005::33'
-    uci add_list network.lan.dns='240d:12:4:1b01:152:165:245:17'
+    uci add_list network.${LAN_IF}.dns='240d:0010:0004:0005::33'
+    uci add_list network.${LAN_IF}.dns='240d:12:4:1b01:152:165:245:17'
     
-    uci add_list dhcp.lan.dns='2606:4700:4700::1111'
-    uci add_list dhcp.lan.dns='2001:4860:4860::8888'
-    uci add_list dhcp.lan.dns='2606:4700:4700::1001'
-    uci add_list dhcp.lan.dns='2001:4860:4860::8844'
+    uci add_list dhcp.${LAN_IF}.dns='2606:4700:4700::1111'
+    uci add_list dhcp.${LAN_IF}.dns='2001:4860:4860::8888'
+    uci add_list dhcp.${LAN_IF}.dns='2606:4700:4700::1001'
+    uci add_list dhcp.${LAN_IF}.dns='2001:4860:4860::8844'
 
     debug_log "DEBUG" "mape_nuro_config: Committing all UCI changes..."
     local commit_success=1
@@ -289,8 +295,7 @@ mape_nuro_config() {
         return 0
     else
         debug_log "DEBUG" "mape_nuro_config: One or more UCI commit operations failed."
-        # MSG_MAPE_UCI_COMMIT_FAILED is not in internet-map-e.sh, using direct English.
-        printf "%s\\n" "$(color "red" "Error: UCI commit failed.")"
+        printf "%s\n" "$(color "red" "Error: UCI commit failed.")"
         return 1
     fi
 }
