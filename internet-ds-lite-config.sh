@@ -211,6 +211,10 @@ map_dslite() {
     DETECTED_PROVIDER_DISPLAY_NAME=""
     DETECTED_PROVIDER_KEY=""
 
+    if [ "$DETECTED_PROVIDER_KEY" = "manual" ]; then
+        return 0
+    fi
+    
     if [ -n "$manual_input_specifier" ]; then
         source_specifier="$manual_input_specifier"
         debug_log "DEBUG" "map_dslite: Manual mode. Using input specifier: '$source_specifier'"
@@ -320,6 +324,11 @@ determine_dslite() {
 
     debug_log "DEBUG" "determine_dslite: Processing for Provider Key '$provider_key', AFTR Info: '$aftr_info_from_db', Display Name: '$provider_display_name_from_db'."
 
+    if [ "$DETECTED_PROVIDER_KEY" = "manual" ]; then
+        DSLITE_AFTR_IP="$aftr_info_from_db"
+        return 0
+    fi
+    
     if [ -z "$provider_key" ]; then
         debug_log "DEBUG" "determine_dslite: Provider key (from global) is empty."
         return 1
