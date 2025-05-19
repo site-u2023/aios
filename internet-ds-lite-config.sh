@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.17-00-00"
+SCRIPT_VERSION="2025.05.19-00-00"
 
 . /lib/functions/network.sh
 
