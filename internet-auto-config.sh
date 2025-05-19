@@ -80,6 +80,16 @@ add_provider_record() {
 get_provider_data_by_as() {
     local search_asn="$1"
     local result=""
+    local numeric_asn=""
+
+    # Remove "AS" prefix if present
+    if echo "$search_asn" | grep -q "^AS"; then
+        numeric_asn=$(echo "$search_asn" | sed 's/^AS//')
+    else
+        numeric_asn="$search_asn"
+    fi
+    debug_log "DEBUG" "get_provider_data_by_as: Original ASN:[$search_asn], Numeric ASN for search:[$numeric_asn]"
+
 
     if [ "$PROVIDER_DATABASE_INITIALIZED" = "false" ]; then
         provider_data_definitions
@@ -87,17 +97,18 @@ get_provider_data_by_as() {
     fi
 
     if [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-        result=$(echo "$PROVIDER_DATABASE_CONTENT" | grep "^${search_asn}|" | head -n 1)
+        # Use numeric_asn for grep
+        result=$(echo "$PROVIDER_DATABASE_CONTENT" | grep "^${numeric_asn}|" | head -n 1)
     else
         result=""
     fi
 
     if [ -n "$result" ]; then
-        debug_log "DEBUG" "get_provider_data_by_as: Found data for ASN $search_asn: $result"
+        debug_log "DEBUG" "get_provider_data_by_as: Found data for NumericASN $numeric_asn: $result"
         echo "$result"
         return 0
     else
-        debug_log "DEBUG" "get_provider_data_by_as: No data found for ASN $search_asn"
+        debug_log "DEBUG" "get_provider_data_by_as: No data found for NumericASN $numeric_asn"
         return 1
     fi
 }
@@ -106,8 +117,16 @@ determine_connection_auto() {
     local input_asn="$1"
     local input_pd="$2"
     local input_aftr="$3"
+    local numeric_asn=""
 
-    debug_log "DEBUG" "determine_connection_auto: Entry - ASN:[$input_asn], PD:[$input_pd], AFTR:[$input_aftr]"
+    # Remove "AS" prefix if present
+    if echo "$input_asn" | grep -q "^AS"; then
+        numeric_asn=$(echo "$input_asn" | sed 's/^AS//')
+    else
+        numeric_asn="$input_asn"
+    fi
+
+    debug_log "DEBUG" "determine_connection_auto: Entry - OrigASN:[$input_asn], NumericASN:[$numeric_asn], PD:[$input_pd], AFTR:[$input_aftr]"
 
     if [ "$PROVIDER_DATABASE_INITIALIZED" = "false" ]; then
         debug_log "DEBUG" "determine_connection_auto: Initializing provider database."
@@ -127,43 +146,46 @@ determine_connection_auto() {
     # 1. AFTR name match
     debug_log "DEBUG" "determine_connection_auto: Attempting AFTR match with AFTR:[$input_aftr]"
     if [ -n "$input_aftr" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-        result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v aftr="$input_aftr" '{if($3==aftr){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+        # Pass input_aftr directly to awk
+        result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v aftr_val="$input_aftr" '{if($3!="" && $3==aftr_val){print $6 "|" $4 "|" $5 "|" $7; exit}}')
         if [ -n "$result" ]; then
             debug_log "DEBUG" "determine_connection_auto: AFTR match found: [$result]"
         else
             debug_log "DEBUG" "determine_connection_auto: No AFTR match found for AFTR:[$input_aftr]"
         fi
     else
-        debug_log "DEBUG" "determine_connection_auto: Skipping AFTR match (AFTR or DB content empty)."
+        debug_log "DEBUG" "determine_connection_auto: Skipping AFTR match (AFTR input or DB content empty)."
     fi
 
     # 2. AS+PD match
     if [ -z "$result" ]; then
-        debug_log "DEBUG" "determine_connection_auto: Attempting AS+PD match with ASN:[$input_asn], PD:[$input_pd]"
-        if [ -n "$input_asn" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" -v pd="$input_pd" '{if($1==asn && index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+        debug_log "DEBUG" "determine_connection_auto: Attempting AS+PD match with NumericASN:[$numeric_asn], PD:[$input_pd]"
+        if [ -n "$numeric_asn" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
+            # Use numeric_asn (asn_val) for comparison with $1
+            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn_val="$numeric_asn" -v pd_val="$input_pd" '{if($1==asn_val && $2!="" && index(pd_val,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
             if [ -n "$result" ]; then
                 debug_log "DEBUG" "determine_connection_auto: AS+PD match found: [$result]"
             else
-                debug_log "DEBUG" "determine_connection_auto: No AS+PD match found for ASN:[$input_asn], PD:[$input_pd]"
+                debug_log "DEBUG" "determine_connection_auto: No AS+PD match found for NumericASN:[$numeric_asn], PD:[$input_pd]"
             fi
         else
-            debug_log "DEBUG" "determine_connection_auto: Skipping AS+PD match (ASN, PD or DB content empty)."
+            debug_log "DEBUG" "determine_connection_auto: Skipping AS+PD match (NumericASN, PD or DB content empty)."
         fi
     fi
 
     # 3. AS only match
     if [ -z "$result" ]; then
-        debug_log "DEBUG" "determine_connection_auto: Attempting AS only match with ASN:[$input_asn]"
-        if [ -n "$input_asn" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" '{if($1==asn){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+        debug_log "DEBUG" "determine_connection_auto: Attempting AS only match with NumericASN:[$numeric_asn]"
+        if [ -n "$numeric_asn" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
+            # Use numeric_asn (asn_val) for comparison with $1
+            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn_val="$numeric_asn" '{if($1==asn_val){print $6 "|" $4 "|" $5 "|" $7; exit}}')
             if [ -n "$result" ]; then
                 debug_log "DEBUG" "determine_connection_auto: AS only match found: [$result]"
             else
-                debug_log "DEBUG" "determine_connection_auto: No AS only match found for ASN:[$input_asn]"
+                debug_log "DEBUG" "determine_connection_auto: No AS only match found for NumericASN:[$numeric_asn]"
             fi
         else
-            debug_log "DEBUG" "determine_connection_auto: Skipping AS only match (ASN or DB content empty)."
+            debug_log "DEBUG" "determine_connection_auto: Skipping AS only match (NumericASN or DB content empty)."
         fi
     fi
 
@@ -171,11 +193,12 @@ determine_connection_auto() {
     if [ -z "$result" ]; then
         debug_log "DEBUG" "determine_connection_auto: Attempting PD only match with PD:[$input_pd]"
         if [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v pd="$input_pd" '{if(index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+            # Original logic for PD only match
+            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v pd_val="$input_pd" '{if(index(pd_val,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
             if [ -n "$result" ]; then
                 debug_log "DEBUG" "determine_connection_auto: PD only match found: [$result]"
             else
-                debug_log "DEBUG" "determine_connection_auto: No PD only match found for PD:[$input_pd]"
+                debug_log "DEBUG" "determine_connection_auto: No PD only match found for PD:[$input_pd] (after awk execution)"
             fi
         else
             debug_log "DEBUG" "determine_connection_auto: Skipping PD only match (PD or DB content empty)."
