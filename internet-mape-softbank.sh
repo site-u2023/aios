@@ -19,10 +19,10 @@ SCRIPT_VERSION="2025.05.19-03-00" # バージョン更新
 
 # --- Configuration: Potentially fixed MAP-E parameters ---
 # These values are from the blog post and NEED VERIFICATION for general applicability.
-SB_MAP_E_BR_IPV6_ADDRESS="2404:8e00::feed:100"
-SB_MAP_E_EA_LEN="32"
-SB_MAP_E_PSID_LEN="8"
-SB_MAP_E_PSID_OFFSET="0"
+="2400:2000:4:0:a000::1919"
+SB_MAP_E_EA_LEN=""
+SB_MAP_E_PSID_LEN=""
+SB_MAP_E_PSID_OFFSET=""
 # --- End of Configuration ---
 
 get_delegated_prefix() {
@@ -61,7 +61,7 @@ get_delegated_prefix() {
     fi
 }
 
-config_softbank_mape() {
+config_softbank() {
     # Script-level argument validation
     if [ "$#" -ne 1 ]; then
         debug_log "DEBUG" "Error: Incorrect number of script arguments."
@@ -100,7 +100,7 @@ config_softbank_mape() {
     fi
 
     debug_log "DEBUG" "Info: Using IPv6 Delegated Prefix for MAP-E: $DELEGATED_IPV6_PREFIX"
-    debug_log "DEBUG" "Info: Using MAP-E BR IPv6 Address: $SB_MAP_E_BR_IPV6_ADDRESS"
+    debug_log "DEBUG" "Info: Using MAP-E BR IPv6 Address: $"
     debug_log "DEBUG" "Info: Using MAP-E EA-len: $SB_MAP_E_EA_LEN, PSID-len: $SB_MAP_E_PSID_LEN, Offset: $SB_MAP_E_PSID_OFFSET"
 
     # Determine the tunlink interface (should be the actual IPv6 WAN interface)
@@ -116,15 +116,7 @@ config_softbank_mape() {
 
     uci -q delete network."$MAP_IFACE_NAME"
 
-    uci set network."$MAP_IFACE_NAME"="interface"
-    uci set network."$MAP_IFACE_NAME".proto="map"
-    uci set network."$MAP_IFACE_NAME".maptype="map-e"
-    uci set network."$MAP_IFACE_NAME".tunlink="$IPV6_LINK_IF"
-    uci set network."$MAP_IFACE_NAME".ip6prefix="$DELEGATED_IPV6_PREFIX"
-    uci set network."$MAP_IFACE_NAME".peeraddr="$SB_MAP_E_BR_IPV6_ADDRESS"
-    uci set network."$MAP_IFACE_NAME".ealen="$SB_MAP_E_EA_LEN"
-    uci set network."$MAP_IFACE_NAME".psidlen="$SB_MAP_E_PSID_LEN"
-    uci set network."$MAP_IFACE_NAME".offset="$SB_MAP_E_PSID_OFFSET"
+
 
     uci commit network
     debug_log "DEBUG" "Info: MAP-E interface '$MAP_IFACE_NAME' configured in UCI."
@@ -154,15 +146,15 @@ internet_softbank_main() {
     fi
     
     # Call the core configuration function, passing all script arguments.
-    # config_softbank_mape will handle argument validation internally.
-    config_softbank_mape "$@"
+    # config_softbank will handle argument validation internally.
+    config_softbank "$@"
     configure_status=$?
 
     # Log final status based on the return code of the configuration function.
     if [ "$configure_status" -eq 0 ]; then
         debug_log "DEBUG" "Info: SoftBank MAP-E configuration script finished successfully."
     else
-        # Specific error messages and usage should have been printed by config_softbank_mape
+        # Specific error messages and usage should have been printed by config_softbank
         debug_log "DEBUG" "Error: SoftBank MAP-E configuration script failed. Exit status: $configure_status."
     fi
 
