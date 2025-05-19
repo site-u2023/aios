@@ -39,24 +39,25 @@ decode_hex_aftr_name_dslite() {
 }
 
 ipv6_address_dslite() {
-    # OpenWrt互換: シンプルなIPv6アドレス判定
-    # 引数: $1 IPv6アドレス文字列
-    local input_string="$1"
-    # 1. コロンが2つ以上含まれているか判定
-    # 2. 英数字とコロン・ピリオドのみ
-    if [ -z "$input_string" ]; then
+    local addr="$1"
+    local gua_addr=""
+
+    if [ -z "$addr" ]; then
         return 1
     fi
-    case "$input_string" in
-        *::*) ;; # "::"を含む（IPv6略記あり）
-        *:*) ;;  # ":"を含む
-        *) return 1;;
+
+    if network_get_ipaddr6 gua_addr "$addr" 2>/dev/null && [ -n "$gua_addr" ]; then
+        addr="$gua_addr"
+    fi
+
+    case "$addr" in
+        2[0-9a-fA-F]*|3[0-9a-fA-F]*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
     esac
-    # 文字種チェック（英数字・:・.のみ）
-    if echo "$input_string" | grep -qv '^[0-9a-fA-F:.]*$'; then
-        return 1
-    fi
-    return 0
 }
 
 get_aaaa_record_dslite() {
