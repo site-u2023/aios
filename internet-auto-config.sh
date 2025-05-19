@@ -81,93 +81,49 @@ determine_connection_as() {
 }
 
 internet_auto_config_main() {
-    local asn=""
-    local connection_info=""
-    local connection_type=""
-    local provider_key="" 
-    local display_isp_name=""
-    local command_to_execute=""
-    local exit_code=0
+    # ...（変数宣言・初期化）
 
-    debug_log "DEBUG" "Starting automatic internet configuration detection process (Version: $SCRIPT_VERSION)"
+    # 失敗時やN選択時は「manual_menu」変数に"1"をセット
+    local manual_menu_needed=0
 
-    debug_log "DEBUG" "Checking prerequisites..."
-    local ip_type_file="${CACHE_DIR}/ip_type.ch"
-    if [ ! -f "$ip_type_file" ]; then
-        debug_log "DEBUG" "IP type cache file not found: ${ip_type_file}."
-    fi
+    # -- AS番号ファイル未発見
     if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        debug_log "DEBUG" "AS number cache file not found: ${CACHE_DIR}/isp_as.ch."
-        echo "unknown||"
-        return 1
-    fi
-
-    debug_log "DEBUG" "Retrieving AS number..."
-    asn=$(cat "${CACHE_DIR}/isp_as.ch")
-    if [ -z "$asn" ]; then
-        debug_log "DEBUG" "Failed to retrieve AS number from cache, or cache file is empty."
-        echo "unknown||"
-        return 1
-    fi
-    debug_log "DEBUG" "Detected AS Number: $asn"
-    
-    debug_log "DEBUG" "Determining connection type and command string..."
-    connection_info=$(determine_connection_as "$asn")
-    
-    connection_type=$(echo "$connection_info" | cut -d'|' -f1)
-    provider_key=$(echo "$connection_info" | cut -d'|' -f2) 
-    display_isp_name=$(echo "$connection_info" | cut -d'|' -f3)
-    command_to_execute=$(echo "$connection_info" | cut -d'|' -f4)
-
-    debug_log "DEBUG" "Determined: Type='$connection_type', Key='$provider_key', Name='$display_isp_name', Command='$command_to_execute'"
-
-    if [ "$connection_type" != "unknown" ]; then
-        local final_display_name_for_msg="$display_isp_name"
-        if [ -z "$final_display_name_for_msg" ] || [ "$final_display_name_for_msg" = "Unknown Provider" ]; then
-             if [ -n "$provider_key" ]; then
-                final_display_name_for_msg="$provider_key (key)"
-             else
-                final_display_name_for_msg="Unknown Provider"
-             fi
-        fi
-        printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$final_display_name_for_msg" tp="$connection_type")")"
-        confirm "MSG_AUTO_CONFIG_CONFIRM"
-        local confirm_status=$?
-        if [ $confirm_status -ne 0 ]; then
-            debug_log "DEBUG" "User declined to apply settings or confirmation failed (status: $confirm_status). Returning."
-            exit_code=1
-            return $exit_code
-        fi
-
-        if [ -n "$command_to_execute" ]; then
-            debug_log "DEBUG" "Preparing to execute command: $command_to_execute"
-            
-            local eval_status
-            eval "$command_to_execute"
-            eval_status=$?
-
-            if [ $eval_status -eq 0 ]; then
-                debug_log "DEBUG" "Command executed successfully."
-                exit_code=0
-            else
-                debug_log "DEBUG" "Command execution failed with status $eval_status."
-                exit_code=1
-            fi
+        printf "\n%s\n" "$(color yellow "AS number cache file not found.")"
+        manual_menu_needed=1
+    else
+        asn=$(cat "${CACHE_DIR}/isp_as.ch")
+        if [ -z "$asn" ]; then
+            printf "\n%s\n" "$(color yellow "AS number is empty.")"
+            manual_menu_needed=1
         else
-            debug_log "DEBUG" "No command string defined for connection type '$connection_type' with key '$provider_key'."
+            connection_info=$(determine_connection_as "$asn")
+            connection_type=$(echo "$connection_info" | cut -d'|' -f1)
+            provider_key=$(echo "$connection_info" | cut -d'|' -f2)
+            display_isp_name=$(echo "$connection_info" | cut -d'|' -f3)
+            command_to_execute=$(echo "$connection_info" | cut -d'|' -f4)
+
+            if [ "$connection_type" = "unknown" ]; then
+                printf "\n%s\n" "$(color yellow "Unknown provider. Please select manually.")"
+                manual_menu_needed=1
+            else
+                printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" sp="$display_isp_name" tp="$connection_type")")"
+                confirm "MSG_AUTO_CONFIG_CONFIRM"
+                local confirm_status=$?
+                if [ $confirm_status -ne 0 ]; then
+                    manual_menu_needed=1
+                else
+                    eval "$command_to_execute"
+                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command failed.")"
+                fi
+            fi
         fi
-    else 
-        local unknown_display_name_for_msg="$display_isp_name"
-        if [ "$unknown_display_name_for_msg" = "Unknown Provider" ] && [ -n "$asn" ]; then
-            unknown_display_name_for_msg="AS$asn"
-        elif [ -z "$unknown_display_name_for_msg" ]; then
-             unknown_display_name_for_msg="N/A"
-        fi
-        printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" a="$asn" sp="$unknown_display_name_for_msg")")"
-        exit_code=1
     fi
 
-    return $exit_code
+    # --- 集約: manual_menu_neededが1なら手動メニュー
+    if [ "$manual_menu_needed" -eq 1 ]; then
+        selector MENU_INTERNET
+    fi
+    return 0
 }
 
 internet_auto_config_main
