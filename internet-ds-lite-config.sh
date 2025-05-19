@@ -93,10 +93,9 @@ get_aaaa_record_dslite() {
 
 manual_dslite() {
     local aftr_value="$1"
+    local isp_name="$(get_message "${SELECTED_MENU_KEY}")"
 
-    print_section_title "${SELECTED_MENU_KEY}"
-
-    if ! confirm; then
+    if ! confirm "$isp_name"; then
         debug_log "DEBUG" "manual_dslite: User cancelled DS-Lite manual configuration."
         return 1
     fi
