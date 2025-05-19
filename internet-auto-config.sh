@@ -106,32 +106,40 @@ determine_connection_auto() {
     local input_asn="$1"
     local input_pd="$2"
     local input_aftr="$3"
-    local PROVIDER_DATABASE_CONTENT=""
-    provider_data_definitions
+    # local PROVIDER_DATABASE_CONTENT="" # Removed: This local variable was shadowing the global one.
+    # provider_data_definitions          # Removed: Initialization is now handled below.
+
+    # Ensure the global provider database is initialized if it hasn't been already.
+    if [ "$PROVIDER_DATABASE_INITIALIZED" = "false" ]; then
+        provider_data_definitions
+        PROVIDER_DATABASE_INITIALIZED="true"
+    fi
 
     local result=""
 
-    # 1. AFTR名一致
-    if [ -n "$input_aftr" ]; then
+    # 1. AFTR name match
+    # Check if input_aftr is not empty and PROVIDER_DATABASE_CONTENT is not empty
+    if [ -n "$input_aftr" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
         result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v aftr="$input_aftr" '{if($3==aftr){print $6 "|" $4 "|" $5 "|" $7; exit}}')
     fi
 
-    # 2. AS+PD一致
-    if [ -z "$result" ] && [ -n "$input_asn" ] && [ -n "$input_pd" ]; then
+    # 2. AS+PD match
+    # Check if result is empty and other conditions are met
+    if [ -z "$result" ] && [ -n "$input_asn" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
         result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" -v pd="$input_pd" '{if($1==asn && index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
     fi
 
-    # 3. ASのみ一致
-    if [ -z "$result" ] && [ -n "$input_asn" ]; then
+    # 3. AS only match
+    if [ -z "$result" ] && [ -n "$input_asn" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
         result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" '{if($1==asn){print $6 "|" $4 "|" $5 "|" $7; exit}}')
     fi
 
-    # 4. PDのみ一致
-    if [ -z "$result" ] && [ -n "$input_pd" ]; then
+    # 4. PD only match
+    if [ -z "$result" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
         result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v pd="$input_pd" '{if(index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
     fi
 
-    # 5. 不明
+    # 5. Unknown
     if [ -z "$result" ]; then
         result="unknown|unknown|unknown|"
     fi
