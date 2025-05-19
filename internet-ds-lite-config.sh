@@ -142,6 +142,48 @@ OK_get_dslite() {
     return 0
 }
 
+ipv6_address_dslite() {
+    local input_string="$1"
+    local ipv6_regex_pattern='^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}))|:)))$'
+
+    if echo "$input_string" | grep -Eq "$ipv6_regex_pattern"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+get_aaaa_record_dslite() {
+    local hostname="$1"
+    local resolved_ip=""
+
+    if [ -z "$hostname" ]; then
+        debug_log "DEBUG" "get_aaaa_record_dslite: Hostname is empty."
+        echo ""
+        return
+    fi
+
+    if ! command -v getent >/dev/null 2>&1; then
+        debug_log "ERROR" "get_aaaa_record_dslite: 'getent' command not found. Cannot resolve hostname '$hostname'."
+        echo ""
+        return
+    fi
+
+    resolved_ip=$(getent ahostsv6 "$hostname" | awk '{print $1; exit}')
+
+    if [ -n "$resolved_ip" ]; then
+        if ipv6_address_dslite "$resolved_ip"; then
+            echo "$resolved_ip"
+        else
+            debug_log "DEBUG" "get_aaaa_record_dslite: Resolved IP '$resolved_ip' for hostname '$hostname' is not a valid IPv6 format."
+            echo ""
+        fi
+    else
+        debug_log "DEBUG" "get_aaaa_record_dslite: Could not resolve AAAA record for hostname '$hostname'."
+        echo ""
+    fi
+}
+
 get_dslite() {
     local manual_input_specifier="$1"
 
@@ -262,7 +304,7 @@ map_dslite() {
 
     debug_log "DEBUG" "map_dslite: Retrieved raw AFTR name (source_specifier): '$source_specifier'."
 
-    if is_ipv6_address_dslite "$source_specifier"; then
+    if ipv6_address_dslite "$source_specifier"; then
         DETECTED_AFTR_INFO="$source_specifier"
         if [ "$source_specifier" = "$AFTR_TRANS_EAST" ]; then
             DETECTED_PROVIDER_KEY="transix"
@@ -363,7 +405,7 @@ determine_dslite() {
         DSLITE_AFTR_IP="$aftr_info_from_db"
         debug_log "DEBUG" "determine_dslite: [Transix] Using AFTR IP determined by get_dslite: $DSLITE_AFTR_IP, Display: $DSLITE_DISPLAY_NAME"
     else
-        if is_ipv6_address_dslite "$aftr_info_from_db"; then
+        if ipv6_address_dslite "$aftr_info_from_db"; then
             DSLITE_AFTR_IP="$aftr_info_from_db"
         else
             DSLITE_AFTR_IP=$(get_aaaa_record_dslite "$aftr_info_from_db")
