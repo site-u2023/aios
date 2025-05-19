@@ -106,44 +106,89 @@ determine_connection_auto() {
     local input_asn="$1"
     local input_pd="$2"
     local input_aftr="$3"
-    # local PROVIDER_DATABASE_CONTENT="" # Removed: This local variable was shadowing the global one.
-    # provider_data_definitions          # Removed: Initialization is now handled below.
 
-    # Ensure the global provider database is initialized if it hasn't been already.
+    debug_log "DEBUG" "determine_connection_auto: Entry - ASN:[$input_asn], PD:[$input_pd], AFTR:[$input_aftr]"
+
     if [ "$PROVIDER_DATABASE_INITIALIZED" = "false" ]; then
+        debug_log "DEBUG" "determine_connection_auto: Initializing provider database."
         provider_data_definitions
         PROVIDER_DATABASE_INITIALIZED="true"
+        if [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
+            debug_log "DEBUG" "determine_connection_auto: Provider database initialized and content is present."
+        else
+            debug_log "DEBUG" "determine_connection_auto: Provider database initialized but content is EMPTY."
+        fi
+    else
+        debug_log "DEBUG" "determine_connection_auto: Provider database already initialized."
     fi
 
     local result=""
 
     # 1. AFTR name match
-    # Check if input_aftr is not empty and PROVIDER_DATABASE_CONTENT is not empty
+    debug_log "DEBUG" "determine_connection_auto: Attempting AFTR match with AFTR:[$input_aftr]"
     if [ -n "$input_aftr" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
         result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v aftr="$input_aftr" '{if($3==aftr){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+        if [ -n "$result" ]; then
+            debug_log "DEBUG" "determine_connection_auto: AFTR match found: [$result]"
+        else
+            debug_log "DEBUG" "determine_connection_auto: No AFTR match found for AFTR:[$input_aftr]"
+        fi
+    else
+        debug_log "DEBUG" "determine_connection_auto: Skipping AFTR match (AFTR or DB content empty)."
     fi
 
     # 2. AS+PD match
-    # Check if result is empty and other conditions are met
-    if [ -z "$result" ] && [ -n "$input_asn" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-        result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" -v pd="$input_pd" '{if($1==asn && index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+    if [ -z "$result" ]; then
+        debug_log "DEBUG" "determine_connection_auto: Attempting AS+PD match with ASN:[$input_asn], PD:[$input_pd]"
+        if [ -n "$input_asn" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
+            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" -v pd="$input_pd" '{if($1==asn && index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+            if [ -n "$result" ]; then
+                debug_log "DEBUG" "determine_connection_auto: AS+PD match found: [$result]"
+            else
+                debug_log "DEBUG" "determine_connection_auto: No AS+PD match found for ASN:[$input_asn], PD:[$input_pd]"
+            fi
+        else
+            debug_log "DEBUG" "determine_connection_auto: Skipping AS+PD match (ASN, PD or DB content empty)."
+        fi
     fi
 
     # 3. AS only match
-    if [ -z "$result" ] && [ -n "$input_asn" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-        result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" '{if($1==asn){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+    if [ -z "$result" ]; then
+        debug_log "DEBUG" "determine_connection_auto: Attempting AS only match with ASN:[$input_asn]"
+        if [ -n "$input_asn" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
+            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn="$input_asn" '{if($1==asn){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+            if [ -n "$result" ]; then
+                debug_log "DEBUG" "determine_connection_auto: AS only match found: [$result]"
+            else
+                debug_log "DEBUG" "determine_connection_auto: No AS only match found for ASN:[$input_asn]"
+            fi
+        else
+            debug_log "DEBUG" "determine_connection_auto: Skipping AS only match (ASN or DB content empty)."
+        fi
     fi
 
     # 4. PD only match
-    if [ -z "$result" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-        result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v pd="$input_pd" '{if(index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+    if [ -z "$result" ]; then
+        debug_log "DEBUG" "determine_connection_auto: Attempting PD only match with PD:[$input_pd]"
+        if [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
+            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v pd="$input_pd" '{if(index(pd,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
+            if [ -n "$result" ]; then
+                debug_log "DEBUG" "determine_connection_auto: PD only match found: [$result]"
+            else
+                debug_log "DEBUG" "determine_connection_auto: No PD only match found for PD:[$input_pd]"
+            fi
+        else
+            debug_log "DEBUG" "determine_connection_auto: Skipping PD only match (PD or DB content empty)."
+        fi
     fi
 
     # 5. Unknown
     if [ -z "$result" ]; then
+        debug_log "DEBUG" "determine_connection_auto: No specific match found. Setting result to unknown."
         result="unknown|unknown|unknown|"
     fi
 
+    debug_log "DEBUG" "determine_connection_auto: Exit - Result:[$result]"
     echo "$result"
 }
 
