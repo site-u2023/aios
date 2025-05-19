@@ -91,12 +91,13 @@ get_aaaa_record_dslite() {
     fi
 }
 
-manual_dslite_main() {
+manual_dslite() {
     local aftr_value="$1"
+
     print_section_title "${SELECTED_MENU_KEY}"
 
     if ! confirm; then
-        debug_log "DEBUG" "manual_dslite_main: User cancelled DS-Lite manual configuration."
+        debug_log "DEBUG" "manual_dslite: User cancelled DS-Lite manual configuration."
         return 1
     fi
 
@@ -107,28 +108,6 @@ manual_dslite_main() {
     DSLITE_AFTR_IP="$aftr_value"
     DSLITE_DISPLAY_NAME="$(get_message "${SELECTED_MENU_KEY}")"
 
-    if ! install_package ds-lite hidden; then
-        debug_log "DEBUG" "manual_dslite_main: Failed to install 'ds-lite' package or it was already installed. Continuing."
-        return 1
-    fi
-
-    if ! replace_dslite_sh; then
-        return 1
-    fi
-    
-    if ! config_dslite; then
-        debug_log "DEBUG" "manual_dslite_main: config_dslite function failed. UCI settings might be inconsistent."
-        return 1
-    fi
-
-    if ! display_dslite; then
-        debug_log "DEBUG" "manual_dslite_main: display_dslite function failed. Aborting reboot."
-        return 1
-    fi
-
-    debug_log "DEBUG" "manual_dslite_main: Configuration complete. Rebooting system."
-    reboot
-
     return 0
 }
 
@@ -138,8 +117,9 @@ get_dslite() {
     DHCP_AFTR_NAME=""
 
     if [ -n "$manual_input_specifier" ]; then
-        debug_log "DEBUG" "get_dslite: Manual mode (input specifier present: '$manual_input_specifier'), skipping DHCP detection."
-        return 0
+        debug_log "DEBUG" "get_dslite: Manual mode (input specifier present: '$manual_input_specifier'), calling manual_dslite()."
+        manual_dslite "$manual_input_specifier"
+        return $?
     fi
     
     debug_log "DEBUG" "get_dslite: Automatic mode. Starting AFTR name detection from DHCP."
