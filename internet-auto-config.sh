@@ -6,7 +6,7 @@ PROVIDER_DATABASE_CONTENT=""
 PROVIDER_DATABASE_INITIALIZED="false"
 
 provider_data_definitions() {
-    add_provider_record "4713|ocn|OCN Virtual Connect|map-e|download internet-map-e.sh chmod load; internet_map_main"
+    add_provider_record "4713|nttcom|NTT Communications|map-e|download internet-map-e.sh chmod load; internet_map_main"
     add_provider_record "2518|v6plus|v6 Plus|map-e|download internet-map-e.sh chmod load; internet_map_main"
     add_provider_record "2519|transix|transix|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
     add_provider_record "2527|cross|Cross Pass|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main" 
