@@ -444,11 +444,6 @@ display_nuro_ports() {
 }
 
 internet_map_nuro_main() {
-    if type print_section_title > /dev/null 2>&1; then
-        print_section_title "MENU_INTERNET_MAPE" # This key exists in internet-map-e.sh
-    else
-        debug_log "DEBUG" "internet_map_nuro_main: Starting NURO MAP-E Setup."
-    fi
 
     if ! mold_mape_nuro; then
         debug_log "DEBUG" "internet_map_nuro_main: mold_mape_nuro function failed. Exiting script."
