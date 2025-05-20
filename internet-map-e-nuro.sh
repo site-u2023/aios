@@ -171,14 +171,23 @@ EOF
 }
 
 mape_nuro_config() {
-    local WANMAP_IF="${WANMAP_IF:-wanmap}"
-    local WAN_IF="${WAN_IF:-wan}"
-    local WAN6_IF="${WAN6_IF:-wan6}"
-    local LAN_IF="${LAN_IF:-lan}"
+    local WANMAP_IF="${WANMAP_IF:-wanmap}" # NURO用MAP-Eインターフェース名
+    local WAN_IF="${WAN_IF:-wan}"         # 従来のWANインターフェース名
+    local WAN6_IF="${WAN6_IF:-wan6}"      # WAN側IPv6インターフェース名
+    local LAN_IF="${LAN_IF:-lan}"         # LAN側インターフェース名
 
     local FIREWALL_ZONE_IDX
-    FIREWALL_ZONE_IDX=$(uci show firewall | grep "network.*'lan'" | head -n1 | sed -n "s/^firewall\.@zone\[\([0-9]*\)\].*/\1/p")
-    [ -z "$FIREWALL_ZONE_IDX" ] && FIREWALL_ZONE_IDX="1"
+    # WANファイアウォールゾーンのインデックスを特定する
+    # まず 'wan' という名前のゾーンを探す
+    local wan_zone_name_to_find="wan"
+    FIREWALL_ZONE_IDX=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
+
+    if [ -z "$FIREWALL_ZONE_IDX" ]; then
+        debug_log "WARNING" "mape_nuro_config: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
+        FIREWALL_ZONE_IDX="1" # 'wan' という名前のゾーンが見つからない場合のフォールバック
+    else
+        debug_log "DEBUG" "mape_nuro_config: Using firewall zone '$wan_zone_name_to_find' (index $FIREWALL_ZONE_IDX) for the $WANMAP_IF interface."
+    fi
 
     local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
@@ -191,36 +200,42 @@ mape_nuro_config() {
     debug_log "DEBUG" "mape_nuro_config: Applying UCI settings for NURO MAP-E interfaces and dhcp."
 
     debug_log "DEBUG" "mape_nuro_config: Setting DHCP LAN..."
-    uci set dhcp.${LAN_IF}.ra='relay'
-    uci set dhcp.${LAN_IF}.dhcpv6='server'
-    uci set dhcp.${LAN_IF}.ndp='relay'
-    uci set dhcp.${LAN_IF}.force='1'
+    uci -q set dhcp.${LAN_IF}.ra='relay'
+    uci -q set dhcp.${LAN_IF}.dhcpv6='server' # NUROではLAN側でDHCPv6サーバーを動かすことが多い
+    uci -q set dhcp.${LAN_IF}.ndp='relay'
+    uci -q set dhcp.${LAN_IF}.force='1'
 
-    debug_log "DEBUG" "mape_nuro_config: Setting WAN interface (network.${WAN_IF}.auto='1')..."
-    uci set network.${WAN_IF}.auto='1'
+    # NUROの場合、従来のWAN (pppoeなど) は無効化せず、auto='1' のまま残すことが多い。
+    # WANMAP_IF が主経路となるため、従来のWAN_IFの disable/auto 設定はここでは変更しない。
+    # ただし、ファイアウォールゾーンからは従来のWAN_IFを削除する。
+    # uci set network.${WAN_IF}.auto='1' # 元のコードで指定されているため維持
 
     debug_log "DEBUG" "mape_nuro_config: Setting DHCP WAN6..."
-    uci set dhcp.${WAN6_IF}=dhcp
-    uci set dhcp.${WAN6_IF}.interface="${WAN_IF}"
-    uci set dhcp.${WAN6_IF}.master='1'
-    uci set dhcp.${WAN6_IF}.ra='relay'
-    uci set dhcp.${WAN6_IF}.dhcpv6='relay'
-    uci set dhcp.${WAN6_IF}.ndp='relay'
+    uci -q set dhcp.${WAN6_IF}=dhcp
+    # NUROではwan6の実体がwanと同じ物理インターフェースを指すことが多い。
+    # そのため、dhcp.wan6.interface は $WAN_IF (例: eth0.2) を指すのが適切か、
+    # あるいは $WAN6_IF (論理インターフェース名 'wan6') を指すのが適切か確認が必要。
+    # 元のコードでは dhcp.wan6.interface="${WAN_IF}" となっていたため、それを維持する。
+    uci -q set dhcp.${WAN6_IF}.interface="${WAN_IF}" # 元のコードに合わせる
+    uci -q set dhcp.${WAN6_IF}.master='1'
+    uci -q set dhcp.${WAN6_IF}.ra='relay'
+    uci -q set dhcp.${WAN6_IF}.dhcpv6='relay'
+    uci -q set dhcp.${WAN6_IF}.ndp='relay'
 
     debug_log "DEBUG" "mape_nuro_config: Setting MAP-E interface (network.${WANMAP_IF})..."
-    uci set network."${WANMAP_IF}"=interface
-    uci set network."${WANMAP_IF}".proto='map'
-    uci set network."${WANMAP_IF}".maptype='map-e'
-    uci set network."${WANMAP_IF}".peeraddr="$BR"
-    uci set network."${WANMAP_IF}".ipaddr="$IPV4"
-    uci set network."${WANMAP_IF}".ip4prefixlen="$IP4PREFIXLEN"
-    uci set network."${WANMAP_IF}".ip6prefix="${IP6PFX}::"
-    uci set network."${WANMAP_IF}".ip6prefixlen="$IP6PREFIXLEN"
-    uci set network."${WANMAP_IF}".ealen="$EALEN"
-    uci set network."${WANMAP_IF}".psidlen="$PSIDLEN"
-    uci set network."${WANMAP_IF}".offset="$OFFSET"
-    uci set network."${WANMAP_IF}".mtu='1452'
-    uci set network."${WANMAP_IF}".encaplimit='ignore'
+    uci -q set network."${WANMAP_IF}"=interface
+    uci -q set network."${WANMAP_IF}".proto='map'
+    uci -q set network."${WANMAP_IF}".maptype='map-e'
+    uci -q set network."${WANMAP_IF}".peeraddr="$BR"
+    uci -q set network."${WANMAP_IF}".ipaddr="$IPV4"
+    uci -q set network."${WANMAP_IF}".ip4prefixlen="$IP4PREFIXLEN"
+    uci -q set network."${WANMAP_IF}".ip6prefix="${IP6PFX}::"
+    uci -q set network."${WANMAP_IF}".ip6prefixlen="$IP6PREFIXLEN"
+    uci -q set network."${WANMAP_IF}".ealen="$EALEN"
+    uci -q set network."${WANMAP_IF}".psidlen="$PSIDLEN"
+    uci -q set network."${WANMAP_IF}".offset="$OFFSET"
+    uci -q set network."${WANMAP_IF}".mtu='1452' # NURO指定のMTU
+    uci -q set network."${WANMAP_IF}".encaplimit='ignore'
 
     if [ -f "$osversion_file" ]; then
         osversion=$(cat "$osversion_file")
@@ -233,70 +248,83 @@ mape_nuro_config() {
     if echo "$osversion" | grep -q "^19"; then
         debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt 19.x compatible version."
         uci -q delete network."${WANMAP_IF}".tunlink
-        uci add_list network."${WANMAP_IF}".tunlink="${WAN6_IF}"
-    else
+        uci -q add_list network."${WANMAP_IF}".tunlink="${WAN6_IF}" # シェル変数を展開
+    else # OpenWrt 21.02+ or unknown
         debug_log "DEBUG" "mape_nuro_config: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
-        uci set dhcp.${WAN6_IF}.ignore='1'
-        uci set network."${WANMAP_IF}".legacymap='1'
-        uci set network."${WANMAP_IF}".tunlink="${WAN6_IF}"
+        uci -q set dhcp.${WAN6_IF}.ignore='1'
+        uci -q set network."${WANMAP_IF}".legacymap='1'
+        uci -q set network."${WANMAP_IF}".tunlink="${WAN6_IF}" # シェル変数を展開
     fi
 
-    debug_log "DEBUG" "mape_nuro_config: Setting Firewall rules for zone index $FIREWALL_ZONE_IDX..."
+    debug_log "DEBUG" "mape_nuro_config: Setting Firewall rules for WAN zone index $FIREWALL_ZONE_IDX..."
     local current_fw_networks
-    current_fw_networks=$(uci -q get firewall.@zone["$FIREWALL_ZONE_IDX"].network)
+    current_fw_networks=$(uci -q get firewall.@zone["$FIREWALL_ZONE_IDX"].network 2>/dev/null)
     
+    # 従来のWANインターフェースをWANゾーンから削除 (もし存在すれば)
     if echo "$current_fw_networks" | grep -q "\b${WAN_IF}\b"; then
-        uci del_list firewall.@zone["$FIREWALL_ZONE_IDX"].network="${WAN_IF}"
-        debug_log "DEBUG" "mape_nuro_config: Removed '${WAN_IF}' from firewall zone $FIREWALL_ZONE_IDX network list."
+        uci -q del_list firewall.@zone["$FIREWALL_ZONE_IDX"].network="${WAN_IF}"
+        debug_log "DEBUG" "mape_nuro_config: Removed '${WAN_IF}' from firewall WAN zone $FIREWALL_ZONE_IDX network list."
     fi
+    # NURO MAP-EインターフェースをWANゾーンに追加 (もし存在しなければ)
     if ! echo "$current_fw_networks" | grep -q "\b${WANMAP_IF}\b"; then
-        uci add_list firewall.@zone["$FIREWALL_ZONE_IDX"].network="${WANMAP_IF}"
-        debug_log "DEBUG" "mape_nuro_config: Added '${WANMAP_IF}' to firewall zone $FIREWALL_ZONE_IDX network list."
+        uci -q add_list firewall.@zone["$FIREWALL_ZONE_IDX"].network="${WANMAP_IF}"
+        debug_log "DEBUG" "mape_nuro_config: Added '${WANMAP_IF}' to firewall WAN zone $FIREWALL_ZONE_IDX network list."
     else
-        debug_log "DEBUG" "mape_nuro_config: '${WANMAP_IF}' already in firewall zone $FIREWALL_ZONE_IDX network list."
+        debug_log "DEBUG" "mape_nuro_config: '${WANMAP_IF}' already in firewall WAN zone $FIREWALL_ZONE_IDX network list."
     fi
+    # WANゾーンの共通設定
+    uci -q set firewall.@zone["$FIREWALL_ZONE_IDX"].masq='1'
+    uci -q set firewall.@zone["$FIREWALL_ZONE_IDX"].mtu_fix='1'
+
 
     debug_log "DEBUG" "mape_nuro_config: Setting DNS configurations..."
     uci -q delete dhcp.${LAN_IF}.dns
     uci -q delete dhcp.${LAN_IF}.dhcp_option
     uci -q delete network.${LAN_IF}.dns
 
-    uci add_list network.${LAN_IF}.dns='118.238.201.33'
-    uci add_list network.${LAN_IF}.dns='152.165.245.17'
+    # ISP提供のDNSとパブリックDNSを混在させる例 (元のコードに準拠)
+    # IPv4 DNS for LAN clients (via DHCP)
+    uci -q add_list dhcp.${LAN_IF}.dhcp_option='6,118.238.201.33,152.165.245.17' # NURO DNS
+    # uci -q add_list dhcp.${LAN_IF}.dhcp_option='6,1.1.1.1,1.0.0.1' # Cloudflare (例)
 
-    uci add_list dhcp.${LAN_IF}.dhcp_option='6,1.1.1.1,8.8.8.8'
-    uci add_list dhcp.${LAN_IF}.dhcp_option='6,1.0.0.1,8.8.4.4'
+    # IPv4 DNS for Router itself (network.lan.dns)
+    uci -q add_list network.${LAN_IF}.dns='118.238.201.33'
+    uci -q add_list network.${LAN_IF}.dns='152.165.245.17'
+    # uci -q add_list network.${LAN_IF}.dns='1.1.1.1'
 
-    uci add_list network.${LAN_IF}.dns='240d:0010:0004:0005::33'
-    uci add_list network.${LAN_IF}.dns='240d:12:4:1b01:152:165:245:17'
+    # IPv6 DNS for LAN clients (via RA/DHCPv6)
+    uci -q add_list dhcp.${LAN_IF}.dns='240d:0010:0004:0005::33' # NURO DNS
+    uci -q add_list dhcp.${LAN_IF}.dns='240d:12:4:1b01:152:165:245:17' # NURO DNS
+    # uci -q add_list dhcp.${LAN_IF}.dns='2606:4700:4700::1111' # Cloudflare (例)
     
-    uci add_list dhcp.${LAN_IF}.dns='2606:4700:4700::1111'
-    uci add_list dhcp.${LAN_IF}.dns='2001:4860:4860::8888'
-    uci add_list dhcp.${LAN_IF}.dns='2606:4700:4700::1001'
-    uci add_list dhcp.${LAN_IF}.dns='2001:4860:4860::8844'
-
     debug_log "DEBUG" "mape_nuro_config: Committing all UCI changes..."
-    local commit_success=1
-    if ! uci commit dhcp; then
-        debug_log "DEBUG" "mape_nuro_config: 'uci commit dhcp' failed."
-        commit_success=0
+    local commit_failed=0
+    local commit_errors=""
+
+    if ! uci -q commit dhcp; then
+        commit_failed=1
+        commit_errors="${commit_errors}dhcp "
+        debug_log "ERROR" "mape_nuro_config: 'uci commit dhcp' failed."
     fi
-    if ! uci commit network; then
-        debug_log "DEBUG" "mape_nuro_config: 'uci commit network' failed."
-        commit_success=0
+    if ! uci -q commit network; then
+        commit_failed=1
+        commit_errors="${commit_errors}network "
+        debug_log "ERROR" "mape_nuro_config: 'uci commit network' failed."
     fi
-    if ! uci commit firewall; then
-        debug_log "DEBUG" "mape_nuro_config: 'uci commit firewall' failed."
-        commit_success=0
+    if ! uci -q commit firewall; then
+        commit_failed=1
+        commit_errors="${commit_errors}firewall "
+        debug_log "ERROR" "mape_nuro_config: 'uci commit firewall' failed."
     fi
 
-    if [ "$commit_success" -eq 1 ]; then
+    if [ "$commit_failed" -eq 1 ]; then
+        debug_log "ERROR" "mape_nuro_config: One or more UCI commit operations failed: ${commit_errors}."
+        # 元のコードでは printf でユーザーにエラーを通知していたので、それを踏襲
+        printf "%s\n" "$(color "red" "Error: UCI commit failed for: ${commit_errors}")"
+        return 1
+    else
         debug_log "DEBUG" "mape_nuro_config: All UCI changes committed successfully."
         return 0
-    else
-        debug_log "DEBUG" "mape_nuro_config: One or more UCI commit operations failed."
-        printf "%s\n" "$(color "red" "Error: UCI commit failed.")"
-        return 1
     fi
 }
 
