@@ -514,44 +514,30 @@ add_special_menu_items() {
 # menu_ynオプションを処理する関数
 process_menu_yn() {
     local cmd_str="$1"
-    local confirm_msg_key=""
-    local cmd_to_execute="$cmd_str"
-    local keyword_phrase_to_remove="menu_yn"
-
-    debug_log "DEBUG" "process_menu_yn: Received command string: [$cmd_str]"
-
+    
+    debug_log "DEBUG" "Processing menu_yn option if present"
+    
+    # menu_ynオプションがない場合はそのまま返す
     if ! echo "$cmd_str" | grep -q "menu_yn"; then
-        debug_log "DEBUG" "process_menu_yn: 'menu_yn' keyword not found in command: [$cmd_str]. Returning original command."
+        debug_log "DEBUG" "No menu_yn option found, returning original command"
         echo "$cmd_str"
-        return 0 
-    fi
-
-    local potential_msg_key=$(echo "$cmd_str" | sed 's/.*menu_yn[[:space:]]//' | awk '{print $1}')
-    local part_after_menu_yn=$(echo "$cmd_str" | sed 's/.*menu_yn//')
-    local first_char_after_menu_yn=$(echo "$part_after_menu_yn" | cut -c1)
-
-    if [ "$first_char_after_menu_yn" = " " ] && [ -n "$potential_msg_key" ] && echo "$potential_msg_key" | grep -q "^MSG_"; then
-        confirm_msg_key="$potential_msg_key"
-        keyword_phrase_to_remove="menu_yn[[:space:]]\{1,\}${confirm_msg_key}"
-        debug_log "DEBUG" "process_menu_yn: Custom message key found: [$confirm_msg_key]"
-    else
-        confirm_msg_key="MSG_CONFIRM_INSTALL"
-        debug_log "DEBUG" "process_menu_yn: No valid custom message key found after 'menu_yn', or keyword was at the end/no space after. Using default: [$confirm_msg_key]"
+        return 0
     fi
     
-    debug_log "DEBUG" "process_menu_yn: Requesting confirmation with key: [$confirm_msg_key]"
+    debug_log "DEBUG" "Found menu_yn option in command, requesting confirmation"
     
-    if ! confirm "$confirm_msg_key"; then
-        debug_log "DEBUG" "process_menu_yn: User declined confirmation for command associated with key: [$confirm_msg_key]"
+    # 既存のconfirm関数を使用して確認
+    if ! confirm "MSG_CONFIRM_INSTALL"; then
+        debug_log "DEBUG" "User declined confirmation"
         printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
         return 1
     fi
     
-    cmd_to_execute=$(echo "$cmd_str" | sed "s/${keyword_phrase_to_remove}//")
-    cmd_to_execute=$(echo "$cmd_to_execute" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/[[:space:]][[:space:]]*/ /g')
-
-    debug_log "DEBUG" "process_menu_yn: User confirmed. Command to execute: [$cmd_to_execute]"
-    echo "$cmd_to_execute"
+    # 確認OKの場合、コマンド文字列からmenu_ynオプションを削除
+    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn//g')
+    debug_log "DEBUG" "User confirmed, returning cleaned command: $cleaned_cmd"
+    
+    echo "$cleaned_cmd"
     return 0
 }
 
