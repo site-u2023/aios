@@ -523,7 +523,7 @@ process_menu_yn() {
     if ! echo "$cmd_str" | grep -q "menu_yn"; then
         debug_log "WARNING" "process_menu_yn: 'menu_yn' keyword not found in command: [$cmd_str]. Returning original command."
         echo "$cmd_str"
-        return 0
+        return 0 
     fi
 
     local potential_msg_key=$(echo "$cmd_str" | sed 's/.*menu_yn[[:space:]]//' | awk '{print $1}')
@@ -531,24 +531,26 @@ process_menu_yn() {
     local part_after_menu_yn=$(echo "$cmd_str" | sed 's/.*menu_yn//')
     local first_char_after_menu_yn=$(echo "$part_after_menu_yn" | cut -c1)
 
-    if [ -n "$part_after_menu_yn" ] && [ "$first_char_after_menu_yn" = " " ] && [ -n "$potential_msg_key" ] && echo "$potential_msg_key" | grep -q "^MSG_"; then
+    if [ "$first_char_after_menu_yn" = " " ] && [ -n "$potential_msg_key" ] && echo "$potential_msg_key" | grep -q "^MSG_"; then
         confirm_msg_key="$potential_msg_key"
         keyword_phrase_to_remove="menu_yn[[:space:]]\{1,\}${confirm_msg_key}"
         debug_log "DEBUG" "process_menu_yn: Custom message key found: [$confirm_msg_key]"
     else
         confirm_msg_key="MSG_CONFIRM_INSTALL"
-        debug_log "DEBUG" "process_menu_yn: No valid custom message key found after 'menu_yn', using default: [$confirm_msg_key]"
+        debug_log "DEBUG" "process_menu_yn: No valid custom message key found after 'menu_yn', or keyword was at the end/no space after. Using default: [$confirm_msg_key]"
     fi
     
     debug_log "DEBUG" "process_menu_yn: Requesting confirmation with key: [$confirm_msg_key]"
+    
     if ! confirm "$confirm_msg_key"; then
         debug_log "INFO" "process_menu_yn: User declined confirmation for command associated with key: [$confirm_msg_key]"
         printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
         return 1
     fi
-    
+
     cmd_to_execute=$(echo "$cmd_str" | sed "s/${keyword_phrase_to_remove}//")
 
+    # 前後の空白および連続する空白を除去
     cmd_to_execute=$(echo "$cmd_to_execute" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/[[:space:]][[:space:]]*/ /g')
 
     debug_log "DEBUG" "process_menu_yn: User confirmed. Command to execute: [$cmd_to_execute]"
