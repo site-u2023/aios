@@ -314,12 +314,6 @@ handle_user_selection() {
         return $submenu_status
     elif [ "$type" = "command" ]; then
         debug_log "DEBUG" "Executing command: $action from section [$section_name]"
-        local processed_action=""
-        if ! processed_action=$(process_menu_yn "$action"); then
-             debug_log "DEBUG" "Command cancelled by user via menu_yn confirmation."
-             return 0 # Command cancelled, redisplay current menu
-        fi
-        action="$processed_action"
 
         # Execute command in a subshell to prevent accidental script exit
         (eval "$action")
@@ -509,36 +503,6 @@ add_special_menu_items() {
     fi
     debug_log "DEBUG" "Added $special_items_count special menu items"
     echo "$special_items_count $menu_count"
-}
-
-# menu_ynオプションを処理する関数
-process_menu_yn() {
-    local cmd_str="$1"
-    
-    debug_log "DEBUG" "Processing menu_yn option if present"
-    
-    # menu_ynオプションがない場合はそのまま返す
-    if ! echo "$cmd_str" | grep -q "menu_yn"; then
-        debug_log "DEBUG" "No menu_yn option found, returning original command"
-        echo "$cmd_str"
-        return 0
-    fi
-    
-    debug_log "DEBUG" "Found menu_yn option in command, requesting confirmation"
-    
-    # 既存のconfirm関数を使用して確認
-    if ! confirm "MSG_CONFIRM_INSTALL"; then
-        debug_log "DEBUG" "User declined confirmation"
-        printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
-        return 1
-    fi
-    
-    # 確認OKの場合、コマンド文字列からmenu_ynオプションを削除
-    local cleaned_cmd=$(echo "$cmd_str" | sed 's/menu_yn//g')
-    debug_log "DEBUG" "User confirmed, returning cleaned command: $cleaned_cmd"
-    
-    echo "$cleaned_cmd"
-    return 0
 }
 
 # Selector function - Revised loop structure (with added/modified debug logs) - FULL VERSION
@@ -824,3 +788,4 @@ menu_exit() {
     exit 0
 }
  
+# printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
