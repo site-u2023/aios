@@ -489,7 +489,7 @@ display_dslite() {
     printf "  %-25s %s\n" "Provider:" "$DSLITE_DISPLAY_NAME"
     printf "  %-25s %s\n" "AFTR (Border Relay):" "$DSLITE_AFTR_IP"
     printf "  %-25s %s\n" "Interface MTU (expected):" "1460"
-    
+    printf "\n"
     printf "%s\n" "$(color green "$(get_message MSG_DSLITE_APPLY_SUCCESS)")"
     read -r -n 1 -s
     
@@ -536,6 +536,7 @@ restore_dslite() {
     fi
 
     if [ "$all_restored_successfully" -eq 1 ]; then
+        printf "\n"
         printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
     else
         debug_log "DEBUG" "restore_dslite_settings: One or more files may not have been restored successfully. Please check logs."
