@@ -13,22 +13,22 @@ MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
 MENU_INTERNET_MAPE_NURO selector MENU_INTERNET_NURO_MAPE
 
 [MENU_INTERNET_PPPOE]
-MENU_INTERNET_PPPOE download "internet-pppoe.sh" "chmod" "load"; internet_pppoe_main menu_yn
+MENU_INTERNET_PPPOE download "internet-pppoe.sh" "chmod" "load"; internet_pppoe_main menu_yn MSG_AUTO_CONFIG_CONFIRM
 MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
 
 [MENU_INTERNET_MAPE]
-MENU_INTERNET_MAPE download "internet-map-e.sh" "chmod" "load"; internet_map_main menu_yn
+MENU_INTERNET_MAPE download "internet-map-e.sh" "chmod" "load"; internet_map_main menu_yn MSG_AUTO_CONFIG_CONFIRM
 MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
 
 [MENU_INTERNET_DSLITE]
-MENU_INTERNET_DSLITE_TRANS_EAST download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "2403:7f00:4000:2000::126" menu_yn
-MENU_INTERNET_DSLITE_TRANS_WEST download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "2403:7f00:c000:1000::126" menu_yn
-MENU_INTERNET_DSLITE_XPASS download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "dgw.xpass.jp" menu_yn
-MENU_INTERNET_DSLITE_V6CONNECT download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "gw.example.v6option.ne.jp" menu_yn
+MENU_INTERNET_DSLITE_TRANS_EAST download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "2403:7f00:4000:2000::126" menu_yn MSG_AUTO_CONFIG_CONFIRM
+MENU_INTERNET_DSLITE_TRANS_WEST download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "2403:7f00:c000:1000::126" menu_yn MSG_AUTO_CONFIG_CONFIRM
+MENU_INTERNET_DSLITE_XPASS download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "dgw.xpass.jp" menu_yn MSG_AUTO_CONFIG_CONFIRM
+MENU_INTERNET_DSLITE_V6CONNECT download "internet-ds-lite-config.sh" "chmod" "load"; internet_dslite_main "gw.example.v6option.ne.jp" menu_yn MSG_AUTO_CONFIG_CONFIRM
 MENU_INTERNET_RESTORE download "internet-ds-lite-config.sh" "chmod" "load"; restore_dslite
 
 [MENU_INTERNET_MAPE_NURO]
-MENU_INTERNET_MAPE_NURO download "internet-map-e-nuro.sh" "chmod" "load"; internet_map_nuro_main menu_yn
+MENU_INTERNET_MAPE_NURO download "internet-map-e-nuro.sh" "chmod" "load"; internet_map_nuro_main menu_yn MSG_AUTO_CONFIG_CONFIRM
 MENU_INTERNET_RESTORE download "internet-map-e-nuro.sh" "chmod" "load"; restore_mape_nuro
 
 [MENU_SYSTEM]
