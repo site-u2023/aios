@@ -1264,6 +1264,163 @@ OK_config_mape() {
     return 0
 }
 
+config_mape() {
+    local WANMAP='wanmap'
+
+    # WANファイアウォールゾーンのインデックスを特定する
+    # まず 'wan' という名前のゾーンを探す
+    local ZONE_NO
+    local wan_zone_name_to_find="wan"
+    ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
+
+    if [ -z "$ZONE_NO" ]; then
+        debug_log "WARNING" "config_mape: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
+        ZONE_NO="1" # 'wan' という名前のゾーンが見つからない場合のフォールバック (一般的なWANゾーンのインデックス)
+    else
+        debug_log "DEBUG" "config_mape: Using firewall zone '$wan_zone_name_to_find' (index $ZONE_NO) for the $WANMAP interface."
+    fi
+
+    # インターフェース名は変数で上書きできるように
+    local WAN_IF="${WAN_IF:-wan}"
+    local WAN6_IF="${WAN6_IF:-wan6}"
+    local LAN_IF="${LAN_IF:-lan}"
+
+    local osversion_file="${CACHE_DIR}/osversion.ch"
+    local osversion=""
+
+    debug_log "DEBUG" "config_mape: Backing up /etc/config/network, /etc/config/dhcp, /etc/config/firewall."
+    cp /etc/config/network /etc/config/network.map-e.bak 2>/dev/null
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.bak 2>/dev/null
+    cp /etc/config/firewall /etc/config/firewall.map-e.bak 2>/dev/null
+
+    debug_log "DEBUG" "config_mape: Applying UCI settings for MAP-E interfaces and dhcp."
+    
+    uci -q set network.${WAN_IF}.disabled='1'
+    uci -q set network.${WAN_IF}.auto='0'
+
+    uci -q set dhcp.${LAN_IF}.ra='relay'
+    uci -q set dhcp.${LAN_IF}.dhcpv6='relay' # MAP-Eでは通常 relay
+    uci -q set dhcp.${LAN_IF}.ndp='relay'
+    uci -q set dhcp.${LAN_IF}.force='1'
+
+    uci -q set dhcp.${WAN6_IF}=dhcp
+    uci -q set dhcp.${WAN6_IF}.interface="$WAN6_IF" # 修正: シェル変数を展開
+    uci -q set dhcp.${WAN6_IF}.master='1'
+    uci -q set dhcp.${WAN6_IF}.ra='relay'
+    uci -q set dhcp.${WAN6_IF}.dhcpv6='relay'
+    uci -q set dhcp.${WAN6_IF}.ndp='relay'
+
+    uci -q set network.${WAN6_IF}.proto='dhcpv6'
+    uci -q set network.${WAN6_IF}.reqaddress='try'
+    uci -q set network.${WAN6_IF}.reqprefix='auto' # MAP-Eでは通常 'auto' またはISP指定の長さ
+    
+    debug_log "DEBUG" "config_mape: IPv6 acquisition method is '${MAPE_IPV6_ACQUISITION_METHOD}'."
+    if [ "$MAPE_IPV6_ACQUISITION_METHOD" = "gua" ]; then
+        if [ -n "$IPV6PREFIX" ]; then # IPV6PREFIX は mold_mape で h0:h1:h2:h3:: 形式で設定される
+            debug_log "DEBUG" "config_mape: Setting network.${WAN6_IF}.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
+            uci -q set network.${WAN6_IF}.ip6prefix="${IPV6PREFIX}/64" # GUAの場合は/64を期待
+        else
+            debug_log "WARNING" "config_mape: IPV6PREFIX is empty, cannot set network.${WAN6_IF}.ip6prefix for GUA method." # DEBUGからWARNINGに変更
+            uci -q delete network.${WAN6_IF}.ip6prefix
+        fi
+    elif [ "$MAPE_IPV6_ACQUISITION_METHOD" = "pd" ]; then
+        debug_log "DEBUG" "config_mape: Deleting network.${WAN6_IF}.ip6prefix (PD method, prefix delegation expected)."
+        uci -q delete network.${WAN6_IF}.ip6prefix # PDの場合は DHCPv6クライアントがプレフィックスを管理
+    else
+        debug_log "WARNING" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.${WAN6_IF}.ip6prefix." # DEBUGからWARNINGに変更
+        uci -q delete network.${WAN6_IF}.ip6prefix # 不明な場合は削除が無難
+    fi
+
+    uci -q set network.${WANMAP}=interface
+    uci -q set network.${WANMAP}.proto='map'
+    uci -q set network.${WANMAP}.maptype='map-e'
+    uci -q set network.${WANMAP}.peeraddr="${BR}"
+    uci -q set network.${WANMAP}.ipaddr="${IPV4}"
+    uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
+    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::" # IP6PFXはmold_mapeで計算
+    uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
+    uci -q set network.${WANMAP}.ealen="${EALEN}"
+    uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
+    uci -q set network.${WANMAP}.offset="${OFFSET}"
+    uci -q set network.${WANMAP}.mtu='1460'
+    uci -q set network.${WANMAP}.encaplimit='ignore'
+    
+    if [ -f "$osversion_file" ]; then
+        osversion=$(cat "$osversion_file")
+        debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
+    else
+        osversion="unknown"
+        debug_log "DEBUG" "config_mape: OS version file '$osversion_file' not found. Applying default/latest version settings."
+    fi
+
+    if echo "$osversion" | grep -q "^19"; then
+        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt 19.x compatible version."
+        uci -q delete network.${WANMAP}.tunlink
+        uci -q add_list network.${WANMAP}.tunlink="${WAN6_IF}" # シェル変数を展開
+        uci -q delete network.${WANMAP}.legacymap
+    else # OpenWrt 21.02+ or unknown
+        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
+        uci -q set dhcp.${WAN6_IF}.ignore='1' # 21.02+ではwan6をignoreすることが多い
+        uci -q set network.${WANMAP}.legacymap='1' # 21.02+ではlegacymapが必要な場合がある
+        uci -q set network.${WANMAP}.tunlink="${WAN6_IF}" # シェル変数を展開
+    fi
+    
+    # ファイアウォール設定: WANゾーンにwanmapインターフェースを追加し、従来のwanインターフェースを削除
+    local current_wan_networks
+    current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null) # エラー出力を抑制
+
+    # 既存の 'wan' インターフェースをWANゾーンから削除
+    if echo "$current_wan_networks" | grep -q "\b${WAN_IF}\b"; then
+        uci -q del_list firewall.@zone[${ZONE_NO}].network="${WAN_IF}"
+        debug_log "DEBUG" "config_mape: Removed '${WAN_IF}' from firewall WAN zone ${ZONE_NO} network list."
+    fi
+
+    # 'wanmap' インターフェースをWANゾーンに追加 (存在しない場合のみ)
+    if ! echo "$current_wan_networks" | grep -q "\b${WANMAP}\b"; then
+        uci -q add_list firewall.@zone[${ZONE_NO}].network="${WANMAP}" # WANMAP変数を使用
+        debug_log "DEBUG" "config_mape: Added '${WANMAP}' to firewall WAN zone ${ZONE_NO} network list."
+    else
+        debug_log "DEBUG" "config_mape: '${WANMAP}' already in firewall WAN zone ${ZONE_NO} network list."
+    fi
+    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
+    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
+    
+    debug_log "DEBUG" "config_mape: Committing UCI changes..."
+    local commit_failed=0 # どのコミットが失敗したか記録するため
+    local commit_errors=""
+
+    uci -q commit network
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}network "
+        debug_log "ERROR" "config_mape: Failed to commit network."
+    fi
+
+    uci -q commit dhcp
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}dhcp "
+        debug_log "ERROR" "config_mape: Failed to commit dhcp."
+    fi
+    
+    uci -q commit firewall
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}firewall "
+        debug_log "ERROR" "config_mape: Failed to commit firewall."
+    fi
+
+    if [ "$commit_failed" -eq 1 ]; then
+        debug_log "ERROR" "config_mape: One or more UCI sections failed to commit: ${commit_errors}."
+        # 復元処理を促すか、エラーメッセージを表示して終了するか検討
+        return 1 # コミット失敗
+    else
+        debug_log "DEBUG" "config_mape: All UCI sections committed successfully."
+    fi
+    
+    return 0
+}
+
 replace_map_sh() {
     local proto_script_path="/lib/netifd/proto/map.sh"
     local backup_script_path="${proto_script_path}.bak"
@@ -1338,128 +1495,6 @@ replace_map_sh() {
         debug_log "DEBUG" "replace_map_sh: wget download FAILED. Exit code: $wget_rc."
         return 1 # wget失敗
     fi
-}
-
-config_mape() {
-    local WANMAP='wanmap'
-
-    # firewall zone番号自動検出（lan含む最初のゾーン）
-    local ZONE_NO
-    ZONE_NO=$(uci show firewall | grep "network.*'lan'" | head -n1 | sed -n "s/^firewall\.@zone\[\([0-9]*\)\].*/\1/p")
-    [ -z "$ZONE_NO" ] && ZONE_NO="1"
-
-    # インターフェース名は変数で上書きできるように
-    local WAN_IF="${WAN_IF:-wan}"
-    local WAN6_IF="${WAN6_IF:-wan6}"
-    local LAN_IF="${LAN_IF:-lan}"
-
-    local osversion_file="${CACHE_DIR}/osversion.ch"
-    local osversion=""
-
-    debug_log "DEBUG" "config_mape: Backing up /etc/config/network, /etc/config/dhcp, /etc/config/firewall."
-    cp /etc/config/network /etc/config/network.map-e.bak 2>/dev/null
-    cp /etc/config/dhcp /etc/config/dhcp.map-e.bak 2>/dev/null
-    cp /etc/config/firewall /etc/config/firewall.map-e.bak 2>/dev/null
-
-    debug_log "DEBUG" "config_mape: Applying UCI settings for MAP-E interfaces and dhcp."
-    
-    uci -q set network.${WAN_IF}.disabled='1'
-    uci -q set network.${WAN_IF}.auto='0'
-
-    uci -q set dhcp.${LAN_IF}.ra='relay'
-    uci -q set dhcp.${LAN_IF}.dhcpv6='relay'
-    uci -q set dhcp.${LAN_IF}.ndp='relay'
-    uci -q set dhcp.${LAN_IF}.force='1'
-
-    uci -q set dhcp.${WAN6_IF}=dhcp
-    uci -q set dhcp.${WAN6_IF}.interface='${WAN6_IF}'
-    uci -q set dhcp.${WAN6_IF}.master='1'
-    uci -q set dhcp.${WAN6_IF}.ra='relay'
-    uci -q set dhcp.${WAN6_IF}.dhcpv6='relay'
-    uci -q set dhcp.${WAN6_IF}.ndp='relay'
-
-    uci -q set network.${WAN6_IF}.proto='dhcpv6'
-    uci -q set network.${WAN6_IF}.reqaddress='try'
-    uci -q set network.${WAN6_IF}.reqprefix='auto'
-    
-    debug_log "DEBUG" "config_mape: IPv6 acquisition method is '${MAPE_IPV6_ACQUISITION_METHOD}'."
-    if [ "$MAPE_IPV6_ACQUISITION_METHOD" = "gua" ]; then
-        if [ -n "$IPV6PREFIX" ]; then
-            debug_log "DEBUG" "config_mape: Setting network.${WAN6_IF}.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
-            uci -q set network.${WAN6_IF}.ip6prefix="${IPV6PREFIX}/64"
-        else
-            debug_log "DEBUG" "config_mape: IPV6PREFIX is empty, cannot set network.${WAN6_IF}.ip6prefix for GUA method."
-            uci -q delete network.${WAN6_IF}.ip6prefix
-        fi
-    elif [ "$MAPE_IPV6_ACQUISITION_METHOD" = "pd" ]; then
-        debug_log "DEBUG" "config_mape: Deleting network.${WAN6_IF}.ip6prefix (PD method)."
-        uci -q delete network.${WAN6_IF}.ip6prefix
-    else
-        debug_log "DEBUG" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.${WAN6_IF}.ip6prefix."
-        uci -q delete network.${WAN6_IF}.ip6prefix
-    fi
-
-    uci -q set network.${WANMAP}=interface
-    uci -q set network.${WANMAP}.proto='map'
-    uci -q set network.${WANMAP}.maptype='map-e'
-    uci -q set network.${WANMAP}.peeraddr="${BR}"
-    uci -q set network.${WANMAP}.ipaddr="${IPV4}"
-    uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::"
-    uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
-    uci -q set network.${WANMAP}.ealen="${EALEN}"
-    uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
-    uci -q set network.${WANMAP}.offset="${OFFSET}"
-    uci -q set network.${WANMAP}.mtu='1460'
-    uci -q set network.${WANMAP}.encaplimit='ignore'
-    
-    if [ -f "$osversion_file" ]; then
-        osversion=$(cat "$osversion_file")
-        debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
-    else
-        osversion="unknown"
-        debug_log "DEBUG" "config_mape: OS version file '$osversion_file' not found. Applying default/latest version settings."
-    fi
-    if echo "$osversion" | grep -q "^19"; then
-        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt 19.x compatible version."
-        uci -q delete network.${WANMAP}.tunlink
-        uci -q add_list network.${WANMAP}.tunlink="${WAN6_IF}"
-        uci -q delete network.${WANMAP}.legacymap
-    else
-        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
-        uci -q set dhcp.${WAN6_IF}.ignore='1'
-        uci -q set network.${WANMAP}.legacymap='1'
-        uci -q set network.${WANMAP}.tunlink="${WAN6_IF}"
-    fi
-    
-    local current_wan_networks
-    current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network)
-    if echo "$current_wan_networks" | grep -q "\b${WAN_IF}\b"; then
-        uci -q del_list firewall.@zone[${ZONE_NO}].network="${WAN_IF}"
-        debug_log "DEBUG" "config_mape: Removed '${WAN_IF}' from firewall zone ${ZONE_NO} network list."
-    fi
-    if ! echo "$current_wan_networks" | grep -q "\b${WANMAP}\b"; then
-        uci -q add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
-        debug_log "DEBUG" "config_mape: Added '${WANMAP}' to firewall zone ${ZONE_NO} network list."
-    else
-        debug_log "DEBUG" "config_mape: '${WANMAP}' already in firewall zone ${ZONE_NO} network list."
-    fi
-    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
-    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
-    
-    debug_log "DEBUG" "config_mape: Committing UCI changes..."
-    local commit_ok=1
-    if ! uci commit network; then debug_log "DEBUG" "config_mape: Failed to commit network."; commit_ok=0; fi
-    if ! uci commit dhcp; then debug_log "DEBUG" "config_mape: Failed to commit dhcp."; commit_ok=0; fi
-    if ! uci commit firewall; then debug_log "DEBUG" "config_mape: Failed to commit firewall."; commit_ok=0; fi
-
-    if [ "$commit_ok" -eq 1 ]; then
-        debug_log "DEBUG" "config_mape: All UCI sections committed successfully."
-    else
-        debug_log "DEBUG" "config_mape: One or more UCI sections failed to commit."
-    fi
-    
-    return 0
 }
 
 # MAP-E設定情報を表示する関数
