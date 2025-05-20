@@ -560,14 +560,17 @@ display_dslite() {
     fi
 
     printf "\n%s\n" "$(color blue "DS-Lite Configuration Summary:")"
-    printf "\n"
     printf "  %-25s %s\n" "Provider:" "$DSLITE_DISPLAY_NAME"
     printf "  %-25s %s\n" "AFTR (Border Relay):" "$DSLITE_AFTR_IP"
     printf "  %-25s %s\n" "Interface MTU (expected):" "1460"
     printf "\n"
-    printf "%s\n" "$(color green "$(get_message MSG_DSLITE_APPLY_SUCCESS)")"
+    printf "\n%s\n" "$(color green "$(get_message "MSG_DSLITE_SUCCESS")")"
+    printf "%s\n" "$(color green "$(get_message "MSG_DSLITE_APPLY_SUCCESS")")"
     read -r -n 1 -s
-    
+    printf "\n"
+     
+    debug_log "DEBUG" "Rebooting system after restore."
+    reboot    
     return 0
 }
 
