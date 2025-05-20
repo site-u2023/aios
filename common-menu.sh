@@ -108,6 +108,24 @@ pop_menu_history() {
     fi
 }
 
+menu_yn() {
+    local message_key="$1"
+    local default_message_key="MSG_AUTO_CONFIG_CONFIRM"
+
+    if [ -z "$message_key" ]; then
+        debug_log "DEBUG" "menu_yn: Message key not provided. Using default: [$default_message_key]."
+        message_key="$default_message_key"
+    fi
+
+    if confirm "$message_key"; then
+        debug_log "DEBUG" "menu_yn: User confirmed action for message key [$message_key]."
+        return 0
+    else
+        debug_log "DEBUG" "menu_yn: User cancelled action for message key [$message_key]."
+        return 1
+    fi
+}
+
 debug_breadcrumbs() {
     local history="$MENU_HISTORY"
     debug_log "DEBUG" "Raw history data: $history"
