@@ -589,6 +589,10 @@ normalize_message() {
     output=$(echo "$output" | sed 's/[[:space:]]\+}/}/g') # Space before } (inside)
     LC_ALL="$saved_locale"
 
+    # Explicitly remove spaces that might follow "{@}" before it's converted to a newline.
+    # This handles cases like "{@} {a}" becoming "{@}{a}"
+    output=$(echo "$output" | sed 's/{@}[[:space:]]\+/{@}/g')
+    
     # Special placeholder replacement ( {;} is NOT replaced here )
     output=$(echo "$output" | sed 's/{:}/:/g') # {:} -> :
     output=$(echo "$output" | sed 's/{@}/\\n/g') # {@} -> newline (\n) - printf %b will interpret this
