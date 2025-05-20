@@ -521,13 +521,12 @@ process_menu_yn() {
     debug_log "DEBUG" "process_menu_yn: Received command string: [$cmd_str]"
 
     if ! echo "$cmd_str" | grep -q "menu_yn"; then
-        debug_log "WARNING" "process_menu_yn: 'menu_yn' keyword not found in command: [$cmd_str]. Returning original command."
+        debug_log "DEBUG" "process_menu_yn: 'menu_yn' keyword not found in command: [$cmd_str]. Returning original command."
         echo "$cmd_str"
         return 0 
     fi
 
     local potential_msg_key=$(echo "$cmd_str" | sed 's/.*menu_yn[[:space:]]//' | awk '{print $1}')
-
     local part_after_menu_yn=$(echo "$cmd_str" | sed 's/.*menu_yn//')
     local first_char_after_menu_yn=$(echo "$part_after_menu_yn" | cut -c1)
 
@@ -543,14 +542,12 @@ process_menu_yn() {
     debug_log "DEBUG" "process_menu_yn: Requesting confirmation with key: [$confirm_msg_key]"
     
     if ! confirm "$confirm_msg_key"; then
-        debug_log "INFO" "process_menu_yn: User declined confirmation for command associated with key: [$confirm_msg_key]"
+        debug_log "DEBUG" "process_menu_yn: User declined confirmation for command associated with key: [$confirm_msg_key]"
         printf "%s\n" "$(color yellow "$(get_message "MSG_ACTION_CANCELLED")")"
         return 1
     fi
-
+    
     cmd_to_execute=$(echo "$cmd_str" | sed "s/${keyword_phrase_to_remove}//")
-
-    # 前後の空白および連続する空白を除去
     cmd_to_execute=$(echo "$cmd_to_execute" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/[[:space:]][[:space:]]*/ /g')
 
     debug_log "DEBUG" "process_menu_yn: User confirmed. Command to execute: [$cmd_to_execute]"
