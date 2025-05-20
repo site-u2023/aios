@@ -1274,7 +1274,7 @@ config_mape() {
     ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
 
     if [ -z "$ZONE_NO" ]; then
-        debug_log "WARNING" "config_mape: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
+        debug_log "DEBUG" "config_mape: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
         ZONE_NO="1" # 'wan' という名前のゾーンが見つからない場合のフォールバック (一般的なWANゾーンのインデックス)
     else
         debug_log "DEBUG" "config_mape: Using firewall zone '$wan_zone_name_to_find' (index $ZONE_NO) for the $WANMAP interface."
@@ -1320,14 +1320,14 @@ config_mape() {
             debug_log "DEBUG" "config_mape: Setting network.${WAN6_IF}.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
             uci -q set network.${WAN6_IF}.ip6prefix="${IPV6PREFIX}/64" # GUAの場合は/64を期待
         else
-            debug_log "WARNING" "config_mape: IPV6PREFIX is empty, cannot set network.${WAN6_IF}.ip6prefix for GUA method." # DEBUGからWARNINGに変更
+            debug_log "DEBUG" "config_mape: IPV6PREFIX is empty, cannot set network.${WAN6_IF}.ip6prefix for GUA method." # DEBUGからWARNINGに変更
             uci -q delete network.${WAN6_IF}.ip6prefix
         fi
     elif [ "$MAPE_IPV6_ACQUISITION_METHOD" = "pd" ]; then
         debug_log "DEBUG" "config_mape: Deleting network.${WAN6_IF}.ip6prefix (PD method, prefix delegation expected)."
         uci -q delete network.${WAN6_IF}.ip6prefix # PDの場合は DHCPv6クライアントがプレフィックスを管理
     else
-        debug_log "WARNING" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.${WAN6_IF}.ip6prefix." # DEBUGからWARNINGに変更
+        debug_log "DEBUG" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.${WAN6_IF}.ip6prefix." # DEBUGからWARNINGに変更
         uci -q delete network.${WAN6_IF}.ip6prefix # 不明な場合は削除が無難
     fi
 
