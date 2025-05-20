@@ -6,7 +6,7 @@ en|MSG_UNDER_TEST=👽 test
 # menu.db
 en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE / NURO Hikari
 en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
-en|MENU_INTERNET_NURO_MAPE=MAP-E{:} NURO Hikari
+en|MENU_INTERNET_MAPE_NURO=MAP-E{:} NURO Hikari
 en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
 en|MENU_INTERNET_PPPOE=PPPoE
 en|MENU_INTERNET_RESTORE=Restore
@@ -14,7 +14,7 @@ en|MENU_INTERNET_DSLITE_TRANS_EAST=Transix (East Japan)
 en|MENU_INTERNET_DSLITE_TRANS_WEST=Transix (West Japan)
 en|MENU_INTERNET_DSLITE_XPASS=Cross Pass
 en|MENU_INTERNET_DSLITE_V6CONNECT=v6 Connect
-en|MENU_INTERNET_MAPE_NURO=NURO Hikari
+en|MENU_INTERNET_MAPE_NUROHIKARI=NURO Hikari
 
 # internet-auto-config.sh
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {s} ({t})
