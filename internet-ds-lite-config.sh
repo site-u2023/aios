@@ -400,22 +400,37 @@ replace_dslite_sh() {
 }
 
 config_dslite() {
-    local DSLITE="dslite"
+    local DSLITE="dslite" # Ensure this matches the actual interface name created by the 'dslite' proto
 
     local ZONE_NO
     local wan_zone_name_to_find="wan"
-    ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
-
-    if [ -z "$ZONE_NO" ]; then
-        debug_log "WARNING" "config_dslite: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
-        ZONE_NO="1"
-    else
-        debug_log "DEBUG" "config_dslite: Using firewall zone '$wan_zone_name_to_find' (index $ZONE_NO) for the dslite interface."
-    fi
-
-    local WAN_IF="${WAN_IF:-wan}"
+    local WAN_IF="${WAN_IF:-wan}" # Used in fallback logic
     local WAN6_IF="${WAN6_IF:-wan6}"
     local LAN_IF="${LAN_IF:-lan}"
+
+    debug_log "DEBUG" "config_dslite: Starting function. WAN_IF is '$WAN_IF', WAN6_IF is '$WAN6_IF', LAN_IF is '$LAN_IF'."
+
+    # Attempt to find the firewall zone index for 'wan' by its name
+    ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
+    debug_log "DEBUG" "config_dslite: Attempt 1: ZONE_NO from 'name=$wan_zone_name_to_find' is: '$ZONE_NO'"
+
+    if [ -z "$ZONE_NO" ]; then
+        debug_log "WARNING" "config_dslite: Firewall zone named '$wan_zone_name_to_find' not found. Attempting fallback by network list containing '$WAN_IF'."
+        # Fallback 1: Try to find a zone that has '$WAN_IF' in its network list
+        ZONE_NO=$(uci show firewall | grep "network.*'$WAN_IF'" | sed -n "s/^firewall\.@zone\[\([0-9]*\)\].*/\1/p" | head -n1)
+        debug_log "DEBUG" "config_dslite: Attempt 2 (Fallback 1): ZONE_NO from network list '$WAN_IF' is: '$ZONE_NO'"
+        
+        if [ -z "$ZONE_NO" ]; then
+            debug_log "WARNING" "config_dslite: No zone found associated with network '$WAN_IF' either. Defaulting to zone index '1'. This might not be correct for the WAN."
+            ZONE_NO="1" # Default to zone 1 as a last resort
+        else
+            debug_log "DEBUG" "config_dslite: Using firewall zone index '$ZONE_NO' (found via network list containing '$WAN_IF')."
+        fi
+    else
+        debug_log "DEBUG" "config_dslite: Using firewall zone index '$ZONE_NO' (found via name='$wan_zone_name_to_find')."
+    fi
+    debug_log "INFO" "config_dslite: Final FIREWALL ZONE_NO to be used for dslite interface: '$ZONE_NO'"
+
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
         debug_log "ERROR" "config_dslite: DSLITE_AFTR_IP is not set. Cannot apply UCI settings."
@@ -456,18 +471,58 @@ config_dslite() {
 
     local current_networks
     current_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null)
+    local uci_add_list_failed=0 # Flag specifically for add_list failure
 
-    if ! echo "$current_networks" | grep -q "\b${DSLITE}\b"; then
-        uci -q add_list firewall.@zone[${ZONE_NO}].network="${DSLITE}"
-        debug_log "DEBUG" "config_dslite: Added '${DSLITE}' to firewall WAN zone ${ZONE_NO} network list."
+    # Check if old WAN_IF is in the zone and remove it.
+    # Failure to remove (e.g., if not present) is not necessarily a fatal error for this script's logic.
+    if echo "$current_networks" | grep -q "\b${WAN_IF}\b"; then
+        debug_log "DEBUG" "config_dslite: Attempting to remove '${WAN_IF}' from firewall zone ${ZONE_NO} network list."
+        uci -q del_list firewall.@zone[${ZONE_NO}].network="${WAN_IF}"
+        if [ $? -ne 0 ]; then
+            # Log as a warning, but do not set a fatal error flag here.
+            debug_log "WARNING" "config_dslite: Failed to remove '${WAN_IF}' from firewall zone ${ZONE_NO} (it might not have been there, or another issue)."
+        else
+            debug_log "DEBUG" "config_dslite: Successfully removed '${WAN_IF}' from firewall zone ${ZONE_NO} network list."
+        fi
     else
-        debug_log "DEBUG" "config_dslite: '${DSLITE}' already in firewall WAN zone ${ZONE_NO} network list."
+        debug_log "DEBUG" "config_dslite: '${WAN_IF}' not found in current network list for zone ${ZONE_NO}. No removal needed."
+    fi
+
+    # Add DSLITE to the zone if not already present.
+    # Re-fetch current_networks in case it changed due to del_list
+    current_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null)
+    if ! echo "$current_networks" | grep -q "\b${DSLITE}\b"; then
+        debug_log "DEBUG" "config_dslite: Attempting to add '${DSLITE}' to firewall zone ${ZONE_NO} network list."
+        uci -q add_list firewall.@zone[${ZONE_NO}].network="${DSLITE}"
+        if [ $? -ne 0 ]; then
+            debug_log "ERROR" "config_dslite: Failed to add '${DSLITE}' to firewall zone ${ZONE_NO}."
+            uci_add_list_failed=1 # Set flag if add_list fails
+        else
+            debug_log "DEBUG" "config_dslite: Successfully added '${DSLITE}' to firewall zone ${ZONE_NO} network list."
+        fi
+    else
+        debug_log "DEBUG" "config_dslite: '${DSLITE}' already in firewall zone ${ZONE_NO} network list."
     fi
     
-    debug_log "DEBUG" "config_dslite: Setting masq='1' and mtu_fix='1' for firewall WAN zone '${ZONE_NO}'."
-    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
-    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
+    # If adding DSLITE to the firewall zone failed, this is a more critical issue.
+    if [ "$uci_add_list_failed" -eq 1 ]; then
+        debug_log "ERROR" "config_dslite: Halting before commit due to failure to add '${DSLITE}' to firewall zone ${ZONE_NO}."
+        return 1
+    fi
 
+    # Proceed to set masq and mtu_fix only if adding DSLITE was successful or it was already there.
+    debug_log "DEBUG" "config_dslite: Setting masq='1' and mtu_fix='1' for firewall zone '${ZONE_NO}'."
+    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
+    if [ $? -ne 0 ]; then
+        debug_log "WARNING" "config_dslite: Failed to set masq for firewall zone ${ZONE_NO}."
+        # Not necessarily fatal, but log it.
+    fi
+    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
+    if [ $? -ne 0 ]; then
+        debug_log "WARNING" "config_dslite: Failed to set mtu_fix for firewall zone ${ZONE_NO}."
+        # Not necessarily fatal, but log it.
+    fi
+    
     local commit_failed=0
     local commit_errors=""
     debug_log "DEBUG" "config_dslite: Committing UCI changes for dhcp, network, and firewall."
@@ -498,7 +553,7 @@ config_dslite() {
         return 1
     fi
 
-    debug_log "DEBUG" "config_dslite: UCI settings applied and committed successfully."
+    debug_log "INFO" "config_dslite: UCI settings applied and committed successfully."
     return 0
 }
 
