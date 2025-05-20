@@ -246,55 +246,68 @@ determine_connection_auto() {
 }
 
 internet_auto_config_main() {
-    # ...（変数宣言・初期化）
-
     local manual_menu_needed=0
-    local asn="" # asn変数を初期化
-    local device_info="" # device_info変数を初期化
-    local aftr_name="" # aftr_name変数を初期化
-    local pd_prefix="" # pd_prefix変数を初期化
-    local connection_info="" # connection_info変数を初期化
-    local connection_type="" # connection_type変数を初期化
-    local provider_key="" # provider_key変数を初期化
-    local display_isp_name="" # display_isp_name変数を初期化
-    local command_to_execute="" # command_to_execute変数を初期化
-
+    local asn=""
+    local device_info=""
+    local aftr_name=""
+    local pd_prefix=""
+    local global_ipv6=""
+    local connection_info=""
+    local connection_type=""
+    local provider_key=""
+    local display_isp_name=""
+    local command_to_execute=""
 
     if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        printf "\n%s\n" "$(color yellow "AS number cache file not found.")" # Cache file not found
+        printf "\n%s\n" "$(color yellow "AS number cache file not found.")"
         manual_menu_needed=1
     else
         asn=$(cat "${CACHE_DIR}/isp_as.ch")
         if [ -z "$asn" ]; then
-            printf "\n%s\n" "$(color yellow "AS number is empty.")" # AS number is empty in cache
+            printf "\n%s\n" "$(color yellow "AS number is empty.")"
             manual_menu_needed=1
         else
-            # --- Get PD and AFTR name here as well
-            device_info=$(get_device_network_info) # Retrieve current network info
+            device_info=$(get_device_network_info)
             aftr_name=$(echo "$device_info" | cut -d'|' -f1)
             pd_prefix=$(echo "$device_info" | cut -d'|' -f2)
-            # asn is used as before
+            global_ipv6=$(echo "$device_info" | cut -d'|' -f4)
+
             connection_info=$(determine_connection_auto "$asn" "$pd_prefix" "$aftr_name")
             connection_type=$(echo "$connection_info" | cut -d'|' -f1)
-            provider_key=$(echo "$connection_info" | cut -d'|' -f2) # Value from $4 is stored here
+            provider_key=$(echo "$connection_info" | cut -d'|' -f2)
             display_isp_name=$(echo "$connection_info" | cut -d'|' -f3)
             command_to_execute=$(echo "$connection_info" | cut -d'|' -f4)
 
             if [ "$connection_type" = "unknown" ]; then
-                # Prepare diagnostic information for the {a} placeholder
                 local diagnostic_info_a=""
-                [ -n "$asn" ] && diagnostic_info_a="AS: $asn"
-                # Only add PD if it's not empty and not just "/" (which might indicate no PD)
+                if [ -n "$asn" ]; then
+                    diagnostic_info_a="AS: $asn"
+                fi
+
+                local pd_or_v6_info=""
                 if [ -n "$pd_prefix" ] && [ "$pd_prefix" != "/" ]; then
-                    [ -n "$diagnostic_info_a" ] && diagnostic_info_a="$diagnostic_info_a, "
-                    diagnostic_info_a="${diagnostic_info_a}PD: $pd_prefix"
+                    pd_or_v6_info="PD: $pd_prefix"
+                elif [ -n "$global_ipv6" ]; then
+                    pd_or_v6_info="V6: $global_ipv6"
                 fi
-                # Only add AFTR if it's not empty
+
+                if [ -n "$pd_or_v6_info" ]; then
+                    if [ -n "$diagnostic_info_a" ]; then
+                        diagnostic_info_a="$diagnostic_info_a, $pd_or_v6_info"
+                    else
+                        diagnostic_info_a="$pd_or_v6_info"
+                    fi
+                fi
+
                 if [ -n "$aftr_name" ]; then
-                    [ -n "$diagnostic_info_a" ] && diagnostic_info_a="$diagnostic_info_a, "
-                    diagnostic_info_a="${diagnostic_info_a}AFTR: $aftr_name"
+                    if [ -n "$diagnostic_info_a" ]; then
+                        diagnostic_info_a="$diagnostic_info_a, AFTR: $aftr_name"
+                    else
+                        diagnostic_info_a="AFTR: $aftr_name"
+                    fi
                 fi
-                [ -z "$diagnostic_info_a" ] && diagnostic_info_a="N/A" # Fallback if no info
+
+                [ -z "$diagnostic_info_a" ] && diagnostic_info_a="N/A"
 
                 printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" a="$diagnostic_info_a")")"
                 manual_menu_needed=1
@@ -306,7 +319,7 @@ internet_auto_config_main() {
                     manual_menu_needed=1
                 else
                     eval "$command_to_execute"
-                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command execution failed.")" # Command failed
+                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command execution failed.")"
                 fi
             fi
         fi
