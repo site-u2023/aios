@@ -3,13 +3,22 @@ SCRIPT_VERSION="2025-03-31-00-00"
 # debug_test
 en|MSG_UNDER_TEST=👽 test
 
-# common-feed-package.sh
-en|MSG_APK_DEPLOY_CAUTION=Caution: Deploying {pkg} directly bypasses the package
+# menu.db
+en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE / NURO Hikari
+en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
+en|MENU_INTERNET_NURO_MAPE=MAP-E{:} NURO
+en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
+en|MENU_INTERNET_PPPOE=PPPoE
+en|MENU_INTERNET_RESTORE=Restore
+en|MENU_INTERNET_DSLITE_TRANS_EAST=Transix (East Japan)
+en|MENU_INTERNET_DSLITE_TRANS_WEST=Transix (West Japan)
+en|MENU_INTERNET_DSLITE_XPASS=Cross Pass
+en|MENU_INTERNET_DSLITE_V6CONNECT=v6 Connect
 
-# internet-map-e-nuro.sh
-en|MSG_NURO_APPLY_SUCCESS=NURO MAP-E configuration completed. Please reboot the system
-en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix
-en|MSG_MAPE_NURO_UNSUPPORTED_PREFIX_RULE=Not supported{:} MAP-E nuro
+# internet-auto-config.sh
+en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {s} ({t})
+en|MSG_AUTO_CONFIG_CONFIRM=Apply this ISP {yn}{;}
+en|MSG_AUTO_CONFIG_UNKNOWN=Automatic configuration is not supported{:}{@}{a}
 
 # internet-map-e.sh
 en|MSG_MAPE_APPLY_SUCCESS=Press any key (the system will reboot)
@@ -33,23 +42,11 @@ en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
 en|MSG_DSLITE_AUTO_DETECT_FAILED=Provider detection failed
 en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {r}
 en|MSG_DSLITE_UNSUPPORTED=Not supported{:} DS-Lite
-en|MENU_DSLITE_TRANS_EAST=Transix (East Japan)
-en|MENU_DSLITE_TRANS_WEST=Transix (West Japan)
-en|MENU_DSLITE_XPASS=Cross Pass
-en|MENU_DSLITE_V6CONNECT=v6 Connect
 
-# menu.db
-en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE / NURO Hikari
-en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
-en|MENU_INTERNET_NURO_MAPE=MAP-E{:} NURO
-en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
-en|MENU_INTERNET_PPPOE=PPPoE
-en|MENU_INTERNET_RESTORE=Restore
-
-# internet-auto-config.sh
-en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {s} ({t})
-en|MSG_AUTO_CONFIG_CONFIRM=Apply this ISP {yn}{;}
-en|MSG_AUTO_CONFIG_UNKNOWN=Automatic configuration is not supported{:}{@}{a}
+# internet-map-e-nuro.sh
+en|MSG_NURO_APPLY_SUCCESS=NURO MAP-E configuration completed. Please reboot the system
+en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix
+en|MSG_MAPE_NURO_UNSUPPORTED_PREFIX_RULE=Not supported{:} MAP-E nuro
 
 # common-information.sh
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
@@ -91,7 +88,6 @@ en|PKG_SECTION_USB=USB Storage
 en|PKG_SECTION_SAMBA=File Sharing
 en|MSG_CONFIRM_PACKAGE_OPERATION=Do you want to install the packages listed above {yn}{;}
 en|MSG_PACKAGE_INSTALL_CANCELLED=Package installation cancelled
-
 
 # common-system.sh
 en|MSG_USE_DETECTED_ISP_INFORMATION=ISP Sources{:} {i}
@@ -247,6 +243,9 @@ en|MSG_UNKNOWN_OPTION=Unknown option{:} {option}
 en|MSG_ERROR_NO_PACKAGE_MANAGER=No package manager found in cache
 en|MSG_CONFIRM_INSTALL=Package{:} {pkg}{@}Install this package {yn}{;}
 en|MSG_CONFIRM_INSTALL_WITH_DESC=Package{:} {pkg}{@}Description{:} {desc}{@}Install this package {yn}{;}
+
+# common-feed-package.sh
+en|MSG_APK_DEPLOY_CAUTION=Caution: Deploying {pkg} directly bypasses the package
 
 # system-config.sh
 en|MSG_INFO_NET_COUNTRY=IP location
