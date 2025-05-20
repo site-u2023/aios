@@ -93,13 +93,8 @@ get_aaaa_record_dslite() {
 
 manual_dslite() {
     local aftr_value="$1"
-    local isp_name="$(get_message "${SELECTED_MENU_KEY}")"
-    local yn_prompt="${isp_name}{yn}{;}"
-    
-    if ! confirm "$yn_prompt" "yn"; then
-        debug_log "DEBUG" "manual_dslite: User cancelled DS-Lite manual configuration."
-        return 1
-    fi
+
+    debug_log "DEBUG" "manual_dslite: Configuring DS-Lite manually with AFTR: $aftr_value (confirmation is handled by the menu system)."
 
     DETECTED_AFTR_INFO="$aftr_value"
     DETECTED_PROVIDER_DISPLAY_NAME="$(get_message "${SELECTED_MENU_KEY}")"
@@ -554,10 +549,6 @@ internet_dslite_main() {
     print_section_title "MENU_INTERNET_DSLITE"
 
     if ! get_dslite "$@"; then
-        return 1
-    fi
-    
-    if ! map_dslite "$@"; then
         return 1
     fi
     
