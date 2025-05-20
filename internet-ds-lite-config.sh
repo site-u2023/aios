@@ -546,8 +546,6 @@ restore_dslite() {
 
 internet_dslite_main() {
 
-    print_section_title "MENU_INTERNET_DSLITE"
-
     if ! get_dslite "$@"; then
         return 1
     fi
