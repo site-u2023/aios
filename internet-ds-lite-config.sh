@@ -403,15 +403,22 @@ config_dslite() {
     local DSLITE="dslite"
 
     local ZONE_NO
-    ZONE_NO=$(uci show firewall | grep "network.*'lan'" | head -n1 | sed -n "s/^firewall\.@zone\[\([0-9]*\)\].*/\1/p")
-    [ -z "$ZONE_NO" ] && ZONE_NO="1"
+    local wan_zone_name_to_find="wan"
+    ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
+
+    if [ -z "$ZONE_NO" ]; then
+        debug_log "WARNING" "config_dslite: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
+        ZONE_NO="1"
+    else
+        debug_log "DEBUG" "config_dslite: Using firewall zone '$wan_zone_name_to_find' (index $ZONE_NO) for the dslite interface."
+    fi
 
     local WAN_IF="${WAN_IF:-wan}"
     local WAN6_IF="${WAN6_IF:-wan6}"
     local LAN_IF="${LAN_IF:-lan}"
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
-        debug_log "DEBUG" "config_dslite: DSLITE_AFTR_IP is not set. Cannot apply UCI settings."
+        debug_log "ERROR" "config_dslite: DSLITE_AFTR_IP is not set. Cannot apply UCI settings."
         return 1
     fi
 
@@ -431,7 +438,7 @@ config_dslite() {
     uci -q set dhcp.${LAN_IF}.force='1'
     
     uci -q set dhcp.${WAN6_IF}=dhcp
-    uci -q set dhcp.${WAN6_IF}.interface='${WAN6_IF}'
+    uci -q set dhcp.${WAN6_IF}.interface="$WAN6_IF"
     uci -q set dhcp.${WAN6_IF}.ignore='1'
     uci -q set dhcp.${WAN6_IF}.master='1'
     uci -q set dhcp.${WAN6_IF}.ra='relay'
@@ -445,30 +452,49 @@ config_dslite() {
     uci -q set network.${DSLITE}.peeraddr="$DSLITE_AFTR_IP"
     uci -q set network.${DSLITE}.mtu='1460'
 
-    debug_log "DEBUG" "config_dslite: Applying firewall UCI settings for interface '${DSLITE}' in zone index '${ZONE_NO}'."
+    debug_log "DEBUG" "config_dslite: Applying firewall UCI settings for interface '${DSLITE}' in WAN zone index '${ZONE_NO}'."
 
     local current_networks
     current_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null)
 
     if ! echo "$current_networks" | grep -q "\b${DSLITE}\b"; then
         uci -q add_list firewall.@zone[${ZONE_NO}].network="${DSLITE}"
-        debug_log "DEBUG" "config_dslite: Added '${DSLITE}' to firewall zone ${ZONE_NO} network list."
+        debug_log "DEBUG" "config_dslite: Added '${DSLITE}' to firewall WAN zone ${ZONE_NO} network list."
     else
-        debug_log "DEBUG" "config_dslite: '${DSLITE}' already in firewall zone ${ZONE_NO} network list."
+        debug_log "DEBUG" "config_dslite: '${DSLITE}' already in firewall WAN zone ${ZONE_NO} network list."
     fi
     
-    debug_log "DEBUG" "config_dslite: Setting masq='1' and mtu_fix='1' for firewall zone '${ZONE_NO}'."
+    debug_log "DEBUG" "config_dslite: Setting masq='1' and mtu_fix='1' for firewall WAN zone '${ZONE_NO}'."
     uci -q set firewall.@zone[${ZONE_NO}].masq='1'
     uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
 
     local commit_failed=0
+    local commit_errors=""
     debug_log "DEBUG" "config_dslite: Committing UCI changes for dhcp, network, and firewall."
-    uci -q commit dhcp || commit_failed=1
-    uci -q commit network || commit_failed=1
-    uci -q commit firewall || commit_failed=1
+    
+    uci -q commit dhcp
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}dhcp "
+        debug_log "ERROR" "config_dslite: Failed to commit dhcp."
+    fi
+
+    uci -q commit network
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}network "
+        debug_log "ERROR" "config_dslite: Failed to commit network."
+    fi
+    
+    uci -q commit firewall
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}firewall "
+        debug_log "ERROR" "config_dslite: Failed to commit firewall."
+    fi
 
     if [ "$commit_failed" -eq 1 ]; then
-        debug_log "DEBUG" "config_dslite: Failed to commit one or more UCI sections."
+        debug_log "ERROR" "config_dslite: Failed to commit one or more UCI sections: ${commit_errors}."
         return 1
     fi
 
