@@ -183,7 +183,7 @@ mape_nuro_config() {
     FIREWALL_ZONE_IDX=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
 
     if [ -z "$FIREWALL_ZONE_IDX" ]; then
-        debug_log "WARNING" "mape_nuro_config: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
+        debug_log "DEBUG" "mape_nuro_config: Firewall zone named '$wan_zone_name_to_find' not found. Defaulting to zone index '1' for WAN. This might not be correct for all configurations. Please verify your firewall setup."
         FIREWALL_ZONE_IDX="1" # 'wan' という名前のゾーンが見つからない場合のフォールバック
     else
         debug_log "DEBUG" "mape_nuro_config: Using firewall zone '$wan_zone_name_to_find' (index $FIREWALL_ZONE_IDX) for the $WANMAP_IF interface."
@@ -304,21 +304,21 @@ mape_nuro_config() {
     if ! uci -q commit dhcp; then
         commit_failed=1
         commit_errors="${commit_errors}dhcp "
-        debug_log "ERROR" "mape_nuro_config: 'uci commit dhcp' failed."
+        debug_log "DEBUG" "mape_nuro_config: 'uci commit dhcp' failed."
     fi
     if ! uci -q commit network; then
         commit_failed=1
         commit_errors="${commit_errors}network "
-        debug_log "ERROR" "mape_nuro_config: 'uci commit network' failed."
+        debug_log "DEBUG" "mape_nuro_config: 'uci commit network' failed."
     fi
     if ! uci -q commit firewall; then
         commit_failed=1
         commit_errors="${commit_errors}firewall "
-        debug_log "ERROR" "mape_nuro_config: 'uci commit firewall' failed."
+        debug_log "DEBUG" "mape_nuro_config: 'uci commit firewall' failed."
     fi
 
     if [ "$commit_failed" -eq 1 ]; then
-        debug_log "ERROR" "mape_nuro_config: One or more UCI commit operations failed: ${commit_errors}."
+        debug_log "DEBUG" "mape_nuro_config: One or more UCI commit operations failed: ${commit_errors}."
         # 元のコードでは printf でユーザーにエラーを通知していたので、それを踏襲
         printf "%s\n" "$(color "red" "Error: UCI commit failed for: ${commit_errors}")"
         return 1
