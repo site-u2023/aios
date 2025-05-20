@@ -1653,8 +1653,6 @@ restore_mape() {
 
 internet_map_main() {
 
-    print_section_title "MENU_INTERNET_MAPE"
-
     # MAP-Eパラメータ計算
     if ! mold_mape; then
         debug_log "DEBUG" "internet_map_main: mold_mape function failed. Exiting script."
