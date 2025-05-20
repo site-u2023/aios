@@ -549,6 +549,10 @@ internet_dslite_main() {
     if ! get_dslite "$@"; then
         return 1
     fi
+
+    if ! map_dslite "$@"; then
+        return 1
+    fi
     
     if ! determine_dslite; then
         debug_log "DEBUG" "internet_dslite_main: determine_dslite function failed. Exiting script."
