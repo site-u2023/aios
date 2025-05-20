@@ -251,7 +251,7 @@ internet_auto_config_main() {
     local device_info=""
     local aftr_name=""
     local pd_prefix=""
-    local global_ipv6=""
+    local global_ipv6="" 
     local connection_info=""
     local connection_type=""
     local provider_key=""
@@ -259,18 +259,18 @@ internet_auto_config_main() {
     local command_to_execute=""
 
     if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        printf "\n%s\n" "$(color yellow "AS number cache file not found.")"
+        printf "\n%s\n" "$(color yellow "AS number cache file not found.")" 
         manual_menu_needed=1
     else
         asn=$(cat "${CACHE_DIR}/isp_as.ch")
         if [ -z "$asn" ]; then
-            printf "\n%s\n" "$(color yellow "AS number is empty.")"
+            printf "\n%s\n" "$(color yellow "AS number is empty.")" 
             manual_menu_needed=1
         else
-            device_info=$(get_device_network_info)
+            device_info=$(get_device_network_info) 
             aftr_name=$(echo "$device_info" | cut -d'|' -f1)
             pd_prefix=$(echo "$device_info" | cut -d'|' -f2)
-            global_ipv6=$(echo "$device_info" | cut -d'|' -f4)
+            global_ipv6=$(echo "$device_info" | cut -d'|' -f4) 
 
             connection_info=$(determine_connection_auto "$asn" "$pd_prefix" "$aftr_name")
             connection_type=$(echo "$connection_info" | cut -d'|' -f1)
@@ -293,7 +293,7 @@ internet_auto_config_main() {
 
                 if [ -n "$pd_or_v6_info" ]; then
                     if [ -n "$diagnostic_info_a" ]; then
-                        diagnostic_info_a="$diagnostic_info_a, $pd_or_v6_info"
+                        diagnostic_info_a="$diagnostic_info_a $pd_or_v6_info"
                     else
                         diagnostic_info_a="$pd_or_v6_info"
                     fi
@@ -301,15 +301,17 @@ internet_auto_config_main() {
 
                 if [ -n "$aftr_name" ]; then
                     if [ -n "$diagnostic_info_a" ]; then
-                        diagnostic_info_a="$diagnostic_info_a, AFTR: $aftr_name"
+                        diagnostic_info_a="$diagnostic_info_a $aftr_name"
                     else
                         diagnostic_info_a="AFTR: $aftr_name"
                     fi
                 fi
 
                 [ -z "$diagnostic_info_a" ] && diagnostic_info_a="N/A"
-
-                printf "\n%s\n" "$(color yellow "$(get_message "MSG_AUTO_CONFIG_UNKNOWN" a="$diagnostic_info_a")")"
+                
+                local raw_msg_content_for_display
+                raw_msg_content_for_display=$(get_message "MSG_AUTO_CONFIG_UNKNOWN" a="$diagnostic_info_a")
+                printf "\n%s\n" "$(color yellow "$raw_msg_content_for_display")"
                 manual_menu_needed=1
             else
                 printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" s="$display_isp_name" t="$connection_type")")"
@@ -319,7 +321,7 @@ internet_auto_config_main() {
                     manual_menu_needed=1
                 else
                     eval "$command_to_execute"
-                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command execution failed.")"
+                    [ $? -ne 0 ] && printf "\n%s\n" "$(color yellow "Command execution failed.")" 
                 fi
             fi
         fi
