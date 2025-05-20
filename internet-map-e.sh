@@ -978,6 +978,7 @@ EOF
         OFFSET=6 # ruleprefix38_20では offset=6 を使用
     else
         # Using a more specific message key if available, or a generic one
+        printf "\n"
         printf "%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE")")"
         debug_log "DEBUG" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
         return 1
