@@ -1393,25 +1393,25 @@ config_mape() {
     if [ $? -ne 0 ]; then
         commit_failed=1
         commit_errors="${commit_errors}network "
-        debug_log "ERROR" "config_mape: Failed to commit network."
+        debug_log "DEBUG" "config_mape: Failed to commit network."
     fi
 
     uci -q commit dhcp
     if [ $? -ne 0 ]; then
         commit_failed=1
         commit_errors="${commit_errors}dhcp "
-        debug_log "ERROR" "config_mape: Failed to commit dhcp."
+        debug_log "DEBUG" "config_mape: Failed to commit dhcp."
     fi
     
     uci -q commit firewall
     if [ $? -ne 0 ]; then
         commit_failed=1
         commit_errors="${commit_errors}firewall "
-        debug_log "ERROR" "config_mape: Failed to commit firewall."
+        debug_log "DEBUG" "config_mape: Failed to commit firewall."
     fi
 
     if [ "$commit_failed" -eq 1 ]; then
-        debug_log "ERROR" "config_mape: One or more UCI sections failed to commit: ${commit_errors}."
+        debug_log "DEBUG" "config_mape: One or more UCI sections failed to commit: ${commit_errors}."
         # 復元処理を促すか、エラーメッセージを表示して終了するか検討
         return 1 # コミット失敗
     else
