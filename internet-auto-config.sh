@@ -12,7 +12,7 @@ provider_data_definitions() {
     add_provider_record "2518|||v6plus|v6 Plus|map-e|download internet-map-e.sh chmod load; internet_map_main"
     add_provider_record "7413||gw.transix.jp|biglobe_dslite|BIGLOBE|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
     add_provider_record "7413|||biglobe_mape|BIGLOBE|map-e|download internet-map-e.sh chmod load; internet_map_main"
-    add_provider_record "4713|||ocn|OCN|map-e|download internet-map-e.sh chmod load; internet_map_main"
+    add_provider_record "4713|||ocn|OCN Virtual Connect|map-e|download internet-map-e.sh chmod load; internet_map_main"
     add_provider_record "2519|||transix_dslite|transix|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
     add_provider_record "2527|||cross_dslite|Cross Pass|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
     add_provider_record "4737|||v6connect_dslite|v6 Connect|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
