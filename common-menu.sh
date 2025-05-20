@@ -112,6 +112,8 @@ menu_yn() {
     local message_key="$1"
     local default_message_key="MSG_AUTO_CONFIG_CONFIRM"
 
+    pop_menu_history
+
     if [ -z "$message_key" ]; then
         debug_log "DEBUG" "menu_yn: Message key not provided. Using default: [$default_message_key]."
         message_key="$default_message_key"
