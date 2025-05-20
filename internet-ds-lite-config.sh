@@ -63,6 +63,7 @@ ipv6_address_dslite() {
 get_aaaa_record_dslite() {
     local hostname="$1"
     local resolved_ip=""
+    local nslookup_output=""
 
     if [ -z "$hostname" ]; then
         debug_log "DEBUG" "get_aaaa_record_dslite: Hostname is empty."
@@ -70,23 +71,22 @@ get_aaaa_record_dslite() {
         return
     fi
 
-    if ! command -v getent >/dev/null 2>&1; then
-        debug_log "DEBUG" "get_aaaa_record_dslite: 'getent' command not found. Cannot resolve hostname '$hostname'."
-        echo ""
-        return
-    fi
+    nslookup_output=$(nslookup -type=AAAA "$hostname" 2>/dev/null)
 
-    resolved_ip=$(getent ahostsv6 "$hostname" | awk '{print $1; exit}')
+    if [ -n "$nslookup_output" ]; then
+        resolved_ip=$(echo "$nslookup_output" | grep -i '^Address:' | awk '{print $2}' | head -n1)
+    fi
 
     if [ -n "$resolved_ip" ]; then
         if ipv6_address_dslite "$resolved_ip"; then
+            debug_log "DEBUG" "get_aaaa_record_dslite: Resolved $hostname to AAAA: $resolved_ip (using nslookup). Validation by ipv6_address_dslite successful."
             echo "$resolved_ip"
         else
-            debug_log "DEBUG" "get_aaaa_record_dslite: Resolved IP '$resolved_ip' for hostname '$hostname' is not a valid IPv6 format."
+            debug_log "DEBUG" "get_aaaa_record_dslite: Resolved IP '$resolved_ip' for hostname '$hostname' (using nslookup) is not a valid IPv6 format according to ipv6_address_dslite."
             echo ""
         fi
     else
-        debug_log "DEBUG" "get_aaaa_record_dslite: Could not resolve AAAA record for hostname '$hostname'."
+        debug_log "DEBUG" "get_aaaa_record_dslite: Could not resolve AAAA record for hostname '$hostname' using nslookup, or nslookup output was empty/unparseable."
         echo ""
     fi
 }
@@ -126,30 +126,20 @@ get_dslite() {
     local raw_aftr_name=""
     local exit_status=0
 
-    if command -v network_find_wan6 >/dev/null 2>&1; then
-        network_find_wan6 logical_wan6_ifname
-    else
-        debug_log "DEBUG" "get_dslite: network_find_wan6 command not found."
-        exit_status=1
-    fi
+    network_find_wan6 logical_wan6_ifname
 
-    if [ "$exit_status" -eq 0 ] && [ -z "$logical_wan6_ifname" ]; then
-        debug_log "DEBUG" "get_dslite: Could not find logical IPv6 WAN interface (wan6)."
+    if [ -z "$logical_wan6_ifname" ]; then
+        debug_log "DEBUG" "get_dslite: Could not find logical IPv6 WAN interface (wan6) or network_find_wan6 failed to set it."
         exit_status=1
     fi
 
     if [ "$exit_status" -eq 0 ]; then
-        if command -v network_get_physdev >/dev/null 2>&1; then
-            network_get_physdev physical_wan_ifname "$logical_wan6_ifname"
-        else
-            debug_log "DEBUG" "get_dslite: network_get_physdev command not found."
+        network_get_physdev physical_wan_ifname "$logical_wan6_ifname"
+
+        if [ -z "$physical_wan_ifname" ]; then
+            debug_log "DEBUG" "get_dslite: Could not find physical device for $logical_wan6_ifname or network_get_physdev failed to set it."
             exit_status=1
         fi
-    fi
-    
-    if [ "$exit_status" -eq 0 ] && [ -z "$physical_wan_ifname" ]; then
-        debug_log "DEBUG" "get_dslite: Could not find physical device for $logical_wan6_ifname."
-        exit_status=1
     fi
     
     if [ "$exit_status" -eq 0 ]; then
@@ -169,9 +159,13 @@ get_dslite() {
 
             if [ -n "$hex_encoded_aftr_name" ]; then
                 debug_log "DEBUG" "get_dslite: Found HEX encoded AFTR name '$hex_encoded_aftr_name' for $physical_wan_ifname. Decoding."
-                # HEXデコード部分を追加
-                raw_aftr_name=$(echo "$hex_encoded_aftr_name" | sed 's/../& /g' | awk '{for(i=1;i<=NF;i++) printf "%c", "0x"$i; print ""}')
-                debug_log "DEBUG" "get_dslite: Decoded HEX AFTR name: '$raw_aftr_name'."
+                raw_aftr_name=$(echo "$hex_encoded_aftr_name" | sed 's/../\\x&/g' | xargs printf "%b" 2>/dev/null)
+                if [ $? -ne 0 ] || [ -z "$raw_aftr_name" ]; then
+                    debug_log "DEBUG" "get_dslite: Failed to decode HEX AFTR name or result was empty: '$hex_encoded_aftr_name'."
+                    raw_aftr_name=""
+                else
+                    debug_log "DEBUG" "get_dslite: Decoded HEX AFTR name: '$raw_aftr_name'."
+                fi
             fi
         fi
 
