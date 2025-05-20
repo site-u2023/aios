@@ -120,7 +120,8 @@ EOF
         debug_log "DEBUG" "mold_mape_nuro: NURO Params: IPV4=$IPV4/$IP4PREFIXLEN, IP6PFX=$IP6PFX/$IP6PREFIXLEN, PSID=$PSID"
     else
         debug_log "DEBUG" "mold_mape_nuro: No matching NURO rule for key '$prefix36_hex_key_lookup'."
-        printf "%s\\n" "$(color "red" "$(get_message "MSG_MAPE_NURO_UNSUPPORTED_PREFIX_RULE")")"
+        printf "\n"
+        printf "%s\n" "$(color "red" "$(get_message "MSG_MAPE_NURO_UNSUPPORTED_PREFIX_RULE")")"
         return 1
     fi
 
