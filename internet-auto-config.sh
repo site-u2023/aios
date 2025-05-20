@@ -259,12 +259,14 @@ internet_auto_config_main() {
     local command_to_execute=""
 
     if [ ! -f "${CACHE_DIR}/isp_as.ch" ]; then
-        printf "\n%s\n" "$(color yellow "AS number cache file not found.")" 
+        printf "\n"
+        printf "%s\n" "$(color yellow "AS number cache file not found.")" 
         manual_menu_needed=1
     else
         asn=$(cat "${CACHE_DIR}/isp_as.ch")
         if [ -z "$asn" ]; then
-            printf "\n%s\n" "$(color yellow "AS number is empty.")" 
+            printf "\n"
+            printf "%s\n" "$(color yellow "AS number is empty.")" 
             manual_menu_needed=1
         else
             device_info=$(get_device_network_info) 
@@ -314,7 +316,9 @@ internet_auto_config_main() {
                 printf "\n%s\n" "$(color yellow "$raw_msg_content_for_display")"
                 manual_menu_needed=1
             else
-                printf "\n%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" s="$display_isp_name" t="$connection_type")")"
+                printf "\n"
+                printf "%s\n" "$(color green "$(get_message "MSG_AUTO_CONFIG_RESULT" s="$display_isp_name" t="$connection_type")")"
+                printf "\n"
                 confirm "MSG_AUTO_CONFIG_CONFIRM"
                 local confirm_status=$?
                 if [ $confirm_status -ne 0 ]; then
