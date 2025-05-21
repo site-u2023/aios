@@ -1,6 +1,6 @@
 #!/bin/sh
 
-COMMON_VERSION="2025.05.13-00-00"
+COMMON_VERSION="2025.05.21-00-00"
 
 DEV_NULL="${DEV_NULL:-on}"
 # サイレントモード
