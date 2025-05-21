@@ -280,7 +280,7 @@ local_package_db() {
             debug_log "DEBUG" "  PRE_EXEC_LINE: [$line]"
         done < "$commands_file"
     else
-        debug_log "ERROR" "local_package_db: $commands_file was expected but not found before execution for package [$package_name]!"
+        debug_log "DEBUG" "local_package_db: $commands_file was expected but not found before execution for package [$package_name]!"
         return 1
     fi
 
@@ -315,14 +315,14 @@ local_package_db() {
         return 0
     elif [ "$exit_status" -eq 127 ]; then # 'command not found' の場合
         # 'age: not found' のようなメッセージがここより前に表示されているはず
-        debug_log "ERROR" "local_package_db: Command not found during execution of $commands_file for package [$package_name] (status: 127)."
+        debug_log "DEBUG" "local_package_db: Command not found during execution of $commands_file for package [$package_name] (status: 127)."
         # この場合、追加の "Returning error..." は不要かもしれないが、一貫性のために残す
-        debug_log "ERROR" "local_package_db: Returning error for package [$package_name] due to command not found."
+        debug_log "DEBUG" "local_package_db: Returning error for package [$package_name] due to command not found."
         return 1 # 明確なエラーとして 1 を返す
     else
         # その他の非ゼロステータス (1 や 2 など) はエラーとして扱う
-        debug_log "ERROR" "local_package_db: Execution of commands for package [$package_name] failed with unexpected status: [$exit_status]."
-        debug_log "ERROR" "local_package_db: Returning error for package [$package_name] due to execution failure."
+        debug_log "DEBUG" "local_package_db: Execution of commands for package [$package_name] failed with unexpected status: [$exit_status]."
+        debug_log "DEBUG" "local_package_db: Returning error for package [$package_name] due to execution failure."
         return 1
     fi
 }
