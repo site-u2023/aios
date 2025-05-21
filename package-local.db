@@ -44,10 +44,8 @@ uci -q commit irqbalance
 
 [luci-app-statistics]
 install_package luci-i18n-statistics hidden
-
-# [luci-i18n-statistics]
-# install_package collectd hidden
-# install_package rrdtool1 hidden
+install_package collectd hidden
+install_package rrdtool1 hidden
 
 [nlbwmon]
 install_package luci-i18n-nlbwmon hidden
