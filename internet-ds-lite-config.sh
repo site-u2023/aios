@@ -488,6 +488,8 @@ restore_dslite() {
         debug_log "DEBUG" "restore_dslite: package remove: fail"
     fi
 
+    print_section_title
+
     debug_log "DEBUG" "restore_dslite: end"
     printf "%s\n" "$(color green "$(get_message "MSG_DSLITE_RESTORE_SUCCESS")")"
     printf "%s\n" "$(color yellow "$(get_message "MSG_DSLITE_APPLY_SUCCESS")")"
