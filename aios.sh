@@ -948,7 +948,7 @@ init_device_cache() {
 start_spinner() {
     local message="$1"
     local spinner_color="${2:-$SPINNER_COLOR}"
-    local anim_type="${3:-spinner}" 
+    local anim_type="${3:-block}" 
     
     # グローバル変数を設定
     SPINNER_MESSAGE="$message"
