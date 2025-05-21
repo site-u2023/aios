@@ -10,27 +10,27 @@ install_package luci-i18n-dashboard hidden
 [ttyd]
 install_package luci-app-ttyd hidden
 install_package luci-i18n-ttyd hidden
-uci delete ttyd.ttyd 2>/dev/null
-uci delete ttyd.@ttyd[-1] 2>/dev/null
-uci commit ttyd
-uci set ttyd.ttyd='ttyd'
-uci set ttyd.ttyd.port='7681'
-uci set ttyd.ttyd.interface='@lan'
-uci set ttyd.ttyd.ipv6='1'
-uci set ttyd.ttyd.command='/bin/login -f root'
-uci del ttyd.ttyd.client_option 2>/dev/null
-uci add_list ttyd.ttyd.client_option='theme={"background": "black"}'
-uci add_list ttyd.ttyd.client_option='titleFixed=ttyd'
-uci commit ttyd
-uci add ttyd ttyd  # 新しいセクションを作成
-uci set ttyd.@ttyd[-1].port='8888'
-uci set ttyd.@ttyd[-1].interface='@lan'
-uci set ttyd.@ttyd[-1].ipv6='1'
-uci set ttyd.@ttyd[-1].command='aios'
-uci del ttyd.@ttyd[-1].client_option 2>/dev/null
-uci add_list ttyd.@ttyd[-1].client_option='theme={"background": "blue"}'
-uci add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
-uci commit ttyd
+uci -q delete ttyd.ttyd 2>/dev/null
+uci -q delete ttyd.@ttyd[-1] 2>/dev/null
+uci -q commit ttyd
+uci -q set ttyd.ttyd='ttyd'
+uci -q set ttyd.ttyd.port='7681'
+uci -q set ttyd.ttyd.interface='@lan'
+uci -q set ttyd.ttyd.ipv6='1'
+uci -q set ttyd.ttyd.command='/bin/login -f root'
+uci -q del ttyd.ttyd.client_option 2>/dev/null
+uci -q add_list ttyd.ttyd.client_option='theme={"background": "black"}'
+uci -q add_list ttyd.ttyd.client_option='titleFixed=ttyd'
+uci -q commit ttyd
+uci -q add ttyd ttyd
+uci -q set ttyd.@ttyd[-1].port='8888'
+uci -q set ttyd.@ttyd[-1].interface='@lan'
+uci -q set ttyd.@ttyd[-1].ipv6='1'
+uci -q set ttyd.@ttyd[-1].command='aios'
+uci -q del ttyd.@ttyd[-1].client_option 2>/dev/null
+uci -q add_list ttyd.@ttyd[-1].client_option='theme={"background": "blue"}'
+uci -q add_list ttyd.@ttyd[-1].client_option='titleFixed=aios'
+uci -q commit ttyd
 
 [luci-app-commands]
 install_package luci-i18n-commands hidden
@@ -38,9 +38,9 @@ install_package luci-i18n-commands hidden
 [irqbalance]
 install_package luci-app-irqbalance hidden
 install_package luci-i18n-irqbalance hidden
-uci set irqbalance.irqbalance=irqbalance
-uci set irqbalance.irqbalance.enabled='1'
-uci commit irqbalance
+uci -q set irqbalance.irqbalance=irqbalance
+uci -q set irqbalance.irqbalance.enabled='1'
+uci -q commit irqbalance
 
 [luci-app-statistics]
 install_package luci-i18n-statistics hidden
@@ -85,25 +85,24 @@ feed_package1 yn kiddin9 luci-theme-edge
 [samba4]
 install_package luci-i18n-samba4 hidden
 install_package wsdd2 hidden
-
 NAS="openwrt"
 MNT="/mnt/sda"
-uci set samba4.@samba[0]=samba
-uci set samba4.@samba[0].workgroup='WORKGROUP'
-uci set samba4.@samba[0].charset='UTF-8'
-uci set samba4.@samba[0].description='Samba on OpenWRT'
-uci set samba4.@samba[0].enable_extra_tuning='1'
-uci set samba4.@samba[0].interface='lan'
-uci set samba4.sambashare=sambashare
-uci set samba4.sambashare.name=${NAS}
-uci set samba4.sambashare.path=${MNT}
-uci set samba4.sambashare.read_only='no'
-uci set samba4.sambashare.force_root='1'
-uci set samba4.sambashare.guest_ok='yes'
-uci set samba4.sambashare.inherit_owner='yes'
-uci set samba4.sambashare.create_mask='0777'
-uci set samba4.sambashare.dir_mask='0777'
-uci commit samba4
+uci -q set samba4.@samba[0]=samba
+uci -q set samba4.@samba[0].workgroup='WORKGROUP'
+uci -q set samba4.@samba[0].charset='UTF-8'
+uci -q set samba4.@samba[0].description='Samba on OpenWRT'
+uci -q set samba4.@samba[0].enable_extra_tuning='1'
+uci -q set samba4.@samba[0].interface='lan'
+uci -q set samba4.sambashare=sambashare
+uci -q set samba4.sambashare.name=${NAS}
+uci -q set samba4.sambashare.path=${MNT}
+uci -q set samba4.sambashare.read_only='no'
+uci -q set samba4.sambashare.force_root='1'
+uci -q set samba4.sambashare.guest_ok='yes'
+uci -q set samba4.sambashare.inherit_owner='yes'
+uci -q set samba4.sambashare.create_mask='0777'
+uci -q set samba4.sambashare.dir_mask='0777'
+uci -q commit samba4
 
 [luci-app-sqm]
 install_package luci-i18n-sqm hidden
