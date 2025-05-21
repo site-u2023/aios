@@ -22,7 +22,7 @@ uci -q del ttyd.ttyd.client_option 2>/dev/null
 uci -q add_list ttyd.ttyd.client_option='theme={"background": "black"}'
 uci -q add_list ttyd.ttyd.client_option='titleFixed=ttyd'
 uci -q commit ttyd
-uci -q add ttyd ttyd
+uci -q add ttyd ttyd >/dev/null 2>&1
 uci -q set ttyd.@ttyd[-1].port='8888'
 uci -q set ttyd.@ttyd[-1].interface='@lan'
 uci -q set ttyd.@ttyd[-1].ipv6='1'
