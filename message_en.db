@@ -4,12 +4,14 @@ SCRIPT_VERSION="2025-03-31-00-00"
 en|MSG_UNDER_TEST=👽 test
 
 # menu.db
+en|MENU_INTERNET=Internet settings{:} Exclusive to Japan
 en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE / NURO Hikari
 en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
 en|MENU_INTERNET_MAPE_NURO=MAP-E{:} NURO Hikari
 en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
 en|MENU_INTERNET_PPPOE=PPPoE
 en|MENU_INTERNET_RESTORE=Restore Settings
+en|MENU_INTERNET_MAPE_MAPOCNv6PLUS=OCN / v6 plus
 en|MENU_INTERNET_DSLITE_TRANS_EAST=Transix East Japan
 en|MENU_INTERNET_DSLITE_TRANS_WEST=Transix West Japan
 en|MENU_INTERNET_DSLITE_XPASS=Cross Pass
@@ -109,7 +111,6 @@ en|CONFIG_LOADING_COMPLETE=Loading completed
 en|CONFIG_COMMAND_SUCCESS=Process completed successfully
 en|CONFIG_COMMAND_FAILED=Process failed
 en|MAIN_MENU_NAME=Main menu
-en|MENU_INTERNET=Internet settings (Exclusive to Japan)
 en|MENU_SYSTEM=System settings
 en|MENU_PACKAGES=Package management
 en|MENU_ADBLOCKER=Ad Blocker and DNS Encryption
