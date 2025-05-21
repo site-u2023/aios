@@ -17,7 +17,7 @@ MENU_INTERNET_PPPOE menu_yn && download "internet-pppoe.sh" "chmod" "load" && in
 MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
 
 [MENU_INTERNET_MAPE]
-MENU_INTERNET_MAPE menu_yn && download "internet-map-e.sh" "chmod" "load" && internet_map_main
+MENU_INTERNET_MAPE_MAPOCNV6PLUS menu_yn && download "internet-map-e.sh" "chmod" "load" && internet_map_main
 MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
 
 [MENU_INTERNET_DSLITE]
