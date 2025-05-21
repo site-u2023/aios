@@ -313,48 +313,41 @@ determine_dslite() {
 
     debug_log "DEBUG" "determine_dslite: Processing for Provider Key '$provider_key', AFTR Info: '$aftr_info_from_db', Display Name: '$provider_display_name_from_db'."
 
-    if [ "$DETECTED_PROVIDER_KEY" = "manual" ]; then
-        DSLITE_AFTR_IP="$aftr_info_from_db"
-        return 0
-    fi
-    
     if [ -z "$provider_key" ]; then
-        debug_log "DEBUG" "determine_dslite: Provider key (from global) is empty."
+        debug_log "ERROR" "determine_dslite: Provider key is empty. Cannot proceed."
         return 1
     fi
 
     if [ -z "$aftr_info_from_db" ]; then
-        debug_log "DEBUG" "determine_dslite: AFTR information (from global) is empty for Provider Key '$provider_key'."
+        debug_log "ERROR" "determine_dslite: AFTR information is empty for Provider Key '$provider_key'. Cannot proceed."
         return 1
     fi
 
-    if [ "$provider_key" = "transix" ]; then
+    if ipv6_address_dslite "$aftr_info_from_db"; then
         DSLITE_AFTR_IP="$aftr_info_from_db"
-        debug_log "DEBUG" "determine_dslite: [Transix] Using AFTR IP determined by get_dslite: $DSLITE_AFTR_IP, Display: $DSLITE_DISPLAY_NAME"
+        debug_log "DEBUG" "determine_dslite: AFTR info '$aftr_info_from_db' is an IPv6 address. Using it directly."
     else
-        if ipv6_address_dslite "$aftr_info_from_db"; then
-            DSLITE_AFTR_IP="$aftr_info_from_db"
-        else
-            DSLITE_AFTR_IP=$(get_aaaa_record_dslite "$aftr_info_from_db")
-            if [ -z "$DSLITE_AFTR_IP" ]; then
-                debug_log "DEBUG" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
-                return 1
-            fi
-        fi
-        
-        if ! check_ipv6_reachability_dslite "$DSLITE_AFTR_IP"; then
-            debug_log "DEBUG" "determine_dslite: AFTR IP '$DSLITE_AFTR_IP' for '$provider_key' is not reachable."
-            DSLITE_AFTR_IP=""
+        debug_log "DEBUG" "determine_dslite: AFTR info '$aftr_info_from_db' is not an IPv6 address. Attempting to resolve as hostname."
+        DSLITE_AFTR_IP=$(get_aaaa_record_dslite "$aftr_info_from_db")
+        if [ -z "$DSLITE_AFTR_IP" ]; then
+            debug_log "ERROR" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
             return 1
         fi
+        debug_log "DEBUG" "determine_dslite: Resolved hostname '$aftr_info_from_db' to IP '$DSLITE_AFTR_IP'."
+    fi
+
+    if ! check_ipv6_reachability_dslite "$DSLITE_AFTR_IP"; then
+        debug_log "ERROR" "determine_dslite: AFTR IP '$DSLITE_AFTR_IP' (derived from '$aftr_info_from_db') for Provider Key '$provider_key' is not reachable."
+        DSLITE_AFTR_IP=""
+        return 1
     fi
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
-        debug_log "DEBUG" "determine_dslite: Final DSLITE_AFTR_IP could not be determined for Provider Key '$provider_key'."
+        debug_log "ERROR" "determine_dslite: Final DSLITE_AFTR_IP is empty after all checks for Provider Key '$provider_key'."
         return 1
     fi
 
-    debug_log "DEBUG" "determine_dslite: AFTR determined: $DSLITE_AFTR_IP for $DSLITE_DISPLAY_NAME."
+    debug_log "DEBUG" "determine_dslite: AFTR determined and reachable: $DSLITE_AFTR_IP for $DSLITE_DISPLAY_NAME."
     return 0
 }
 
