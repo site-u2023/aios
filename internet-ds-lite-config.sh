@@ -448,7 +448,7 @@ display_dslite() {
     read -r -n 1 -s
     printf "\n"
      
-    debug_log "DEBUG" "Rebooting system after restore."
+    debug_log "DEBUG" "Rebooting system after setup."
     reboot    
     return 0
 }
@@ -489,7 +489,13 @@ restore_dslite() {
     fi
 
     debug_log "DEBUG" "restore_dslite: end"
-    printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
+    printf "%s\n" "$(color green "$(get_message "MSG_DSLITE_RESTORE_SUCCESS")")"
+    printf "%s\n" "$(color yellow "$(get_message "MSG_DSLITE_APPLY_SUCCESS")")"
+    read -r -n 1 -s
+    printf "\n"
+     
+    debug_log "DEBUG" "Rebooting system after restore."
+    reboot    
     return 0
 }
 
