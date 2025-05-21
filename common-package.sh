@@ -235,8 +235,81 @@ update_package_list() {
     return 0
 }
 
-# package-local.dbからの設定を適用
 local_package_db() {
+    local package_name="$1"
+
+    debug_log "DEBUG" "local_package_db: START for package: [$package_name]"
+
+    extract_commands() {
+        awk -v pkg="$package_name" '
+            $0 ~ "^\\[" pkg "\\]$" {flag=1; next}
+            $0 ~ "^\\[" {flag=0}
+            flag && $0 !~ "^#" && $0 !~ "^[[:space:]]*$" {print}
+        ' "${BASE_DIR}/package-local.db"
+    }
+
+    local cmds
+    cmds=$(extract_commands)
+
+    if [ -z "$cmds" ]; then
+        debug_log "DEBUG" "local_package_db: No commands found for package: [$package_name] in package-local.db"
+        return 1
+    fi
+
+    local commands_file="${CACHE_DIR}/commands.ch"
+    printf "%s\n" "$cmds" > "$commands_file"
+
+    # 環境変数の置換処理 (変更なし)
+    CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
+    for var_name in $CUSTOM_VARS; do
+        eval var_value=\$$var_name
+        if [ -n "$var_value" ]; then
+            sed -i "s|\\\${$var_name}|$var_value|g" "$commands_file"
+            # debug_log "DEBUG" "local_package_db: Substituted variable in $commands_file: $var_name -> $var_value" # 最小限のログ
+        else
+            sed -i "/\${$var_name}/s/^/# UNDEFINED: /" "$commands_file"
+            # debug_log "DEBUG" "local_package_db: Commented out line due to undefined variable: $var_name in $commands_file" # 最小限のログ
+        fi
+    done
+
+    # commands.ch の内容をログに出力 (最小限のログのため、必要であればコメント解除)
+    # debug_log "DEBUG" "local_package_db: Content of $commands_file for package [$package_name] BEFORE execution:"
+    # if [ -f "$commands_file" ]; then
+    #     cat "$commands_file" | while IFS= read -r line; do debug_log "DEBUG" "  CMD_LINE_PRE: [$line]"; done
+    # fi
+
+    local exit_status=0
+    if [ -f "$commands_file" ]; then
+        # カレントシェルで実行し、標準出力と標準エラー出力を抑制してみる
+        # これにより "age: not found" のような意図しないメッセージがターミナルに出るのを防ぐ試み
+        if . "$commands_file" >/dev/null 2>&1; then
+            exit_status=0
+        else
+            exit_status=$? # スクリプト自体のエラーコードを取得
+            debug_log "ERROR" "local_package_db: Execution of $commands_file for [$package_name] failed with status: [$exit_status]"
+        fi
+    else
+        debug_log "ERROR" "local_package_db: $commands_file does not exist. Cannot execute."
+        exit_status=1 # ファイルが存在しない場合はエラー
+    fi
+
+    # commands.ch の削除は実行後すぐに行う
+    if [ -f "$commands_file" ]; then
+        rm -f "$commands_file"
+        debug_log "DEBUG" "local_package_db: Removed $commands_file after execution for package [$package_name]."
+    fi
+
+    if [ $exit_status -ne 0 ]; then
+        # 失敗のログは既に出力されているので、ここでは追加のログは不要
+        return 1
+    fi
+
+    debug_log "DEBUG" "local_package_db: Successfully processed local settings for package [$package_name]"
+    return 0
+}
+
+# package-local.dbからの設定を適用
+OK_local_package_db() {
     local package_name="$1"  # どんなパッケージ名でも受け取れる
 
     debug_log "DEBUG" "Starting to apply package-local.db for package: $package_name"
