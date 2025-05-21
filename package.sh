@@ -609,15 +609,6 @@ package_main() {
         debug_log "DEBUG" "Package list confirmation cancelled by user. Exiting package_main."
         return 1 # MODIFIED: Exit package_main if confirmation was cancelled
     fi
-
-    if type get_predicted_install_size >/dev/null 2>&1; then
-        printf "\n" # サイズ表示の前に改行を挿入して見やすくする
-        get_predicted_install_size # 関数呼び出し
-        # get_predicted_install_size 関数の出力の後に改行を入れるかは、関数の出力形式による
-        # 現在の get_predicted_install_size は末尾に改行を含むので、追加の printf "\n" は不要かもしれない
-    else
-        debug_log "WARNING" "get_predicted_install_size function not found. Skipping size prediction."
-    fi
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
         printf "\n" 
