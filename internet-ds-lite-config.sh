@@ -276,6 +276,10 @@ determine_dslite() {
     local provider_display_name_from_db="$DETECTED_PROVIDER_DISPLAY_NAME"
     local provider_key="$DETECTED_PROVIDER_KEY"
 
+    # Fallback IPs as defined in your internet-config.sh
+    local CROSSPATH_FALLBACK_IP="2404:8e00::feed:100"
+    local V6CONNECT_FALLBACK_IP="2400:c0a8:c0a8:c0a8::1"
+
     DSLITE_AFTR_IP=""
     DSLITE_DISPLAY_NAME="$provider_display_name_from_db"
 
@@ -289,8 +293,17 @@ determine_dslite() {
         local resolved_ip
         resolved_ip=$(get_aaaa_record_dslite "$aftr_info_from_db")
         if [ -z "$resolved_ip" ]; then
-            debug_log "ERROR" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'. DSLITE_AFTR_IP will remain empty."
-            DSLITE_AFTR_IP="" 
+            debug_log "ERROR" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
+            if [ "$provider_key" = "cross_path" ]; then
+                debug_log "INFO" "determine_dslite: Using fallback IP '$CROSSPATH_FALLBACK_IP' for cross_path due to resolution failure."
+                DSLITE_AFTR_IP="$CROSSPATH_FALLBACK_IP"
+            elif [ "$provider_key" = "v6_connect" ]; then
+                debug_log "INFO" "determine_dslite: Using fallback IP '$V6CONNECT_FALLBACK_IP' for v6_connect due to resolution failure."
+                DSLITE_AFTR_IP="$V6CONNECT_FALLBACK_IP"
+            else
+                DSLITE_AFTR_IP=""
+                debug_log "DEBUG" "determine_dslite: No fallback IP defined for Provider Key '$provider_key' on resolution failure. DSLITE_AFTR_IP will remain empty."
+            fi
         else
             DSLITE_AFTR_IP="$resolved_ip"
             debug_log "DEBUG" "determine_dslite: Resolved hostname '$aftr_info_from_db' to IP '$DSLITE_AFTR_IP'."
