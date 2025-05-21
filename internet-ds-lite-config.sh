@@ -292,12 +292,12 @@ determine_dslite() {
         local resolved_ip
         resolved_ip=$(get_aaaa_record_dslite "$aftr_info_from_db")
         if [ -z "$resolved_ip" ]; then
-            debug_log "ERROR" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
+            debug_log "DEGUB" "determine_dslite: Failed to resolve hostname '$aftr_info_from_db' for Provider Key '$provider_key'."
             if [ "$provider_key" = "cross_path" ]; then
-                debug_log "INFO" "determine_dslite: Using fallback IP '$CROSSPATH_FALLBACK_IP' for cross_path due to resolution failure."
+                debug_log "DEGUB" "determine_dslite: Using fallback IP '$CROSSPATH_FALLBACK_IP' for cross_path due to resolution failure."
                 DSLITE_AFTR_IP="$CROSSPATH_FALLBACK_IP"
             elif [ "$provider_key" = "v6option" ]; then
-                debug_log "INFO" "determine_dslite: Using fallback IP '$V6OPTION_FALLBACK_IP' for v6option due to resolution failure."
+                debug_log "DEGUB" "determine_dslite: Using fallback IP '$V6OPTION_FALLBACK_IP' for v6option due to resolution failure."
                 DSLITE_AFTR_IP="$V6OPTION_FALLBACK_IP"
             else
                 DSLITE_AFTR_IP=""
@@ -310,7 +310,7 @@ determine_dslite() {
     fi
 
     if [ -z "$DSLITE_AFTR_IP" ]; then
-        debug_log "ERROR" "determine_dslite: Final DSLITE_AFTR_IP is empty. Cannot proceed with an empty AFTR IP."
+        debug_log "DEGUB" "determine_dslite: Final DSLITE_AFTR_IP is empty. Cannot proceed with an empty AFTR IP."
         return 1
     else
         debug_log "DEBUG" "determine_dslite: AFTR determination process complete. Final DSLITE_AFTR_IP: '$DSLITE_AFTR_IP' for Display Name: '$DSLITE_DISPLAY_NAME'."
