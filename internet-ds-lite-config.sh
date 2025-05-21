@@ -435,13 +435,13 @@ display_dslite() {
     read -r -n 1 -s
     printf "\n"
      
-    debug_log "DEBUG" "Rebooting system after restore." # メッセージは restore 後となっていますが、実際は設定成功後
+    debug_log "DEBUG" "Rebooting system after restore."
     reboot    
     return 0
 }
 
 restore_dslite() {
-    debug_log "DEBUG" "restore_dslite_settings: Restoring DS-Lite settings from backups."
+    debug_log "DEBUG" "restore_dslite: start"
 
     local files_to_restore="network dhcp firewall"
     local config_dir="/etc/config"
@@ -449,44 +449,33 @@ restore_dslite() {
     local file_base
     local original_file
     local backup_file
-    local all_restored_successfully=1
 
+    debug_log "DEBUG" "restore_dslite: config files restore: attempt"
     for file_base in $files_to_restore; do
         original_file="${config_dir}/${file_base}"
         backup_file="${original_file}${backup_suffix}"
         if [ -f "$backup_file" ]; then
-            if cp "$backup_file" "$original_file"; then
-                rm "$backup_file"
-                debug_log "DEBUG" "restore_dslite_settings: Restored $original_file from $backup_file."
-            else
-                debug_log "DEBUG" "restore_dslite_settings: Failed to restore $original_file from $backup_file."
-                all_restored_successfully=0
+            if cp "$backup_file" "$original_file" 2>/dev/null; then
+                rm "$backup_file" 2>/dev/null
             fi
-        else
-            debug_log "DEBUG" "restore_dslite_settings: Backup $backup_file not found for $original_file. No action taken for this file."
         fi
     done
 
+    debug_log "DEBUG" "restore_dslite: proto script restore: attempt"
     if [ -f "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" ]; then
-        if cp "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" "$DSLITE_PROTO_SCRIPT_PATH"; then
-            rm "$DSLITE_PROTO_SCRIPT_BACKUP_PATH"
-            debug_log "DEBUG" "restore_dslite_settings: Restored $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
-        else
-            debug_log "DEBUG" "restore_dslite_settings: Failed to restore $DSLITE_PROTO_SCRIPT_PATH from $DSLITE_PROTO_SCRIPT_BACKUP_PATH."
-            all_restored_successfully=0
+        if cp "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" "$DSLITE_PROTO_SCRIPT_PATH" 2>/dev/null; then
+            rm "$DSLITE_PROTO_SCRIPT_BACKUP_PATH" 2>/dev/null
         fi
-    else
-        debug_log "DEBUG" "restore_dslite_settings: Backup $DSLITE_PROTO_SCRIPT_BACKUP_PATH not found for $DSLITE_PROTO_SCRIPT_PATH. No action taken for this file."
     fi
 
-    if [ "$all_restored_successfully" -eq 1 ]; then
-        printf "\n"
-        printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
+    debug_log "DEBUG" "restore_dslite: package remove: attempt"
+    if opkg remove ds-lite >/dev/null 2>&1; then
+        debug_log "DEBUG" "restore_dslite: package remove: ok"
     else
-        debug_log "DEBUG" "restore_dslite_settings: One or more files may not have been restored successfully. Please check logs."
+        debug_log "DEBUG" "restore_dslite: package remove: fail"
     fi
 
-    debug_log "DEBUG" "restore_dslite_settings: DS-Lite settings restoration process completed."
+    debug_log "DEBUG" "restore_dslite: end"
     return 0
 }
 
