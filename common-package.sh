@@ -251,60 +251,79 @@ local_package_db() {
     local cmds
     cmds=$(extract_commands)
 
+    local commands_file="${CACHE_DIR}/commands.ch" # commands.ch のパスを先に定義
+
     if [ -z "$cmds" ]; then
-        debug_log "DEBUG" "local_package_db: No commands found for package: [$package_name] in package-local.db"
-        return 1
+        debug_log "DEBUG" "local_package_db: No commands found for package: [$package_name] in package-local.db. No file will be created/executed."
+        # commands.ch が存在していたら削除する (前の処理のものが残っている可能性を考慮)
+        if [ -f "$commands_file" ]; then
+            rm -f "$commands_file"
+            debug_log "DEBUG" "local_package_db: Removed existing (but now irrelevant) $commands_file for package [$package_name]."
+        fi
+        return 1 # コマンドがない場合はここで終了
     fi
 
-    local commands_file="${CACHE_DIR}/commands.ch"
+    # commands.ch を作成
     printf "%s\n" "$cmds" > "$commands_file"
+    debug_log "DEBUG" "local_package_db: Created $commands_file for package [$package_name]."
 
-    # 環境変数の置換処理 (変更なし)
+    # 環境変数の置換処理
     CUSTOM_VARS=$(env | grep "^CUSTOM_" | awk -F= '{print $1}')
     for var_name in $CUSTOM_VARS; do
         eval var_value=\$$var_name
         if [ -n "$var_value" ]; then
             sed -i "s|\\\${$var_name}|$var_value|g" "$commands_file"
-            # debug_log "DEBUG" "local_package_db: Substituted variable in $commands_file: $var_name -> $var_value" # 最小限のログ
+            debug_log "DEBUG" "local_package_db: Substituted var in $commands_file: $var_name"
         else
             sed -i "/\${$var_name}/s/^/# UNDEFINED: /" "$commands_file"
-            # debug_log "DEBUG" "local_package_db: Commented out line due to undefined variable: $var_name in $commands_file" # 最小限のログ
+            debug_log "DEBUG" "local_package_db: Commented out var in $commands_file: $var_name"
         fi
     done
 
-    # commands.ch の内容をログに出力 (最小限のログのため、必要であればコメント解除)
-    # debug_log "DEBUG" "local_package_db: Content of $commands_file for package [$package_name] BEFORE execution:"
-    # if [ -f "$commands_file" ]; then
-    #     cat "$commands_file" | while IFS= read -r line; do debug_log "DEBUG" "  CMD_LINE_PRE: [$line]"; done
-    # fi
-
-    local exit_status=0
+    debug_log "DEBUG" "local_package_db: Content of $commands_file for package [$package_name] BEFORE execution:"
     if [ -f "$commands_file" ]; then
-        # カレントシェルで実行し、標準出力と標準エラー出力を抑制してみる
-        # これにより "age: not found" のような意図しないメッセージがターミナルに出るのを防ぐ試み
-        if . "$commands_file" >/dev/null 2>&1; then
-            exit_status=0
-        else
-            exit_status=$? # スクリプト自体のエラーコードを取得
-            debug_log "ERROR" "local_package_db: Execution of $commands_file for [$package_name] failed with status: [$exit_status]"
-        fi
+        # cat でファイル内容をログに出力（各行にプレフィックスを付ける）
+        while IFS= read -r line; do
+            debug_log "DEBUG" "  PRE_EXEC_LINE: [$line]"
+        done < "$commands_file"
     else
-        debug_log "ERROR" "local_package_db: $commands_file does not exist. Cannot execute."
-        exit_status=1 # ファイルが存在しない場合はエラー
+        debug_log "ERROR" "local_package_db: $commands_file was expected but not found before execution for package [$package_name]!"
+        return 1 # ファイルがない場合はエラー
     fi
 
-    # commands.ch の削除は実行後すぐに行う
+    local exit_status=0
+    debug_log "DEBUG" "local_package_db: Executing $commands_file for package [$package_name] using '. \"$commands_file\"'"
+
+    # カレントシェルで実行
+    if . "$commands_file"; then
+        exit_status=0
+        debug_log "DEBUG" "local_package_db: Execution of $commands_file for package [$package_name] reported success (implicit exit 0 or explicit exit 0)."
+    else
+        exit_status=$? # 直前のコマンドの終了ステータスを取得
+        debug_log "ERROR" "local_package_db: Execution of $commands_file for package [$package_name] failed with status: [$exit_status]"
+    fi
+
+    # 実行後の commands.ch の状態を確認（通常は変更されないはず）
+    debug_log "DEBUG" "local_package_db: Checking $commands_file for package [$package_name] AFTER execution:"
     if [ -f "$commands_file" ]; then
+        debug_log "DEBUG" "  $commands_file still exists. Content:"
+        while IFS= read -r line; do
+            debug_log "DEBUG" "  POST_EXEC_LINE: [$line]"
+        done < "$commands_file"
+        # 実行後にファイルを削除
         rm -f "$commands_file"
-        debug_log "DEBUG" "local_package_db: Removed $commands_file after execution for package [$package_name]."
+        debug_log "DEBUG" "local_package_db: Removed $commands_file for package [$package_name] after execution."
+    else
+        debug_log "DEBUG" "local_package_db: $commands_file was not found after execution for package [$package_name] (possibly removed by itself or an error occurred before removal)."
+        # `can't open /tmp/aios/cache/commands.ch` は、この時点でファイルがない場合に発生しうる
     fi
 
     if [ $exit_status -ne 0 ]; then
-        # 失敗のログは既に出力されているので、ここでは追加のログは不要
+        debug_log "ERROR" "local_package_db: Returning error for package [$package_name] due to execution failure."
         return 1
     fi
 
-    debug_log "DEBUG" "local_package_db: Successfully processed local settings for package [$package_name]"
+    debug_log "DEBUG" "local_package_db: Successfully processed local settings for package [$package_name]."
     return 0
 }
 
