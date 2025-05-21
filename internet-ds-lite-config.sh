@@ -508,17 +508,19 @@ internet_dslite_main() {
     if ! map_dslite "$@"; then
         return 1
     fi
-    
+
     determine_dslite
-    
-    install_package ds-lite hidden
+
+    if ! install_package ds-lite hidden; then
+        return 1
+    fi
 
     replace_dslite_sh
-    
+
     config_dslite
 
     display_dslite
-    
+
     debug_log "DEBUG" "internet_dslite_main: Configuration complete. Rebooting system."
     reboot
 
