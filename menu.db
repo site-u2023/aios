@@ -24,7 +24,7 @@ MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
 MENU_INTERNET_DSLITE_TRANS_EAST menu_yn && download "internet-ds-lite-config.sh" "chmod" "load" && internet_dslite_main "2403:7f00:4000:2000::126"
 MENU_INTERNET_DSLITE_TRANS_WEST menu_yn && download "internet-ds-lite-config.sh" "chmod" "load" && internet_dslite_main "2403:7f00:c000:1000::126"
 MENU_INTERNET_DSLITE_XPASS menu_yn && download "internet-ds-lite-config.sh" "chmod" "load" && internet_dslite_main "dgw.xpass.jp"
-MENU_INTERNET_DSLITE_V6CONNECT menu_yn && download "internet-ds-lite-config.sh" "chmod" "load" && internet_dslite_main "gw.example.v6option.ne.jp"
+MENU_INTERNET_DSLITE_V6OPTION menu_yn && download "internet-ds-lite-config.sh" "chmod" "load" && internet_dslite_main "gw.example.v6option.ne.jp"
 MENU_INTERNET_RESTORE download "internet-ds-lite-config.sh" "chmod" "load"; restore_dslite
 
 [MENU_INTERNET_MAPE_NURO]
