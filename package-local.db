@@ -111,9 +111,9 @@ install_package tc-full hidden
 [luci-app-qos]
 install_package luci-i18n-qos hidden
 
-[luci-i18n-statistics]
-install_package collectd hidden
-install_package rrdtool1 hidden
+# [luci-i18n-statistics]
+# install_package collectd hidden
+# install_package rrdtool1 hidden
 
 [wifischedule]
 install_package luci-app-wifischedule hidden
