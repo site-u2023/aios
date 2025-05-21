@@ -512,7 +512,7 @@ internet_dslite_main() {
     determine_dslite
 
     if ! install_package ds-lite hidden; then
-        return 1
+        return 0
     fi
 
     replace_dslite_sh
