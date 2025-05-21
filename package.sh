@@ -384,6 +384,217 @@ confirm_package_lines() {
     done
 }
 
+get_predicted_install_size() {
+    debug_log "DEBUG" "get_predicted_install_size: Calculating total predicted installation size."
+
+    # Ensure essential variables/functions are available
+    if [ -z "$BASE_DIR" ] || [ -z "$CACHE_DIR" ] || [ -z "$(type -t debug_log)" ] || \
+       [ -z "$(type -t get_language_code)" ] || [ -z "$(type -t update_package_list)" ] || \
+       [ -z "$(type -t package_pre_install)" ]; then
+        echo "Error: Required variables or functions are not available. Ensure common scripts are sourced." >&2
+        return 1
+    fi
+
+    # Determine package manager (assuming opkg for size info parsing)
+    local current_package_manager=""
+    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
+        current_package_manager=$(cat "${CACHE_DIR}/package_manager.ch")
+    else
+        debug_log "ERROR" "get_predicted_install_size: Package manager cache not found."
+        echo "Error: Package manager type not determined." >&2
+        return 1
+    fi
+
+    if [ "$current_package_manager" != "opkg" ]; then
+        debug_log "WARNING" "get_predicted_install_size: This function is optimized for opkg to get 'Installed-Size'. Support for '$current_package_manager' may be limited for size prediction."
+        # For apk, 'apk info -s <pkg>' might be used, but the logic below is opkg specific.
+        # echo "Notice: Package size prediction is currently best supported for opkg."
+    fi
+
+    local lang_code
+    lang_code=$(get_language_code)
+
+    local db_file="${BASE_DIR}/package.db"
+    local os_version_id=""
+    local usb_present="0"
+    local all_potential_package_lines="" # Stores full lines from package.db
+
+    if [ ! -f "$db_file" ]; then
+        debug_log "ERROR" "get_predicted_install_size: $db_file not found."
+        echo "Error: package.db not found." >&2
+        return 1
+    fi
+
+    if [ ! -f "${CACHE_DIR}/osversion.ch" ]; then
+        os_version_id="DEFAULT"
+    else
+        local os_ver_val
+        os_ver_val=$(cat "${CACHE_DIR}/osversion.ch")
+        case "$os_ver_val" in
+            19.*) os_version_id="RELEASE19" ;;
+            *[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt]*) os_version_id="SNAPSHOT" ;;
+            *) os_version_id="DEFAULT" ;;
+        esac
+    fi
+    debug_log "DEBUG" "get_predicted_install_size: OS version ID for package.db: $os_version_id"
+
+    if [ -f "${CACHE_DIR}/usbdevice.ch" ] && [ "$(cat "${CACHE_DIR}/usbdevice.ch")" = "detected" ]; then
+        usb_present="1"
+    fi
+    debug_log "DEBUG" "get_predicted_install_size: USB device present: $usb_present"
+
+    all_potential_package_lines=$(sed -e '1s/^\xEF\xBB\xBF//' -e 's/\r$//' "$db_file" | awk -v os_ver_id_awk="$os_version_id" -v usb_is_present_awk="$usb_present" '
+        BEGIN {
+            section_base_common_target = "[BASE_SYSTEM.COMMON]";
+            section_base_version_target = "[BASE_SYSTEM." os_ver_id_awk "]";
+            section_usb_common_target = "[USB.COMMON]";
+            in_section_base_common = 0; count_base_common = 0;
+            in_section_base_version = 0; count_base_version = 0;
+            in_section_usb_common = 0; count_usb_common = 0;
+        }
+        {
+            current_line_content = $0;
+            if (current_line_content ~ /^[[:space:]]*$/) { next; }
+            if (current_line_content ~ /^[[:space:]]*#/) { next; }
+            if (current_line_content == section_base_common_target) { in_section_base_common = 1; in_section_base_version = 0; in_section_usb_common = 0; next; }
+            if (current_line_content == section_base_version_target) { in_section_base_version = 1; in_section_base_common = 0; in_section_usb_common = 0; next; }
+            if (usb_is_present_awk == "1" && current_line_content == section_usb_common_target) { in_section_usb_common = 1; in_section_base_common = 0; in_section_base_version = 0; next; }
+            if (current_line_content ~ /^[[:space:]]*\[.*\][[:space:]]*$/) { in_section_base_common = 0; in_section_base_version = 0; in_section_usb_common = 0; next; }
+            if (in_section_base_common == 1)  { array_base_common[count_base_common++] = current_line_content; }
+            if (in_section_base_version == 1)  { array_base_version[count_base_version++] = current_line_content; }
+            if (in_section_usb_common == 1 && usb_is_present_awk == "1") { array_usb_common[count_usb_common++] = current_line_content; }
+        }
+        END {
+            for (idx = 0; idx < count_base_common; idx++) { print array_base_common[idx]; }
+            for (idx = 0; idx < count_base_version; idx++) { print array_base_version[idx]; }
+            if (usb_is_present_awk == "1") { for (idx = 0; idx < count_usb_common; idx++) { print array_usb_common[idx]; } }
+        }
+    ' | awk '!seen[$0]++')
+
+    if [ -z "$all_potential_package_lines" ]; then
+        debug_log "INFO" "get_predicted_install_size: No package-related command lines found in package.db."
+        echo "Total predicted installation size: 0 KB"
+        return 0
+    fi
+
+    local packages_to_check_size="" # Stores package names for size checking
+    local temp_package_name_for_preinstall=""
+    local main_pkg_name_for_local_db=""
+
+    echo "$all_potential_package_lines" | while IFS= read -r line || [ -n "$line" ]; do
+        if [ -z "$line" ]; then continue; fi
+
+        local _command _package_arg
+        _command=$(echo "$line" | awk '{print $1}')
+        
+        case "$_command" in
+            "install_package") _package_arg=$(echo "$line" | awk '{print $2}') ;;
+            "feed_package")    _package_arg=$(echo "$line" | awk '{print $5}') ;;
+            "feed_package1")   _package_arg=$(echo "$line" | awk '{print $3}') ;;
+            "print_section_header") continue ;;
+            *) debug_log "DEBUG" "get_predicted_install_size: Skipping unknown command '$_command' from package.db line: $line"; continue ;;
+        esac
+
+        main_pkg_name_for_local_db="$_package_arg" # This is the key for package-local.db, without lang code
+        temp_package_name_for_preinstall="$_package_arg"
+        case "$_package_arg" in
+            luci-i18n-*)
+                temp_package_name_for_preinstall="${_package_arg}-${lang_code}"
+                debug_log "DEBUG" "get_predicted_install_size: Resolved lang package from package.db: $temp_package_name_for_preinstall (from $_package_arg)"
+            ;;
+        esac
+        
+        package_pre_install "$temp_package_name_for_preinstall"
+        local pre_status=$?
+        if [ "$pre_status" -eq 0 ]; then # 0 means ready to install
+            packages_to_check_size="${packages_to_check_size}${temp_package_name_for_preinstall}\n"
+            debug_log "DEBUG" "get_predicted_install_size: Added to check list (from package.db): $temp_package_name_for_preinstall"
+
+            # Check package-local.db for dependencies of the main_pkg_name_for_local_db
+            local local_db_dep_cmds
+            local_db_dep_cmds=$(awk -v pkg="$main_pkg_name_for_local_db" '
+                $0 ~ "^\\[" pkg "\\]$" {found_section=1; next}
+                $0 ~ "^\\[" {found_section=0}
+                found_section && $1=="install_package" {print $2} # Print only the package name argument
+            ' "${BASE_DIR}/package-local.db")
+
+            echo "$local_db_dep_cmds" | while IFS= read -r dep_pkg_name || [ -n "$dep_pkg_name" ]; do
+                if [ -z "$dep_pkg_name" ]; then continue; fi
+                
+                local dep_pkg_name_for_preinstall="$dep_pkg_name"
+                case "$dep_pkg_name" in
+                    luci-i18n-*)
+                        dep_pkg_name_for_preinstall="${dep_pkg_name}-${lang_code}"
+                        debug_log "DEBUG" "get_predicted_install_size: Resolved lang dependency from package-local.db: $dep_pkg_name_for_preinstall (from $dep_pkg_name)"
+                    ;;
+                esac
+
+                package_pre_install "$dep_pkg_name_for_preinstall"
+                local dep_pre_status=$?
+                if [ "$dep_pre_status" -eq 0 ]; then
+                    packages_to_check_size="${packages_to_check_size}${dep_pkg_name_for_preinstall}\n"
+                    debug_log "DEBUG" "get_predicted_install_size: Added to check list (from package-local.db): $dep_pkg_name_for_preinstall"
+                fi
+            done
+        fi
+    done
+    
+    local unique_final_package_list
+    unique_final_package_list=$(echo -e "$packages_to_check_size" | grep -v '^$' | awk '!seen[$0]++')
+
+    if [ -z "$unique_final_package_list" ]; then
+        debug_log "INFO" "get_predicted_install_size: No new packages identified for installation after all checks."
+        echo "Total predicted installation size: 0 KB"
+        return 0
+    fi
+
+    debug_log "DEBUG" "get_predicted_install_size: Final unique packages for size calculation:\n$unique_final_package_list"
+
+    if ! update_package_list "yes"; then
+        debug_log "ERROR" "get_predicted_install_size: Failed to update opkg package list."
+        echo "Error: Failed to update package list. Size prediction may be inaccurate." >&2
+        # Continue anayway, but sizes might be from outdated cache
+    fi
+
+    local total_kb=0
+    local pkg_info_size_kb=""
+    
+    echo "$unique_final_package_list" | while IFS= read -r pkg_to_sum || [ -n "$pkg_to_sum" ]; do
+        if [ -z "$pkg_to_sum" ]; then continue; fi
+        
+        pkg_info_size_kb="" # Reset for each package
+        if [ "$current_package_manager" = "opkg" ]; then
+            # Attempt to get Installed-Size. Fallback to Size if not found.
+            local opkg_info_output
+            opkg_info_output=$(opkg info "$pkg_to_sum" 2>/dev/null)
+
+            pkg_info_size_kb=$(echo "$opkg_info_output" | grep -E "^Installed-Size: " | awk '{print $2}')
+            if [ -z "$pkg_info_size_kb" ]; then # Fallback to "Size" if "Installed-Size" is not present
+                 pkg_info_size_kb=$(echo "$opkg_info_output" | grep -E "^Size: " | awk '{print $2}')
+                 if [ -n "$pkg_info_size_kb" ]; then
+                    # "Size" for opkg is usually in bytes, convert to KB
+                    # Use integer division, round up or handle precisely as needed. Simple integer division for now.
+                    pkg_info_size_kb=$(( (pkg_info_size_kb + 1023) / 1024 )) # Convert bytes to KB, rounding up
+                    debug_log "DEBUG" "get_predicted_install_size: Used 'Size' (archive size) for $pkg_to_sum, converted to $pkg_info_size_kb KB."
+                 fi
+            fi
+        else
+            # Placeholder for other package managers like apk
+            debug_log "DEBUG" "get_predicted_install_size: Size retrieval for '$current_package_manager' not fully implemented here for $pkg_to_sum."
+        fi
+        
+        if [ -n "$pkg_info_size_kb" ] && echo "$pkg_info_size_kb" | grep -qE '^[0-9]+$' && [ "$pkg_info_size_kb" -gt 0 ]; then
+            total_kb=$((total_kb + pkg_info_size_kb))
+            debug_log "DEBUG" "get_predicted_install_size: Added $pkg_info_size_kb KB for $pkg_to_sum. Cumulative total: $total_kb KB"
+        else
+            debug_log "WARNING" "get_predicted_install_size: Could not determine a valid Installed-Size (KB) for $pkg_to_sum. Value found: '$pkg_info_size_kb'"
+        fi
+    done
+    
+    echo "Total predicted installation size: ${total_kb} KB"
+    return 0
+}
+
 # メイン処理
 package_main() {
     debug_log "DEBUG" "package_main called. PACKAGE_INSTALL_MODE is currently: '$PACKAGE_INSTALL_MODE'"
@@ -397,6 +608,15 @@ package_main() {
     if [ "$confirm_status" -ne 0 ]; then # MODIFIED: Check if user cancelled in confirm_package_lines
         debug_log "DEBUG" "Package list confirmation cancelled by user. Exiting package_main."
         return 1 # MODIFIED: Exit package_main if confirmation was cancelled
+    fi
+
+    if type get_predicted_install_size >/dev/null 2>&1; then
+        printf "\n" # サイズ表示の前に改行を挿入して見やすくする
+        get_predicted_install_size # 関数呼び出し
+        # get_predicted_install_size 関数の出力の後に改行を入れるかは、関数の出力形式による
+        # 現在の get_predicted_install_size は末尾に改行を含むので、追加の printf "\n" は不要かもしれない
+    else
+        debug_log "WARNING" "get_predicted_install_size function not found. Skipping size prediction."
     fi
     
     if [ "$PACKAGE_INSTALL_MODE" = "auto" ]; then
