@@ -200,7 +200,8 @@ handle_menu_error() {
 }
 
 # Handle user selection - Revised order for special inputs
-handle_user_selection() {
+# サブシェルバージョン
+OK_handle_user_selection() {
     # Correct argument list matching the call from selector
     local section_name="$1"        # Current menu section name
     local is_main_menu="$2"        # 1 if main menu, 0 otherwise
@@ -338,7 +339,7 @@ handle_user_selection() {
 }
 
 # Handle user selection - Revised order for special inputs
-OK_handle_user_selection() {
+handle_user_selection() {
     # Correct argument list matching the call from selector
     local section_name="$1"        # Current menu section name
     local is_main_menu="$2"        # 1 if main menu, 0 otherwise
