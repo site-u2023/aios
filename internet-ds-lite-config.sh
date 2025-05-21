@@ -489,6 +489,7 @@ restore_dslite() {
     fi
 
     debug_log "DEBUG" "restore_dslite: end"
+    printf "%s\n" "$(color green "$(get_message MSG_DSLITE_RESTORE_SUCCESS)")"
     return 0
 }
 
