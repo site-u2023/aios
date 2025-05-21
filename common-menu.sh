@@ -221,6 +221,144 @@ handle_user_selection() {
         selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
         selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
     fi
+    printf "%s" "$(color white "$selection_prompt")"
+
+    # --- Read User Input with Failure Check ---
+    local choice=""
+    if ! IFS= read -r choice < /dev/tty; then
+        debug_log "ERROR" "Failed to read user input in section [$section_name]. Returning 1 to stop loop."
+        return 1 
+    fi
+    if command -v normalize_input >/dev/null 2>&1; then
+        choice=$(normalize_input "$choice" 2>/dev/null || echo "$choice")
+    fi
+    debug_log "DEBUG" "User input: '$choice'"
+
+    # --- Input Validation (Numeric Check) ---
+    case "$choice" in
+        ''|*[!0-9]*)
+            if [ "$choice" != "00" ]; then
+                printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+                debug_log "DEBUG" "Invalid input (not a number or '00'): '$choice' in section [$section_name]. Returning 0 to retry."
+                return 0 
+            fi
+            ;;
+    esac
+
+    # --- Handle Special Selections (Order: 00, 0, 10) ---
+    if [ "$choice" = "00" ]; then # Exit & Delete (Main Menu Only)
+        if [ "$is_main_menu" -eq 0 ]; then
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+             debug_log "DEBUG" "'00' selected in submenu [$section_name]. Invalid. Returning 0 to retry."
+             return 0 
+        fi
+        debug_log "DEBUG" "User selected 00 (Exit & Delete) in section [$section_name]."
+        remove_exit # This function will call exit 0 if user confirms.
+        # If remove_exit returns (status 0), it means user cancelled.
+        debug_log "DEBUG" "remove_exit returned (likely user cancelled). Redisplaying menu."
+        return 0 # Redisplay current menu as deletion was cancelled.
+    fi
+
+    if [ "$choice" -eq 0 ]; then # Go Back (Submenu only)
+        if [ "$is_main_menu" -eq 1 ]; then
+             printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+             debug_log "DEBUG" "'0' selected in main menu [$section_name]. Invalid. Returning 0 to retry."
+             return 0 
+        fi
+        debug_log "DEBUG" "User selected 0 (Go Back) in section [$section_name]."
+        go_back_menu
+        local go_back_status=$?
+        debug_log "DEBUG" "go_back_menu returned status: $go_back_status"
+        return $go_back_status # Propagate status from go_back_menu
+    fi
+
+    if [ "$choice" -eq 10 ]; then # Exit
+        debug_log "DEBUG" "User selected 10 (Exit) in section [$section_name]."
+        menu_exit # This function will call exit 0 and terminate the script.
+        # Execution should NOT reach here.
+        debug_log "ERROR" "handle_user_selection: menu_exit did NOT terminate the script as expected. This is a critical error."
+        return 1 # Indicate a critical error to terminate the selector loop.
+    fi
+
+    # --- Handle Normal Selections (1 to N) ---
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$num_normal_choices" ]; then
+         printf "%s\n" "$(color red "$(get_message "CONFIG_ERROR_NOT_NUMBER")")"
+         debug_log "DEBUG" "Selection '$choice' out of range (1-$num_normal_choices) in section [$section_name]. Returning 0 to retry."
+         return 0 
+    fi
+
+    local action=$(awk "NR==$choice" "$menu_commands_file")
+    local selected_key=$(awk "NR==$choice" "$menu_keys_file")
+    local selected_color=$(awk "NR==$choice" "$menu_colors_file")
+    local type="command" # Assume command by default
+    
+    SELECTED_MENU_KEY="$selected_key"
+    SELECTED_MENU_COLOR="$selected_color"
+
+    if echo "$action" | grep -q "^selector "; then
+        type="menu"
+        action=$(echo "$action" | sed 's/^selector //') 
+    fi
+
+    if [ -z "$action" ] || [ -z "$selected_key" ] || [ -z "$selected_color" ]; then
+        debug_log "ERROR" "Failed to retrieve action details for choice '$choice' from temp files in section [$section_name]."
+        return 0 # Retry input
+    fi
+
+    debug_log "DEBUG" "Choice '$choice' mapped to: Key='$selected_key', Color='$selected_color', Action='$action', Type='$type'"
+
+    if [ "$type" = "menu" ]; then
+        debug_log "DEBUG" "User selected submenu '$action' from section [$section_name]."
+        push_menu_history "$selected_key" "$selected_color"
+        selector "$action" 
+        local submenu_status=$?
+        debug_log "DEBUG" "Submenu selector '$action' returned status: $submenu_status"
+        return $submenu_status 
+    elif [ "$type" = "command" ]; then
+        debug_log "DEBUG" "Executing command (in current shell): $action from section [$section_name]"
+        # Execute commands in the current shell context.
+        # If 'action' (e.g., a loaded script) calls 'menu_exit' or 'remove_exit',
+        # the main script will terminate.
+        eval "$action"
+        local cmd_status=$?
+
+        # This part is reached if 'eval "$action"' did NOT result in an 'exit'.
+        # This can happen if the command completed normally or returned an error status without exiting.
+        if [ $cmd_status -eq 0 ]; then
+            debug_log "DEBUG" "Command '$action' (current shell) completed successfully in section [$section_name]."
+        else
+            debug_log "DEBUG" "Command '$action' (current shell) completed with status $cmd_status (did not exit script) in section [$section_name]."
+        fi
+        # After a command that doesn't exit the script, redisplay the current menu.
+        return 0
+    else
+        debug_log "ERROR" "Internal error: Unknown action type detected for choice '$choice' in section [$section_name]."
+        return 0 # Retry input
+    fi
+}
+
+# Handle user selection - Revised order for special inputs
+OK_handle_user_selection() {
+    # Correct argument list matching the call from selector
+    local section_name="$1"        # Current menu section name
+    local is_main_menu="$2"        # 1 if main menu, 0 otherwise
+    local menu_count="$3"          # Total menu items (including special)
+    local num_normal_choices="$4"  # Number of normal choices (1 to N)
+    local menu_keys_file="$5"      # Temp file with menu keys
+    local menu_displays_file="$6"  # Temp file with display strings (unused here)
+    local menu_commands_file="$7"  # Temp file with commands
+    local menu_colors_file="$8"    # Temp file with colors
+    local main_menu="$9"           # Main menu section name
+
+    # --- Display Prompt ---
+    local selection_prompt=""
+    if [ "$is_main_menu" -eq 1 ]; then
+        selection_prompt=$(get_message "CONFIG_MAIN_SELECT_PROMPT")
+        selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
+    else
+        selection_prompt=$(get_message "CONFIG_SUB_SELECT_PROMPT")
+        selection_prompt=$(echo "$selection_prompt" | sed "s/{0}/$num_normal_choices/g")
+    fi
     printf "%s" "$(color white "$selection_prompt")" # Display prompt before read
 
     # --- Read User Input with Failure Check ---
