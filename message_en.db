@@ -135,13 +135,13 @@ en|CONFIG_DOWNLOADING=Executing{:} {0}
 
 # aios.sh
 en|MSG_PASSWORD_NOTICE=Notice: Set a new password with 8 or more characters (Press Enter to skip)
-en|MSG_ENTER_PASSWORD=Enter new password{;}
-en|MSG_CONFIRM_PASSWORD=Confirm new password{;}
+en|MSG_ENTER_PASSWORD=New password{;}
+en|MSG_CONFIRM_PASSWORD=Retype new password{;}
 en|MSG_PASSWORD_ERROR=Invalid password. Minimum 8 characters. Enter the same password twice
 en|MSG_PASSWORD_SET_OK=Password set successfully
 
 en|MSG_HOSTNAME_SET=Set hostname{;}
-en|MSG_ENTER_HOSTNAME=Enter new hostname{;}
+en|MSG_ENTER_HOSTNAME=New hostname{;}
 en|MSG_HOSTNAME_SET_OK=Hostname set to {h}
 en|MSG_HOSTNAME_ERROR=Failed to set hostname
 
