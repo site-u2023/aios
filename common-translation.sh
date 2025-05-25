@@ -1209,8 +1209,6 @@ OK_create_language_db_new() {
 # @return: 0:success, 1:critical error, 2:partial success
 create_language_db_new() {
     local aip_function_name="$1"
-    # local api_endpoint_url="$2" # Maintained for interface consistency
-    # local domain_name="$3"      # Maintained for interface consistency
     local target_lang_code="$4"
     local max_tasks_limit="$5"
 
@@ -1223,6 +1221,8 @@ create_language_db_new() {
     local pid_to_launch="" 
     local exit_status=0
     local line_from_awk=""
+    
+    local active_jobs_count=0 # ★変更点: アクティブジョブ数カウント用変数を導入
 
     case "$max_tasks_limit" in
         ''|*[!0-9]*) 
@@ -1277,20 +1277,23 @@ create_language_db_new() {
             else
                 pids="$pids $pid_to_launch" 
             fi
+            active_jobs_count=$((active_jobs_count + 1)) # ★変更点: ジョブ数をインクリメント
 
-            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-                local oldest_pid=$(echo "$pids" | cut -d' ' -f1) 
+            while [ "$active_jobs_count" -ge "$current_max_parallel_tasks" ]; do # ★変更点: 条件を active_jobs_count に変更
+                local oldest_pid="${pids%% *}" # ★変更点: cutの代わりにシェル組み込みで最初のPIDを取得
 
                 if [ -n "$oldest_pid" ]; then
                     wait "$oldest_pid" >/dev/null 2>&1 
                     
+                    # ★変更点: sedの代わりにシェル組み込みでPIDを削除
                     if [ "$pids" = "$oldest_pid" ]; then 
                         pids=""
                     else
-                        pids=$(echo "$pids" | sed "s/^$oldest_pid //")
+                        pids="${pids#"$oldest_pid "}"
                     fi
+                    active_jobs_count=$((active_jobs_count - 1)) # ★変更点: ジョブ数をデクリメント
                 else
-                    sleep 1 
+                    : # pids が空なら何もしない (ループ条件で抜けるはず)
                 fi
             done
         done
@@ -1316,14 +1319,13 @@ create_language_db_new() {
             fi
         fi
 
+        # (省略: ファイル結合、マーカー付加のロジックは変更なし。前回の19秒版と同一)
         if [ "$exit_status" -ne 1 ]; then
             local partial_pattern="$(basename "$final_output_file")"".partial_*"
             local found_partial=0
-
             if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
                 found_partial=1
             fi
-
             if [ "$found_partial" -eq 1 ]; then
                  if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} + >> "$final_output_file"); then
                       if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
@@ -1355,7 +1357,6 @@ create_language_db_new() {
                 fi
             fi
         fi
-
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             if [ $? -ne 0 ]; then
