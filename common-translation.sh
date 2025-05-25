@@ -619,12 +619,12 @@ create_language_db_parallel() {
 
     if [ "$osversion" = "19" ]; then
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19 with limit from global CORE_COUNT ($CORE_COUNT)"
-        create_language_db_19 "$@" "$CORE_COUNT"
+        # create_language_db_19 "$@" "$CORE_COUNT"
         create_language_db_new "$@" "$CORE_COUNT"
         exit_status=$?
     else
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion' with limit from global MAX_PARALLEL_TASKS ($MAX_PARALLEL_TASKS)"
-        create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
+        # create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
         create_language_db_new "$@" "$MAX_PARALLEL_TASKS"
         exit_status=$?
     fi
