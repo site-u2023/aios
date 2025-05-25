@@ -74,6 +74,7 @@ en|MSG_TRANSLATION_SOURCE_CURRENT=Translated Language file{:} {i}
 en|MSG_LANGUAGE_SOURCE=Original language code{:} {i}
 en|MSG_LANGUAGE_CODE=Translation language code{:} {i}
 en|MSG_TRANSLATION_SUCCESS=Translation completed
+MSG_TRANSLATION_PARTIAL=Translation partially completed ({s}s)
 en|MSG_ERR_TRANSLATION_FAILED=Translation process failed for language {l}
 
 # package.sh
