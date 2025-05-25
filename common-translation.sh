@@ -990,7 +990,7 @@ translate_main() {
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result}). Not calling display_detected_translation."
         if [ "$db_creation_result" -eq 2 ]; then # 部分的成功の場合のみメッセージ表示
-             printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
+             printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "l=$lang_code")")"
         fi
         return "$db_creation_result"
     fi
