@@ -124,7 +124,7 @@ update_package_list() {
 
     # silent モードでない場合のみ表示
     if [ "$silent_mode" != "yes" ]; then
-        printf "  %s\n"
+        # printf "  %s\n"
         # スピナー開始
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
