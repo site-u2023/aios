@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-26-00-15"
+SCRIPT_VERSION="2025-05-26-00-16"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -620,7 +620,7 @@ create_language_db_parallel() {
     if [ "$osversion" = "19" ]; then
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19 with limit from global CORE_COUNT ($CORE_COUNT)"
         # create_language_db_19 "$@" "$CORE_COUNT"
-        create_language_db_new "$@" "$CORE_COUNT"
+        # create_language_db_new "$@" "$CORE_COUNT"
         create_language_db_new "$@" "1"
         exit_status=$?
     else
