@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-26-00-00"
+SCRIPT_VERSION="2025-05-26-00-01"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -1004,8 +1004,8 @@ translate_main() {
 # @return: 0:success, 1:critical error, 2:partial success
 create_language_db_new() {
     local aip_function_name="$1"
-    local api_endpoint_url="$2" # Not used directly in core logic, but kept for interface consistency
-    local domain_name="$3"      # Not used directly in core logic, but kept for interface consistency
+    local api_endpoint_url="$2" # Maintained for interface consistency
+    local domain_name="$3"      # Maintained for interface consistency
     local target_lang_code="$4"
     local max_tasks_limit="$5"
 
@@ -1014,13 +1014,10 @@ create_language_db_new() {
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
     
-    local pids="" # PIDリスト (例: "PID1" または "PID1 PID2 PID3")
-    local pid_to_launch="" # 起動したサブプロセスのPID
+    local pids="" # PID list (e.g., "PID1" or "PID1 PID2 PID3")
+    local pid_to_launch="" # PID of the launched subshell
     local exit_status=0
     local line_from_awk=""
-    
-    # --- MODIFIED: active_jobs_count for ash compatibility ---
-    local active_jobs_count=0 # シェル変数でアクティブジョブ数を管理
 
     case "$max_tasks_limit" in
         ''|*[!0-9]*) 
@@ -1076,19 +1073,17 @@ create_language_db_new() {
                 exit 0 
             ) & 
             pid_to_launch=$!
-            # --- MODIFIED: pids 変数の管理を堅牢化 ---
+            # --- MODIFIED: Robust pids variable update to prevent leading spaces ---
             if [ -z "$pids" ]; then
-                pids="$pid_to_launch"
+                pids="$pid_to_launch" # First PID, no leading space
             else
-                pids="$pids $pid_to_launch" # スペース区切りでPIDを追加
+                pids="$pids $pid_to_launch" # Subsequent PIDs, space separated
             fi
-            # --- MODIFIED: active_jobs_count をインクリメント ---
-            active_jobs_count=$((active_jobs_count + 1))
 
-            # --- MODIFIED: Use active_jobs_count for job control (ash compatible) ---
-            while [ "$active_jobs_count" -ge "$current_max_parallel_tasks" ]; do
-                # --- oldest_pid の取得 (ユーザー提示の cut 方式を維持) ---
-                # pids は "PID1" または "PID1 PID2..." の形式を想定
+            # --- Job control using `jobs -p | wc -l` (User's original logic) ---
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                # --- oldest_pid extraction using `cut` (User's original logic) ---
+                # Assumes pids is "PID1" or "PID1 PID2..." (no leading space due to above modification)
                 local oldest_pid=$(echo "$pids" | cut -d' ' -f1) 
 
                 if [ -n "$oldest_pid" ]; then
@@ -1097,24 +1092,23 @@ create_language_db_new() {
                     else
                         debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed or already exited."
                     fi
-                    # --- PIDの削除 (ユーザー提示の sed 方式を維持、堅牢化) ---
-                    # oldest_pid がリストの唯一の要素だった場合と、複数の要素の先頭だった場合に対応
-                    if [ "$pids" = "$oldest_pid" ]; then # リストに oldest_pid しかない場合
+                    # --- PID removal using `sed` (User's original logic, slightly adjusted for robustness) ---
+                    if [ "$pids" = "$oldest_pid" ]; then # If it's the only PID in the list
                         pids=""
                     else
-                        # リストの先頭の oldest_pid とそれに続くスペースを削除
+                        # Remove the oldest_pid and the following space from the beginning of the list
                         pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                     fi
-                    # --- MODIFIED: active_jobs_count をデクリメント ---
-                    active_jobs_count=$((active_jobs_count - 1))
                 else
-                    debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
-                    sleep 1
+                    # This case should be less likely if pids is managed correctly and job count is accurate.
+                    # If pids is empty but job count from `jobs -p` is high, it indicates an issue.
+                    debug_log "DEBUG" "create_language_db_all: oldest_pid is empty (pids='$pids'), but job count high. Waiting."
+                    sleep 1 # Original sleep logic
                 fi
             done
         done
         
-        local pipe_status=$? # while ループ (パイプラインの最後) の終了ステータス
+        local pipe_status=$? 
         if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
              debug_log "DEBUG" "create_language_db_all: Warning: Error during awk/while processing (pipe status: $pipe_status)."
         fi
@@ -1122,9 +1116,9 @@ create_language_db_new() {
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
             local wait_failed=0
-            # shellcheck disable=SC2086 # 意図的に$pidsをスペースで分割
-            for pid_to_wait in $pids; do # pidsはクォートなしで展開
-                if [ -n "$pid_to_wait" ]; then # PIDが空でないことを確認
+            # shellcheck disable=SC2086
+            for pid_to_wait in $pids; do 
+                if [ -n "$pid_to_wait" ]; then 
                     if wait "$pid_to_wait"; then
                         : 
                     else
@@ -1162,7 +1156,7 @@ create_language_db_new() {
                                   debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial file: $file_to_delete"
                               fi
                           fi
-                          if [ $? -ne 0 ]; then # read のステータスチェック (通常は不要)
+                          if [ $? -ne 0 ]; then 
                               debug_log "DEBUG" "create_language_db_all: Warning: read command failed in rm loop."
                           fi
                       done); then
