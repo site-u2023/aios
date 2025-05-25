@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-26-00-11"
+SCRIPT_VERSION="2025-05-26-00-12"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -1225,24 +1225,22 @@ create_language_db_new() {
     local pid_to_launch=""
     local exit_status=0
     local line_from_awk=""
+    local line_counter=0 # awkから読み込んだ行数をカウント
 
     case "$max_tasks_limit" in
         ''|*[!0-9]*) 
-            debug_log "DEBUG" "create_language_db_new: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
+            # debug_log "DEBUG" "create_language_db_new: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
             max_tasks_limit=1
             ;;
         0) 
-            debug_log "DEBUG" "create_language_db_new: Received max_tasks_limit=0. Defaulting to 1."
+            # debug_log "DEBUG" "create_language_db_new: Received max_tasks_limit=0. Defaulting to 1."
             max_tasks_limit=1
             ;;
         *) 
             : 
             ;;
     esac
-    # debug_log "DEBUG" "create_language_db_new: Using parallelism limit: $max_tasks_limit" # ユーザー指示により最小限化
-    # debug_log "DEBUG" "create_language_db_new: Starting parallel translation for language '$target_lang_code'." # ユーザー指示により最小限化
     local current_max_parallel_tasks="$max_tasks_limit"
-    # debug_log "DEBUG" "create_language_db_new: Max parallel tasks set from argument: $current_max_parallel_tasks" # ユーザー指示により最小限化
 
     mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_new: Failed to create final output directory: $final_output_dir"; return 1; }
     >"$final_output_file"
@@ -1250,36 +1248,57 @@ create_language_db_new() {
         debug_log "DEBUG" "create_language_db_new: Failed to initialize output file $final_output_file"
         exit_status=1
     else
+        debug_log "DEBUG" "create_language_db_new: Starting to read from $base_db"
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+            line_counter=$((line_counter + 1))
+            # debug_log "DEBUG" "create_language_db_new: Read line $line_counter: [$line_from_awk]" # 大量に出力されるため通常はコメントアウト
+
             ( 
+                # サブシェル内でのset -x は非常に多くのログを出すため注意
+                # set -x
+                local sub_line_counter="$line_counter" # 親のカウンターをコピー
+                debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "Processing line: [$line_from_awk]"
+
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
                 local func="$aip_function_name"
                 local outfile_base="$final_output_file" 
                 local translated_line
                 
+                debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "Calling translate_single_line with: '$current_line', '$lang', '$func'"
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+                local tsl_status=$?
+                debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "translate_single_line status: $tsl_status, result: [$translated_line]"
+
                 if [ -n "$translated_line" ]; then
                      local partial_suffix=""
-                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
+                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell PID:$$ Line:$sub_line_counter]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
                      local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" 
 
                      if date '+%N' >/dev/null 2>&1; then
                         partial_suffix="$$$(date '+%N')"
                      else
-                        partial_suffix="$$$(date '+%S')"
+                        partial_suffix="$$$(date '+%S')" # %N が使えない場合のフォールバック
                      fi
                      
-                     printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
+                     local target_partial_file="${partial_file_path}.partial_$partial_suffix"
+                     debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "Writing to partial file: $target_partial_file"
+                     printf "%s\n" "$translated_line" >> "$target_partial_file"
                      local write_status=$?
                      if [ "$write_status" -ne 0 ]; then
-                         debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
+                         debug_log "ERROR [Subshell PID:$$ Line:$sub_line_counter]" "Failed to append to partial file: $target_partial_file (status: $write_status)"
                          exit 1 
+                     else
+                         debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "Successfully wrote to partial file: $target_partial_file"
                      fi
+                else
+                    debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "translate_single_line returned empty. No partial file created."
                 fi
+                # debug_log "DEBUG [Subshell PID:$$ Line:$sub_line_counter]" "Subshell exiting with 0"
                 exit 0 
             ) & 
             pid_to_launch=$!
+            # debug_log "DEBUG" "create_language_db_new: Launched PID $pid_to_launch for line $line_counter"
             if [ -z "$pids" ]; then
                 pids="$pid_to_launch"
             else
@@ -1293,8 +1312,7 @@ create_language_db_new() {
                     if wait "$oldest_pid" >/dev/null 2>&1; then
                         : 
                     else
-                        # debug_log "DEBUG" "create_language_db_new: Background task PID $oldest_pid may have failed or already exited." # ユーザー指示により最小限化
-                        : # ジョブが既に終了している場合もあるので、エラーとは限らない
+                        : 
                     fi
                     if [ "$pids" = "$oldest_pid" ]; then 
                         pids=""
@@ -1302,20 +1320,18 @@ create_language_db_new() {
                         pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                     fi
                 else
-                    # debug_log "DEBUG" "create_language_db_new: pids list is empty, but job count ($(jobs -p | wc -l)) >= $current_max_parallel_tasks. Breaking inner wait loop." # ユーザー指示により最小限化
                     break 
                 fi
             done
         done
         
         local awk_while_status=$? 
+        debug_log "DEBUG" "create_language_db_new: Finished reading from awk. awk/while status: $awk_while_status. Total lines read by while: $line_counter"
         if [ "$awk_while_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
              debug_log "DEBUG" "create_language_db_new: Warning: Error during awk/while processing (status: $awk_while_status)."
-             # exit_status=2 # 部分的成功として扱うことも検討可
         fi
 
         if [ "$exit_status" -ne 1 ]; then
-            # debug_log "DEBUG" "create_language_db_new: Waiting for remaining background tasks... PIDs: [$pids]" # ユーザー指示により最小限化
             local wait_failed=0
             # shellcheck disable=SC2086
             for pid_to_wait in $pids; do 
@@ -1324,18 +1340,15 @@ create_language_db_new() {
                         : 
                     else
                         wait_failed=1
-                        # debug_log "DEBUG" "create_language_db_new: Remaining task PID $pid_to_wait failed or exited with non-zero status." # ユーザー指示により最小限化
                     fi
                 fi
             done
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                 exit_status=2
             fi
-            # debug_log "DEBUG" "create_language_db_new: All background tasks finished." # ユーザー指示により最小限化
         fi
 
         if [ "$exit_status" -ne 1 ]; then
-            # debug_log "DEBUG" "create_language_db_new: Combining partial results using find..." # ユーザー指示により最小限化
             local partial_pattern="$(basename "$final_output_file")"".partial_*"
             local found_partial=0
 
@@ -1347,17 +1360,13 @@ create_language_db_new() {
             fi
 
             if [ "$found_partial" -eq 1 ]; then
-                 # debug_log "DEBUG" "create_language_db_new: Found partial files matching '$partial_pattern' in $TR_DIR." # ユーザー指示により最小限化
                  if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} + >> "$final_output_file" 2>/dev/null) || \
                     (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} \; >> "$final_output_file" 2>/dev/null) || \
-                    ( (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print) | while IFS= read -r pf_line; do cat "$TR_DIR/$pf_line" >> "$final_output_file"; done ) then
-                      # debug_log "DEBUG" "create_language_db_new: Partial files combined successfully into $final_output_file." # ユーザー指示により最小限化
-                      # debug_log "DEBUG" "create_language_db_new: Attempting to remove partial files using find and rm loop..." # ユーザー指示により最小限化
+                    ( (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print) | while IFS= read -r pf_line; do cat "$TR_DIR/$pf_line" >> "$final_output_file"; done ) then # Removed leading ./ from $pf_line
                       if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
                           file_to_delete_basename="${file_to_delete#./}"
                           if [ -n "$file_to_delete_basename" ]; then 
-                              # debug_log "DEBUG" "create_language_db_new: Removing partial file: $file_to_delete_basename from $TR_DIR" # ユーザー指示により最小限化
-                              if rm -- "$TR_DIR/$file_to_delete_basename"; then
+                              if rm -- "$TR_DIR/$file_to_delete_basename"; then # Added $TR_DIR/
                                   : 
                               else
                                   debug_log "DEBUG" "create_language_db_new: Warning: Failed to remove partial file: $TR_DIR/$file_to_delete_basename"
@@ -1366,11 +1375,8 @@ create_language_db_new() {
                       done); then
                           debug_log "DEBUG" "create_language_db_new: Warning: Error occurred during find or rm loop for partial files in $TR_DIR."
                       else
-                          # debug_log "DEBUG" "create_language_db_new: Partial files removal process completed." # ユーザー指示により最小限化
                           if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
                               debug_log "DEBUG" "create_language_db_new: Warning: Some partial files might still remain in $TR_DIR after removal attempt."
-                          # else
-                              # debug_log "DEBUG" "create_language_db_new: Confirmed no partial files remain matching pattern in $TR_DIR." # ユーザー指示により最小限化
                           fi
                       fi
                  else
@@ -1378,12 +1384,13 @@ create_language_db_new() {
                      [ "$exit_status" -eq 0 ] && exit_status=1 
                  fi
             else
-                # debug_log "DEBUG" "create_language_db_new: No partial files found in $TR_DIR matching '$partial_pattern' to combine." # ユーザー指示により最小限化
-                if [ ! -s "$final_output_file" ]; then
-                    local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
-                    if [ -n "$base_lines_exist" ]; then
-                         debug_log "DEBUG" "create_language_db_new: Warning: Base DB had lines, but no partial files were generated and final file is empty. Potential issue."
+                if [ ! -s "$final_output_file" ]; then # final_output_fileが空かチェック
+                    # awkから読み込んだ行があったか確認
+                    if [ "$line_counter" -gt 0 ]; then
+                         debug_log "DEBUG" "create_language_db_new: Warning: Base DB had lines ($line_counter), but no partial files were generated and final file is empty. Potential issue."
                          [ "$exit_status" -eq 0 ] && exit_status=2
+                    # else
+                         # debug_log "DEBUG" "create_language_db_new: Base DB had no lines to process or awk read no lines."
                     fi
                 fi
             fi
@@ -1394,8 +1401,6 @@ create_language_db_new() {
             if [ $? -ne 0 ]; then
                 debug_log "DEBUG" "create_language_db_new: Failed to append completion marker."
                 [ "$exit_status" -eq 0 ] && exit_status=2
-            # else
-                # debug_log "DEBUG" "create_language_db_new: Completion marker added." # ユーザー指示により最小限化
             fi
         fi
     fi 
