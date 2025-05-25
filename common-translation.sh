@@ -869,14 +869,12 @@ display_detected_translation() {
     local source_db="message_${source_lang}.db"
     local target_db="message_${lang_code}.db" # This might not exist if creation failed
 
-    debug_log "DEBUG" "display_detected_translation: Called with elapsed_seconds: '$elapsed_seconds_for_creation', lang_code: '$lang_code'" # このデバッグログは元のまま
+    debug_log "DEBUG" "display_detected_translation: Called with elapsed_seconds: '$elapsed_seconds_for_creation', lang_code: '$lang_code'"
 
-    # 最初に新しいメッセージキーで翻訳処理時間を表示
     if [ -n "$elapsed_seconds_for_creation" ] && [ "$elapsed_seconds_for_creation" -ne 0 ]; then
         printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_ELAPSED_TIME" "s=$elapsed_seconds_for_creation")")"
     fi
 
-    # 以降は元の表示順序
     printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_ORIGINAL" "i=$source_db")")"
     if [ -f "${BASE_DIR}/${target_db}" ]; then
         printf "%s\n" "$(color white "$(get_message "MSG_TRANSLATION_SOURCE_CURRENT" "i=$target_db")")"
@@ -886,7 +884,9 @@ display_detected_translation() {
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_SOURCE" "i=$source_lang")")"
     printf "%s\n" "$(color white "$(get_message "MSG_LANGUAGE_CODE" "i=$lang_code")")"
 
-    debug_log "DEBUG" "Translation information display completed for ${lang_code}" # このデバッグログは元のまま
+    debug_log "DEBUG" "Translation information display completed for ${lang_code}"
+
+    printf "\n"
 }
 
 # @FUNCTION: translate_main
