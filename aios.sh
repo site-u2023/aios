@@ -61,7 +61,7 @@ ANIMATION_ENABLED="1" # アニメーション有効/無効フラグ
 # --- Set MAX_PARALLEL_TASKS ---
 CORE_COUNT=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo 1)
 case "$CORE_COUNT" in
-    1) MAX_PARALLEL_TASKS=1 ;;
+    1) MAX_PARALLEL_TASKS=2 ;;
     2) MAX_PARALLEL_TASKS=3 ;;
     3) MAX_PARALLEL_TASKS=4 ;;
     *) MAX_PARALLEL_TASKS=5 ;;
