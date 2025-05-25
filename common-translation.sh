@@ -1209,7 +1209,6 @@ OK_create_language_db_new() {
 # @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed.
 # @return: 0:success, 1:critical error, 2:partial success
 create_language_db_new() {
-# 20秒
 
     local aip_function_name="$1"
     local api_endpoint_url="$2" # Maintained for interface consistency
