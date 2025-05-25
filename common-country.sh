@@ -1217,6 +1217,17 @@ country_main() {
     local country_arg="$1"
     local setup_result=1 # デフォルトは失敗
 
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
+        cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
+    fi
+    available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+
+    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
+        debug_log "DEBUG" "country_main: Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping location setup prompt."
+        # 低スペック時は何もせずに正常終了として扱う (translate_main側で別途スキップ判定される)
+        return 0
+    fi
+    
     debug_log "DEBUG" "Entering country_main() with argument: '$country_arg'"
 
     # ステップ1: 引数による設定試行
