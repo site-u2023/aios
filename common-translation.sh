@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-26-00-07"
+SCRIPT_VERSION="2025-05-26-00-08"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -1202,12 +1202,6 @@ OK_create_language_db_new() {
     return "$exit_status"
 }
 
-# @param $1: aip_function_name (string) - AIP function (e.g., "translate_with_google")
-# @param $2: api_endpoint_url (string) - API URL (for logging)
-# @param $3: domain_name (string) - Domain name (for logging)
-# @param $4: target_lang_code (string) - Target language code (e.g., "ja")
-# @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed.
-# @return: 0:success, 1:critical error, 2:partial success
 create_language_db_new() {
     local aip_function_name="$1"
     local api_endpoint_url="$2"
@@ -1225,108 +1219,77 @@ create_language_db_new() {
     local line_from_awk=""
 
     case "$max_tasks_limit" in
-        ''|*[!0-9]*) 
-            max_tasks_limit=1
-            ;;
-        0) 
-            max_tasks_limit=1
-            ;;
-        *) 
-            : 
-            ;;
+        ''|*[!0-9]*) max_tasks_limit=1 ;;
+        0) max_tasks_limit=1 ;;
+        *) ;;
     esac
-
     local current_max_parallel_tasks="$max_tasks_limit"
 
-    mkdir -p "$final_output_dir" || { return 1; }
-    >"$final_output_file"
-    if [ $? -ne 0 ]; then
-        exit_status=1
-    else
-        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            ( 
-                local current_line="$line_from_awk"
-                local lang="$target_lang_code"
-                local func="$aip_function_name"
-                local outfile_base="$final_output_file"
+    mkdir -p "$final_output_dir" || { debug_log "ERR" "Failed to create $final_output_dir"; return 1; }
+    >"$final_output_file" || { debug_log "ERR" "Failed to create $final_output_file"; return 1; }
 
-                local translated_line
-                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
-                if [ -n "$translated_line" ]; then
-                     local partial_suffix=""
-                     mkdir -p "$TR_DIR" || { exit 1; }
-                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")"
+    awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+        (
+            local current_line="$line_from_awk"
+            local lang="$target_lang_code"
+            local func="$aip_function_name"
+            local outfile_base="$final_output_file"
+            local translated_line partial_suffix partial_file_path
 
-                     if date '+%N' >/dev/null 2>&1; then
-                        partial_suffix="$$$(date '+%N')"
-                     else
-                        partial_suffix="$$$(date '+%s')"
-                     fi
-                     
-                     printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
-                     if [ $? -ne 0 ]; then
-                         exit 1
-                     fi
-                fi
-                exit 0
-            ) & 
-
-            pid=$!
-            pids="$pids $pid"
-
-            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-                oldest_pid=$(echo "$pids" | cut -d' ' -f1)
-                if [ -n "$oldest_pid" ]; then
-                    wait "$oldest_pid" >/dev/null 2>&1
-                    pids=$(echo "$pids" | sed "s/^$oldest_pid //")
+            translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+            if [ -n "$translated_line" ]; then
+                mkdir -p "$TR_DIR" || exit 1
+                partial_file_path="${TR_DIR}/$(basename "$outfile_base")"
+                if date '+%N' >/dev/null 2>&1; then
+                    partial_suffix="$$$(date '+%N')"
                 else
-                    sleep 1
+                    partial_suffix="$$$(date '+%s')"
                 fi
-            done
-        done
-
-        local pipe_status=$?
-        if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
-             exit_status=2
-        fi
-
-        if [ "$exit_status" -ne 1 ]; then
-            local wait_failed=0
-            for pid in $pids; do
-                if [ -n "$pid" ]; then
-                    if ! wait "$pid" >/dev/null 2>&1; then
-                        wait_failed=1
-                    fi
-                fi
-            done
-            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
-                exit_status=2
+                printf "%s\n" "$translated_line" >> "${partial_file_path}.partial_${partial_suffix}"
             fi
-        fi
-
-        if [ "$exit_status" -ne 1 ]; then
-            local partial_pattern="$(basename "$final_output_file")"".partial_*"
-            
-            if ls "${TR_DIR}/"${partial_pattern} >/dev/null 2>&1; then
-                 cat "${TR_DIR}/"${partial_pattern} >> "$final_output_file" 2>/dev/null
-                 rm "${TR_DIR}/"${partial_pattern} 2>/dev/null
+            exit 0
+        ) &
+        pid=$!
+        pids="$pids $pid"
+        while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+            oldest_pid=$(echo "$pids" | cut -d' ' -f1)
+            if [ -n "$oldest_pid" ]; then
+                wait "$oldest_pid" >/dev/null 2>&1
+                pids=$(echo "$pids" | sed "s/^$oldest_pid //")
             else
-                if [ ! -s "$final_output_file" ]; then
-                    local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
-                    if [ -n "$base_lines_exist" ]; then
-                         [ "$exit_status" -eq 0 ] && exit_status=2
-                    fi
-                fi
+                sleep 1
             fi
-        fi
+        done
+    done
 
-        if [ "$exit_status" -ne 1 ]; then
-            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
-            if [ $? -ne 0 ]; then
-                [ "$exit_status" -eq 0 ] && exit_status=2
-            fi
-        fi
+    local pipe_status=$?
+    [ "$pipe_status" -ne 0 ] && exit_status=2
+
+    # 残りのBGジョブ待機
+    for pid in $pids; do
+        [ -n "$pid" ] && wait "$pid" || true
+    done
+
+    # 部分ファイル結合（find未使用）
+    local partial_pattern="$(basename "$final_output_file")"".partial_"*
+    local found_partial=0
+    for f in "$TR_DIR"/$partial_pattern; do
+        [ -e "$f" ] || continue
+        found_partial=1
+        cat "$f" >> "$final_output_file"
+    done
+
+    # 部分ファイル削除（find未使用）
+    for f in "$TR_DIR"/$partial_pattern; do
+        [ -e "$f" ] && rm "$f"
+    done
+
+    if [ "$found_partial" -eq 0 ] && [ ! -s "$final_output_file" ]; then
+        local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
+        [ -n "$base_lines_exist" ] && exit_status=2
     fi
+
+    printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file" || exit_status=2
 
     return "$exit_status"
 }
