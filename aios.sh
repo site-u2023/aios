@@ -1797,6 +1797,8 @@ print_banner_unicode() {
 
 print_information() {
     local cpucore=$(cat "${CACHE_DIR}/cpu_core.ch")
+    local memory_total=$(cat "${CACHE_DIR}/memory_total.ch")
+    local flash_total=$(cat "${CACHE_DIR}/flash_total.ch")
     local network=$(cat "${CACHE_DIR}/network.ch")
     local architecture=$(cat "${CACHE_DIR}/architecture.ch")
     local osversion=$(cat "${CACHE_DIR}/osversion.ch")
@@ -1812,6 +1814,8 @@ print_information() {
     fi
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_NETWORK" "i=$network")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_CPUCORE" "i=$cpucore")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_MEMORY" "i=$memory_total")")"
+    printf "%s\n" "$(color white "$(get_message "MSG_INFO_FLASH" "i=$flash_total")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_ARCHITECTURE" "i=$architecture")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_OSVERSION" "i=$osversion")")"
     printf "%s\n" "$(color white "$(get_message "MSG_INFO_PACKAGEMANAGER" "i=$package_manager")")"
