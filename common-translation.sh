@@ -1223,8 +1223,6 @@ create_language_db_new() {
     local pid_to_launch="" 
     local exit_status=0
     local line_from_awk=""
-    
-    local active_jobs_count=0 # ★変更点: アクティブジョブ数カウント用変数を導入
 
     case "$max_tasks_limit" in
         ''|*[!0-9]*) 
@@ -1279,25 +1277,19 @@ create_language_db_new() {
             else
                 pids="$pids $pid_to_launch" 
             fi
-            active_jobs_count=$((active_jobs_count + 1)) # ★変更点: ジョブ数をインクリメント
 
-            while [ "$active_jobs_count" -ge "$current_max_parallel_tasks" ]; do # ★変更点: 条件を active_jobs_count に変更
-                local oldest_pid="${pids%% *}" # ★変更点: cutの代わりにシェル組み込みで最初のPIDを取得
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                local oldest_pid=$(echo "$pids" | cut -d' ' -f1) 
 
                 if [ -n "$oldest_pid" ]; then
                     wait "$oldest_pid" >/dev/null 2>&1 
                     
-                    # ★変更点: sedの代わりにシェル組み込みでPIDを削除
-                    if [ "$pids" = "$oldest_pid" ]; then # リストに oldest_pid しかない場合
+                    if [ "$pids" = "$oldest_pid" ]; then 
                         pids=""
                     else
-                        # リストの先頭の oldest_pid とそれに続くスペースを削除
-                        pids="${pids#"$oldest_pid "}"
+                        pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                     fi
-                    active_jobs_count=$((active_jobs_count - 1)) # ★変更点: ジョブ数をデクリメント
                 else
-                    # pids が空なのに active_jobs_count が上限以上、という状況は通常発生しにくいが、
-                    # 安全のため sleep を残す (元のロジックに存在したため)
                     sleep 1 
                 fi
             done
