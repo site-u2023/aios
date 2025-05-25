@@ -993,6 +993,7 @@ translate_main() {
              printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "l=$lang_code")")"
         fi
         return "$db_creation_result"
+        printf "\n"
     fi
 }
 
