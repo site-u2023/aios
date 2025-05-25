@@ -898,6 +898,16 @@ display_detected_translation() {
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
 #          propagates create_language_db_parallel exit code on failure.
 translate_main() {
+    # --- Memory check: Skip translation if total memory <= 127MB ---
+    local memory_total=0
+    if [ -f "${CACHE_DIR}/memory_total.ch" ]; then
+        memory_total=$(cat "${CACHE_DIR}/memory_total.ch" 2>/dev/null)
+    fi
+    if [ -z "$memory_total" ] || [ "$memory_total" -le 127 ]; then
+        debug_log "DEBUG" "translate_main: Skipped translation due to low memory (${memory_total}MB)"
+        return 0
+    fi
+    
     # --- Initialization ---
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
