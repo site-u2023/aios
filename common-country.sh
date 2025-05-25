@@ -1216,7 +1216,9 @@ OK_setup_location() {
 country_main() {
     local country_arg="$1"
     local setup_result=1 # デフォルトは失敗
-
+    local cpucore=""
+    local available_memory=""
+    
     if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
         cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
     fi
