@@ -1270,7 +1270,7 @@ create_language_db_new() {
         [ -n "$pid" ] && wait "$pid" || true
     done
 
-    # 部分ファイル結合（find未使用）
+    # 部分ファイル結合・削除（find/ls禁止, forのみ・シェルワンライナー最速形）
     local partial_pattern="$(basename "$final_output_file")"".partial_"*
     local found_partial=0
     for f in "$TR_DIR"/$partial_pattern; do
@@ -1278,8 +1278,6 @@ create_language_db_new() {
         found_partial=1
         cat "$f" >> "$final_output_file"
     done
-
-    # 部分ファイル削除（find未使用）
     for f in "$TR_DIR"/$partial_pattern; do
         [ -e "$f" ] && rm "$f"
     done
