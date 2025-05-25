@@ -1211,7 +1211,7 @@ OK_create_language_db_new() {
 # @PARAM: $4 - target_lang_code (string)
 # @PARAM: $5 - max_tasks_limit (integer)
 # @RETURN: 0:success, 1:critical error, 2:partial success
-create_language_db_all() {
+create_language_db_new() {
     local aip_function_name="$1"
     # local api_endpoint_url="$2" # Not used directly in this optimized version's core loop logic
     # local domain_name="$3"      # Not used directly in this optimized version's core loop logic
