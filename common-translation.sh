@@ -898,13 +898,15 @@ display_detected_translation() {
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
 #          propagates create_language_db_parallel exit code on failure.
 translate_main() {
-    # --- Memory check: Skip translation if available memory <= 13MB ---
+    # --- Low spec device check: skip if CPU=1 and available memory <= THRESHOLD ---
+    local cpucore=0
     local available_memory=0
-    if awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null; then
-        available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
+        cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
     fi
-    if [ -z "$available_memory" ] || [ "$available_memory" -le 13 ]; then
-        debug_log "DEBUG" "translate_main: Skipped translation due to low available memory (${available_memory}MB)"
+    available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
+        debug_log "DEBUG" "translate_main: Skipped translation (CPU=1, MemAvailable=${available_memory}MB)"
         return 0
     fi
     
