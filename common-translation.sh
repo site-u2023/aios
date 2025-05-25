@@ -898,13 +898,134 @@ display_detected_translation() {
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
 #          propagates create_language_db_parallel exit code on failure.
 translate_main() {
-    # --- Memory check: Skip translation if total memory <= 127MB ---
-    local memory_total=0
-    if [ -f "${CACHE_DIR}/memory_total.ch" ]; then
-        memory_total=$(cat "${CACHE_DIR}/memory_total.ch" 2>/dev/null)
+    # --- Memory check: Skip translation if available memory <= 13MB ---
+    local available_memory=0
+    if awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null; then
+        available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
     fi
-    if [ -z "$memory_total" ] || [ "$memory_total" -le 127 ]; then
-        debug_log "DEBUG" "translate_main: Skipped translation due to low memory (${memory_total}MB)"
+    if [ -z "$available_memory" ] || [ "$available_memory" -le 13 ]; then
+        debug_log "DEBUG" "translate_main: Skipped translation due to low available memory (${available_memory}MB)"
+        return 0
+    fi
+    
+    # --- Initialization ---
+    if type detect_wget_capabilities >/dev/null 2>&1; then
+        WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
+        debug_log "DEBUG" "translate_main: Wget capability detected: ${WGET_CAPABILITY_DETECTED}"
+    else
+        debug_log "DEBUG" "translate_main: detect_wget_capabilities function not found. Assuming basic wget."
+        WGET_CAPABILITY_DETECTED="basic"
+    fi
+    # --- End Initialization ---
+
+    # --- Translation Control Logic ---
+    local lang_code=""
+    local is_default_lang="false"
+    local target_db=""
+    local db_creation_result=1 # Default to failure/not run
+
+    # 1. Determine Language Code ONLY from Cache
+    if [ -f "${CACHE_DIR}/message.ch" ]; then
+        lang_code=$(cat "${CACHE_DIR}/message.ch")
+        debug_log "DEBUG" "translate_main: Language code read from cache ${CACHE_DIR}/message.ch: ${lang_code}"
+    else
+        lang_code="$DEFAULT_LANGUAGE"
+        debug_log "DEBUG" "translate_main: Cache file ${CACHE_DIR}/message.ch not found, using default language: ${lang_code}"
+    fi
+
+    # 2. Check if it's the default language
+    [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
+    if [ "$is_default_lang" = "true" ]; then
+        debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
+        return 0
+    fi
+
+    debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
+    # 3. Check if target DB exists (Simple file existence check)
+    target_db="${BASE_DIR}/message_${lang_code}.db"
+    debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
+
+    if [ -f "$target_db" ]; then
+        debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Displaying info."
+        display_detected_translation "" # 既存DBの場合は処理時間なし
+        return 0 
+    else
+        debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
+    fi
+    # --- End DB check ---
+
+    # --- メモリ利用状況測定（テスト用INFOログ） ---
+    local mem_before=0
+    mem_before=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+    debug_log "INFO" "translate_main: MemAvailable before translation: ${mem_before}MB"
+
+    # --- Proceed with Translation Process ---
+    # 4. Find the first available translation function...
+    local selected_func=""
+    local func_name=""
+    if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
+         debug_log "DEBUG" "translate_main: AI_TRANSLATION_FUNCTIONS global variable is not set or empty."
+         printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_NO_TRANS_FUNC_VAR")")"
+         return 1
+    fi
+    set -f; set -- $AI_TRANSLATION_FUNCTIONS; set +f
+    for func_name in "$@"; do
+        if type "$func_name" >/dev/null 2>&1; then selected_func="$func_name"; break; fi
+    done
+    if [ -z "$selected_func" ]; then
+        debug_log "DEBUG" "translate_main: No available translation functions found from list: '${AI_TRANSLATION_FUNCTIONS}'."
+        printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_NO_TRANS_FUNC_AVAIL" "list=$AI_TRANSLATION_FUNCTIONS")")"
+        return 1
+    fi
+    debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
+
+    # 5. Determine API URL and Domain Name (for context)
+    local api_endpoint_url=""
+    local domain_name=""
+    case "$selected_func" in
+        "translate_with_google") api_endpoint_url="https://translate.googleapis.com/translate_a/single"; domain_name="translate.googleapis.com" ;;
+        "translate_with_lingva") api_endpoint_url="https://lingva.ml/api/v1/"; domain_name="lingva.ml" ;;
+        *) debug_log "DEBUG" "translate_main: Unknown function ${selected_func}, setting placeholder API info."; api_endpoint_url="N/A"; domain_name="$selected_func" ;;
+    esac
+    debug_log "DEBUG" "translate_main: Using API info context: URL='${api_endpoint_url}', Domain='${domain_name}'"
+
+    # 6. Call create_language_db_parallel
+    debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
+    create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code"
+    db_creation_result=$?
+    debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}. LAST_ELAPSED_SECONDS_TRANSLATION: '$LAST_ELAPSED_SECONDS_TRANSLATION'"
+
+    # --- メモリ利用状況測定（テスト用INFOログ） ---
+    local mem_after=0
+    mem_after=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+    local mem_used=0
+    if [ -n "$mem_before" ] && [ -n "$mem_after" ]; then
+        mem_used=$((mem_before - mem_after))
+        debug_log "INFO" "translate_main: MemAvailable after translation: ${mem_after}MB, Used: ${mem_used}MB"
+    fi
+
+    # 7. Handle Result and Display Info ONLY on Success
+    if [ "$db_creation_result" -eq 0 ]; then
+        debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}. Calling display_detected_translation."
+        display_detected_translation "$LAST_ELAPSED_SECONDS_TRANSLATION"
+        return 0 
+    else
+        debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result}). Not calling display_detected_translation."
+        if [ "$db_creation_result" -eq 2 ]; then # 部分的成功の場合のみメッセージ表示
+             printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "lang=$lang_code")")"
+        fi
+        return "$db_creation_result"
+    fi
+}
+
+OK_translate_main() {
+    # --- Memory check: Skip translation if available memory <= 13MB ---
+    local available_memory=0
+    if awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null; then
+        available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+    fi
+    if [ -z "$available_memory" ] || [ "$available_memory" -le 13 ]; then
+        debug_log "DEBUG" "translate_main: Skipped translation due to low available memory (${available_memory}MB)"
         return 0
     fi
     
