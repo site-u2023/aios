@@ -1004,8 +1004,8 @@ translate_main() {
 # @return: 0:success, 1:critical error, 2:partial success
 create_language_db_new() {
     local aip_function_name="$1"
-    # local api_endpoint_url="$2" # Not used directly
-    # local domain_name="$3"      # Not used directly
+    local api_endpoint_url="$2" # Not used directly in core logic, but kept for interface consistency
+    local domain_name="$3"      # Not used directly in core logic, but kept for interface consistency
     local target_lang_code="$4"
     local max_tasks_limit="$5"
 
@@ -1014,35 +1014,37 @@ create_language_db_new() {
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
     
-    local pids="" # スペース区切りでバックグラウンドジョブのPIDを保持
-    local active_jobs_count=0 # アクティブなジョブのカウンター
-    local pid=""
+    local pids="" # PIDリスト (例: "PID1" または "PID1 PID2 PID3")
+    local pid_to_launch="" # 起動したサブプロセスのPID
     local exit_status=0
     local line_from_awk=""
+    
+    # --- MODIFIED: active_jobs_count for ash compatibility ---
+    local active_jobs_count=0 # シェル変数でアクティブジョブ数を管理
 
     case "$max_tasks_limit" in
-        ''|*[!0-9]*)
-            debug_log "DEBUG" "create_language_db_new: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
+        ''|*[!0-9]*) 
+            debug_log "DEBUG" "create_language_db_all: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
             max_tasks_limit=1
             ;;
-        0)
-            debug_log "DEBUG" "create_language_db_new: Received max_tasks_limit=0. Defaulting to 1."
+        0) 
+            debug_log "DEBUG" "create_language_db_all: Received max_tasks_limit=0. Defaulting to 1."
             max_tasks_limit=1
             ;;
-        *)
-            :
+        *) 
+            : 
             ;;
     esac
-    debug_log "DEBUG" "create_language_db_new: Using parallelism limit: $max_tasks_limit"
-
-    debug_log "DEBUG" "create_language_db_new: Starting parallel translation (dynamic PID management) for language '$target_lang_code'."
+    debug_log "DEBUG" "create_language_db_all: Using parallelism limit: $max_tasks_limit"
+    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
     local current_max_parallel_tasks="$max_tasks_limit"
+    debug_log "DEBUG" "create_language_db_all: Max parallel tasks set from argument: $current_max_parallel_tasks"
 
-    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_new: Failed to create final output directory: $final_output_dir"; return 1; }
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_all: Failed to create final output directory: $final_output_dir"; return 1; }
     >"$final_output_file"
     if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_new: Failed to initialize output file $final_output_file"
-        exit_status=1 
+        debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
+        exit_status=1
     else
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
             ( 
@@ -1056,7 +1058,7 @@ create_language_db_new() {
                 if [ -n "$translated_line" ]; then
                      local partial_suffix=""
                      mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
-                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")"
+                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" 
 
                      if date '+%N' >/dev/null 2>&1; then
                         partial_suffix="$$$(date '+%N')"
@@ -1068,90 +1070,77 @@ create_language_db_new() {
                      local write_status=$?
                      if [ "$write_status" -ne 0 ]; then
                          debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
-                         exit 1
+                         exit 1 
                      fi
                 fi
-                exit 0
-            ) &
-            pid=$!
-            pids="$pids $pid" 
+                exit 0 
+            ) & 
+            pid_to_launch=$!
+            # --- MODIFIED: pids 変数の管理を堅牢化 ---
+            if [ -z "$pids" ]; then
+                pids="$pid_to_launch"
+            else
+                pids="$pids $pid_to_launch" # スペース区切りでPIDを追加
+            fi
+            # --- MODIFIED: active_jobs_count をインクリメント ---
             active_jobs_count=$((active_jobs_count + 1))
-            
+
+            # --- MODIFIED: Use active_jobs_count for job control (ash compatible) ---
             while [ "$active_jobs_count" -ge "$current_max_parallel_tasks" ]; do
-                # pids リストの先頭のPIDを取得 (最も古いジョブ)
-                # pids は " PID1 PID2 PID3 " のような形式になっている可能性がある (先頭にスペース)
-                local first_pid_candidate=""
-                # shellcheck disable=SC2086 # 意図的にスペースで分割
-                for fpc in $pids; do # リストの最初の非空要素を取得
-                    first_pid_candidate="$fpc"
-                    break
-                done
-                local oldest_pid="$first_pid_candidate"
+                # --- oldest_pid の取得 (ユーザー提示の cut 方式を維持) ---
+                # pids は "PID1" または "PID1 PID2..." の形式を想定
+                local oldest_pid=$(echo "$pids" | cut -d' ' -f1) 
 
                 if [ -n "$oldest_pid" ]; then
-                    if wait "$oldest_pid"; then
-                        :
+                    if wait "$oldest_pid" >/dev/null 2>&1; then
+                        : 
                     else
-                        debug_log "DEBUG" "create_language_db_new: Background task PID $oldest_pid may have failed or already exited (status $?)."
+                        debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed or already exited."
                     fi
-                    # 終了したPIDをリストから削除 (先頭のPIDとそれに続くスペースを削除)
-                    pids="${pids#*$oldest_pid }" # oldest_pidとその直後のスペースまでを削除しようと試みる
-                                                # これだと、もしoldest_pidが複数回現れると問題。
-                                                # より安全なのは、一度 set -- で分解して shift する方法だが、それが遅いという指摘だった。
-                                                # ここでは、単純な文字列置換に戻すが、ashの制約上、完璧なPIDリスト管理は難しい。
-                                                # 一旦、よりシンプルな削除方法に戻す。
-                    # pidsリストの先頭から oldest_pid (とそれに続くスペース) を削除する
-                    # 例: pids=" 123 456" oldest_pid="123" -> pids=" 456"
-                    # 例: pids="123 456" oldest_pid="123" -> pids="456"
-                    # 例: pids=" 123 " oldest_pid="123" -> pids=" "
-                    local temp_pids=""
-                    local found_oldest=0
-                    # shellcheck disable=SC2086
-                    for p_item in $pids; do
-                        if [ "$p_item" = "$oldest_pid" ] && [ "$found_oldest" -eq 0 ]; then
-                            found_oldest=1 # 一致したら、そのPIDは追加しない（削除扱い）
-                        else
-                            temp_pids="$temp_pids $p_item"
-                        fi
-                    done
-                    pids="$temp_pids"
-
+                    # --- PIDの削除 (ユーザー提示の sed 方式を維持、堅牢化) ---
+                    # oldest_pid がリストの唯一の要素だった場合と、複数の要素の先頭だった場合に対応
+                    if [ "$pids" = "$oldest_pid" ]; then # リストに oldest_pid しかない場合
+                        pids=""
+                    else
+                        # リストの先頭の oldest_pid とそれに続くスペースを削除
+                        pids=$(echo "$pids" | sed "s/^$oldest_pid //")
+                    fi
+                    # --- MODIFIED: active_jobs_count をデクリメント ---
                     active_jobs_count=$((active_jobs_count - 1))
                 else
-                    debug_log "DEBUG" "create_language_db_new: active_jobs_count >= limit but oldest_pid is empty. Resetting count."
-                    active_jobs_count=0 
-                    break 
+                    debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
+                    sleep 1
                 fi
             done
         done
-        # PIPESTATUS[0] はash非互換のため使用しない
+        
+        local pipe_status=$? # while ループ (パイプラインの最後) の終了ステータス
+        if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
+             debug_log "DEBUG" "create_language_db_all: Warning: Error during awk/while processing (pipe status: $pipe_status)."
+        fi
 
-        if [ "$exit_status" -ne 1 ]; then 
-            debug_log "DEBUG" "create_language_db_new: Waiting for remaining background tasks ($active_jobs_count tasks, PIDs:$pids)..."
-            local wait_failed_count=0
-            # shellcheck disable=SC2086
-            for remaining_pid in $pids; do
-                if [ -n "$remaining_pid" ]; then 
-                    if wait "$remaining_pid"; then
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
+            local wait_failed=0
+            # shellcheck disable=SC2086 # 意図的に$pidsをスペースで分割
+            for pid_to_wait in $pids; do # pidsはクォートなしで展開
+                if [ -n "$pid_to_wait" ]; then # PIDが空でないことを確認
+                    if wait "$pid_to_wait"; then
                         : 
                     else
-                        wait_failed_count=$((wait_failed_count + 1))
-                        debug_log "DEBUG" "create_language_db_new: Remaining task PID $remaining_pid failed or exited with non-zero status (status $?)."
+                        wait_failed=1
+                        debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid_to_wait failed or exited with non-zero status."
                     fi
                 fi
             done
-            active_jobs_count=0 
-            pids="" 
-
-            if [ "$wait_failed_count" -gt 0 ] && [ "$exit_status" -eq 0 ]; then
-                exit_status=2 
+            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
+                exit_status=2
             fi
-            debug_log "DEBUG" "create_language_db_new: All background tasks finished."
+            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
         fi
 
-        # Combine partial results (logic from previous working version)
         if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_new: Combining partial results..."
+            debug_log "DEBUG" "create_language_db_all: Combining partial results using find..."
             local partial_pattern="$(basename "$final_output_file")"".partial_*"
             local found_partial=0
 
@@ -1160,52 +1149,55 @@ create_language_db_new() {
             fi
 
             if [ "$found_partial" -eq 1 ]; then
-                 debug_log "DEBUG" "create_language_db_new: Found partial files matching '$partial_pattern' in $TR_DIR."
+                 debug_log "DEBUG" "create_language_db_all: Found partial files matching '$partial_pattern' in $TR_DIR."
                  if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} + >> "$final_output_file"); then
-                      debug_log "DEBUG" "create_language_db_new: Partial files combined successfully."
-                      debug_log "DEBUG" "create_language_db_new: Attempting to remove partial files..."
+                      debug_log "DEBUG" "create_language_db_all: Partial files combined successfully into $final_output_file."
+                      debug_log "DEBUG" "create_language_db_all: Attempting to remove partial files using find and rm loop..."
                       if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
                           file_to_delete="${file_to_delete#./}"
-                          if [ -n "$file_to_delete" ]; then
-                              rm -- "$file_to_delete"
+                          if [ -n "$file_to_delete" ]; then 
+                              debug_log "DEBUG" "create_language_db_all: Removing partial file: $file_to_delete"
+                              rm -- "$file_to_delete" 
                               if [ $? -ne 0 ]; then
-                                  debug_log "DEBUG" "create_language_db_new: Warning: Failed to remove partial file: $file_to_delete"
+                                  debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial file: $file_to_delete"
                               fi
                           fi
+                          if [ $? -ne 0 ]; then # read のステータスチェック (通常は不要)
+                              debug_log "DEBUG" "create_language_db_all: Warning: read command failed in rm loop."
+                          fi
                       done); then
-                          debug_log "DEBUG" "create_language_db_new: Warning: Error occurred during partial file removal."
+                          debug_log "DEBUG" "create_language_db_all: Warning: Error occurred during find or rm loop for partial files in $TR_DIR."
                       else
-                          debug_log "DEBUG" "create_language_db_new: Partial files removal completed."
+                          debug_log "DEBUG" "create_language_db_all: Partial files removal process completed."
                           if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
-                              debug_log "DEBUG" "create_language_db_new: Warning: Some partial files might still remain after removal."
+                              debug_log "DEBUG" "create_language_db_all: Warning: Some partial files might still remain in $TR_DIR after removal attempt."
                           else
-                              debug_log "DEBUG" "create_language_db_new: Confirmed no partial files remain."
+                              debug_log "DEBUG" "create_language_db_all: Confirmed no partial files remain matching pattern in $TR_DIR."
                           fi
                       fi
                  else
-                     debug_log "DEBUG" "create_language_db_new: Failed to combine partial files."
-                     [ "$exit_status" -eq 0 ] && exit_status=1 # Critical error if cat fails
+                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using find/cat."
+                     [ "$exit_status" -eq 0 ] && exit_status=1 
                  fi
             else
-                debug_log "DEBUG" "create_language_db_new: No partial files found to combine."
+                debug_log "DEBUG" "create_language_db_all: No partial files found in $TR_DIR matching '$partial_pattern' to combine."
                 if [ ! -s "$final_output_file" ]; then
                     local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
                     if [ -n "$base_lines_exist" ]; then
-                         debug_log "DEBUG" "create_language_db_new: Warning: Base DB had lines, but final file is empty. Potential issue."
+                         debug_log "DEBUG" "create_language_db_all: Warning: Base DB had lines, but no partial files were generated and final file is empty. Potential issue."
                          [ "$exit_status" -eq 0 ] && exit_status=2
                     fi
                 fi
             fi
         fi
 
-        # Add completion marker
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             if [ $? -ne 0 ]; then
-                debug_log "DEBUG" "create_language_db_new: Failed to append completion marker."
+                debug_log "DEBUG" "create_language_db_all: Failed to append completion marker."
                 [ "$exit_status" -eq 0 ] && exit_status=2
             else
-                debug_log "DEBUG" "create_language_db_new: Completion marker added."
+                debug_log "DEBUG" "create_language_db_all: Completion marker added."
             fi
         fi
     fi 
