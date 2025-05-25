@@ -331,28 +331,46 @@ detect_and_save_package_manager() {
     fi
 }
 
-# OpenWrtでシステムのCPU数を検出する関数
-detect_cpu_cores() {
+# OpenWrtでシステムのCPUコア数・メモリ・フラッシュ容量を検出しキャッシュに保存する関数
+detect_device() {
+    # CPUコア数検出
     local cpu_count=1
-    
-    # OpenWrtでは/proc/cpuinfoからプロセッサ数を取得
     if [ -f /proc/cpuinfo ]; then
         cpu_count=$(grep -c "^processor" /proc/cpuinfo)
     fi
-    
-    # 不正な値の場合はデフォルト値を使用
     if [ "$cpu_count" -lt 1 ]; then
         cpu_count=1
     fi
-    
-    # グローバル変数にセット
     CPU_CORES="$cpu_count"
-    
-    # キャッシュファイルに保存
+
+    # メモリ総量（MB単位）検出
+    local memory_total=0
+    if [ -f /proc/meminfo ]; then
+        memory_total=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+    fi
+    if [ -z "$memory_total" ] || [ "$memory_total" -lt 1 ]; then
+        memory_total=0
+    fi
+    MEMORY_TOTAL="$memory_total"
+
+    # フラッシュ総容量（MB単位）検出
+    # "/" マウントポイントのブロックサイズ
+    local flash_total=0
+    flash_total=$(df -m / 2>/dev/null | awk 'NR==2{print $2}')
+    if [ -z "$flash_total" ] || [ "$flash_total" -lt 1 ]; then
+        flash_total=0
+    fi
+    FLASH_TOTAL="$flash_total"
+
+    # キャッシュ保存
     mkdir -p "$CACHE_DIR" 2>/dev/null
     printf "%s\n" "$cpu_count" > "${CACHE_DIR}/cpu_core.ch"
-    
-    debug_log "DEGUB" "Detected CPU cores: ${cpu_count}"
+    printf "%s\n" "$memory_total" > "${CACHE_DIR}/memory_total.ch"
+    printf "%s\n" "$flash_total" > "${CACHE_DIR}/flash_total.ch"
+
+    debug_log "DEBUG" "Detected CPU cores: $cpu_count"
+    debug_log "DEBUG" "Detected memory total: $memory_total MB"
+    debug_log "DEBUG" "Detected flash total: $flash_total MB"
 }
 
 # wgetの機能を検出する関数（キャッシュ対応版）
@@ -432,7 +450,7 @@ debug_info() {
 
 # メイン処理
 common_system_main() {
-    detect_cpu_cores
+    detect_device
     get_usb_devices
     detect_and_save_package_manager
 }
