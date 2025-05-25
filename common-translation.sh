@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025-05-26-00-06"
+SCRIPT_VERSION="2025-05-26-00-07"
 
 # 基本定数の設定
 DEBUG_MODE="${DEBUG_MODE:-false}"
@@ -1224,62 +1224,47 @@ create_language_db_new() {
     local exit_status=0
     local line_from_awk=""
 
-    # Input validation for the limit
     case "$max_tasks_limit" in
         ''|*[!0-9]*) 
-            debug_log "DEBUG" "create_language_db_new: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
             max_tasks_limit=1
             ;;
         0) 
-            debug_log "DEBUG" "create_language_db_new: Received max_tasks_limit=0. Defaulting to 1."
             max_tasks_limit=1
             ;;
         *) 
             : 
             ;;
     esac
-    debug_log "DEBUG" "create_language_db_new: Using parallelism limit: $max_tasks_limit"
 
-    debug_log "DEBUG" "create_language_db_new: Starting parallel translation (line-by-line, OpenWrt 19.x compatible) for language '$target_lang_code'."
     local current_max_parallel_tasks="$max_tasks_limit"
-    debug_log "DEBUG" "create_language_db_new: Max parallel tasks set from argument: $current_max_parallel_tasks"
 
-    # Initialize output file
-    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_new: Failed to create final output directory: $final_output_dir"; return 1; }
+    mkdir -p "$final_output_dir" || { return 1; }
     >"$final_output_file"
     if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_new: Failed to initialize output file $final_output_file"
         exit_status=1
     else
-        # Main processing: line-by-line parallel translation (OpenWrt 19.x compatible)
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # Subshell for translate_single_line execution
             ( 
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
                 local func="$aip_function_name"
                 local outfile_base="$final_output_file"
 
-                # Generate temporary file with OpenWrt 19.x compatible naming
                 local translated_line
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
                 if [ -n "$translated_line" ]; then
                      local partial_suffix=""
-                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
+                     mkdir -p "$TR_DIR" || { exit 1; }
                      local partial_file_path="${TR_DIR}/$(basename "$outfile_base")"
 
-                     # OpenWrt 19.x compatible timestamp generation
-                     if command -v date >/dev/null 2>&1 && date '+%N' >/dev/null 2>&1; then
+                     if date '+%N' >/dev/null 2>&1; then
                         partial_suffix="$$$(date '+%N')"
                      else
-                        # Fallback for OpenWrt 19.x: use seconds + process ID
-                        partial_suffix="$$$(date '+%s')_$$"
+                        partial_suffix="$$$(date '+%s')"
                      fi
                      
                      printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
-                     local write_status=$?
-                     if [ "$write_status" -ne 0 ]; then
-                         debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
+                     if [ $? -ne 0 ]; then
                          exit 1
                      fi
                 fi
@@ -1289,19 +1274,12 @@ create_language_db_new() {
             pid=$!
             pids="$pids $pid"
 
-            # Job control with OpenWrt 19.x compatible commands
             while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
                 oldest_pid=$(echo "$pids" | cut -d' ' -f1)
                 if [ -n "$oldest_pid" ]; then
-                    if wait "$oldest_pid" >/dev/null 2>&1; then
-                        : # Success
-                    else
-                        debug_log "DEBUG" "create_language_db_new: Background task PID $oldest_pid may have failed or already exited."
-                    fi
-                    # Remove the PID using sed
+                    wait "$oldest_pid" >/dev/null 2>&1
                     pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                 else
-                    debug_log "DEBUG" "create_language_db_new: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
                     sleep 1
                 fi
             done
@@ -1309,77 +1287,43 @@ create_language_db_new() {
 
         local pipe_status=$?
         if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
-             debug_log "DEBUG" "create_language_db_new: Warning: Error during awk/while processing (pipe status: $pipe_status)."
+             exit_status=2
         fi
 
-        # Wait for remaining background tasks
         if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_new: Waiting for remaining background tasks..."
             local wait_failed=0
             for pid in $pids; do
                 if [ -n "$pid" ]; then
-                    if wait "$pid"; then
-                        : # Success
-                    else
+                    if ! wait "$pid" >/dev/null 2>&1; then
                         wait_failed=1
-                        debug_log "DEBUG" "create_language_db_new: Remaining task PID $pid failed or exited with non-zero status."
                     fi
                 fi
             done
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                 exit_status=2
             fi
-            debug_log "DEBUG" "create_language_db_new: All background tasks finished."
         fi
 
-        # Combine partial results using OpenWrt 19.x compatible commands
         if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_new: Combining partial results using OpenWrt 19.x compatible method..."
             local partial_pattern="$(basename "$final_output_file")"".partial_*"
-            local found_partial=0
-
-            # Check if any partial files exist using basic find
-            if ls "${TR_DIR}/${partial_pattern}" >/dev/null 2>&1; then
-                found_partial=1
-            fi
-
-            if [ "$found_partial" -eq 1 ]; then
-                 debug_log "DEBUG" "create_language_db_new: Found partial files matching '$partial_pattern' in $TR_DIR."
-                 # Combine using basic cat command for OpenWrt 19.x compatibility
-                 if cat "${TR_DIR}/${partial_pattern}" >> "$final_output_file" 2>/dev/null; then
-                      debug_log "DEBUG" "create_language_db_new: Partial files combined successfully into $final_output_file."
-
-                      # Remove partial files using basic rm for OpenWrt 19.x compatibility
-                      debug_log "DEBUG" "create_language_db_new: Attempting to remove partial files using basic rm..."
-                      if rm "${TR_DIR}/${partial_pattern}" 2>/dev/null; then
-                          debug_log "DEBUG" "create_language_db_new: Partial files removal completed."
-                      else
-                          debug_log "DEBUG" "create_language_db_new: Warning: Some partial files might remain in $TR_DIR."
-                      fi
-                 else
-                     debug_log "DEBUG" "create_language_db_new: Failed to combine partial files using cat."
-                     [ "$exit_status" -eq 0 ] && exit_status=1
-                 fi
+            
+            if ls "${TR_DIR}/"${partial_pattern} >/dev/null 2>&1; then
+                 cat "${TR_DIR}/"${partial_pattern} >> "$final_output_file" 2>/dev/null
+                 rm "${TR_DIR}/"${partial_pattern} 2>/dev/null
             else
-                debug_log "DEBUG" "create_language_db_new: No partial files found in $TR_DIR matching '$partial_pattern' to combine."
                 if [ ! -s "$final_output_file" ]; then
                     local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
                     if [ -n "$base_lines_exist" ]; then
-                         debug_log "DEBUG" "create_language_db_new: Warning: Base DB had lines, but no partial files were generated and final file is empty. Potential issue."
                          [ "$exit_status" -eq 0 ] && exit_status=2
                     fi
                 fi
             fi
         fi
 
-        # Add completion marker
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             if [ $? -ne 0 ]; then
-                debug_log "DEBUG" "create_language_db_new: Failed to append completion marker."
                 [ "$exit_status" -eq 0 ] && exit_status=2
-            else
-                debug_log "DEBUG" "create_language_db_new: Completion marker added."
             fi
         fi
     fi
