@@ -1209,7 +1209,8 @@ OK_create_language_db_new() {
 # @return: 0:success, 1:critical error, 2:partial success
 create_language_db_new() {
     local aip_function_name="$1"
-    # api_endpoint_url, domain_name は現状直接使われていないが、インターフェースとして維持
+    # local api_endpoint_url="$2" # Maintained for interface consistency
+    # local domain_name="$3"      # Maintained for interface consistency
     local target_lang_code="$4"
     local max_tasks_limit="$5"
 
@@ -1218,8 +1219,8 @@ create_language_db_new() {
     local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
     local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
     
-    local pids="" 
-    local pid_to_launch="" 
+    local pids="" # PID list (e.g., "PID1" or "PID1 PID2 PID3")
+    local pid_to_launch="" # PID of the launched subshell
     local exit_status=0
     local line_from_awk=""
 
@@ -1236,7 +1237,7 @@ create_language_db_new() {
             : 
             ;;
     esac
-    # 主要な開始ログのみ残す (INFOレベルを推奨)
+    # 主要な開始ログのみ INFO レベルで残す
     debug_log "INFO" "create_language_db_new: Starting translation for '$target_lang_code'. Parallelism limit: $max_tasks_limit."
 
     mkdir -p "$final_output_dir" || { debug_log "ERROR" "create_language_db_new: Failed to create final output directory: $final_output_dir"; return 1; }
@@ -1245,6 +1246,7 @@ create_language_db_new() {
         debug_log "ERROR" "create_language_db_new: Failed to initialize output file $final_output_file"
         exit_status=1
     else
+        local current_max_parallel_tasks="$max_tasks_limit"
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
             ( 
                 local current_line="$line_from_awk"
@@ -1256,8 +1258,7 @@ create_language_db_new() {
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
                 if [ -n "$translated_line" ]; then
                      local partial_suffix=""
-                     # サブシェル内のmkdir失敗は致命的だが、ログは親プロセス側で検知しづらい。exit 1で対応。
-                     mkdir -p "$TR_DIR" || { exit 1; } 
+                     mkdir -p "$TR_DIR" || { exit 1; } # サブシェル内エラーはログ出力せず終了
                      local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" 
 
                      if date '+%N' >/dev/null 2>&1; then
@@ -1274,28 +1275,33 @@ create_language_db_new() {
                 exit 0 
             ) & 
             pid_to_launch=$!
+            # --- MODIFIED: Robust pids variable update to prevent leading spaces (ユーザー提供コードのロジック維持) ---
             if [ -z "$pids" ]; then
-                pids="$pid_to_launch"
+                pids="$pid_to_launch" # First PID, no leading space
             else
-                pids="$pids $pid_to_launch"
+                pids="$pids $pid_to_launch" # Subsequent PIDs, space separated
             fi
 
             # --- Job control using `jobs -p | wc -l` (User's original logic) ---
             # ループ内のログはパフォーマンス影響大のため原則削除
             while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                # --- oldest_pid extraction using `cut` (User's original logic) ---
                 local oldest_pid=$(echo "$pids" | cut -d' ' -f1) 
 
                 if [ -n "$oldest_pid" ]; then
-                    wait "$oldest_pid" >/dev/null 2>&1 # wait失敗時のログも抑制 (必要ならエラーハンドリングで個別対応)
+                    wait "$oldest_pid" >/dev/null 2>&1 # wait失敗時のログも抑制
                     
-                    if [ "$pids" = "$oldest_pid" ]; then 
+                    # --- PID removal using `sed` (User's original logic, slightly adjusted for robustness in user's code) ---
+                    if [ "$pids" = "$oldest_pid" ]; then # If it's the only PID in the list
                         pids=""
                     else
+                        # Remove the oldest_pid and the following space from the beginning of the list
                         pids=$(echo "$pids" | sed "s/^$oldest_pid //")
                     fi
                 else
                     # oldest_pid が空の場合の sleep 1 は維持。ログは出さない。
-                    sleep 1 
+                    # debug_log "DEBUG" "create_language_db_new: oldest_pid is empty (pids='$pids'), but job count high. Waiting." # 最小限化
+                    sleep 1 # Original sleep logic
                 fi
             done
         done
@@ -1309,12 +1315,11 @@ create_language_db_new() {
             # debug_log "DEBUG" "create_language_db_new: Waiting for remaining background tasks..." # 最小限化
             local wait_failed=0
             # shellcheck disable=SC2086
-            for pid_to_wait in $pids; do 
+            for pid_to_wait in $pids; do # ユーザー様が受け入れた変数名変更
                 if [ -n "$pid_to_wait" ]; then 
                     if ! wait "$pid_to_wait" >/dev/null 2>&1; then # wait失敗時のログは抑制
                         wait_failed=1
-                        # 非常に重要なエラーのみログ出しを検討 (例: WARNレベル)
-                        # debug_log "WARN" "create_language_db_new: Remaining task PID $pid_to_wait failed or exited."
+                        # debug_log "WARN" "create_language_db_new: Remaining task PID $pid_to_wait failed or exited." # 重要な場合のみ残す
                     fi
                 fi
             done
@@ -1352,7 +1357,7 @@ create_language_db_new() {
                       else
                           # debug_log "DEBUG" "create_language_db_new: Partial files removal completed." # 最小限化
                           if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
-                              debug_log "WARN" "create_language_db_new: Warning: Some partial files might still remain in $TR_DIR."
+                              debug_log "WARN" "create_language_db_new: Warning: Some partial files might still remain in $TR_DIR." # ログの関数名を修正
                           fi
                       fi
                  else
