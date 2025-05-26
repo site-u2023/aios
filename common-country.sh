@@ -1224,12 +1224,6 @@ country_main() {
     fi
     available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
 
-    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
-        debug_log "DEBUG" "country_main: Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping location setup prompt."
-        # 低スペック時は何もせずに正常終了として扱う (translate_main側で別途スキップ判定される)
-        return 0
-    fi
-    
     debug_log "DEBUG" "Entering country_main() with argument: '$country_arg'"
 
     # ステップ1: 引数による設定試行
@@ -1263,12 +1257,21 @@ country_main() {
 
     if [ "$setup_result" -eq 0 ]; then
         debug_log "DEBUG" "Country and timezone selection completed. Applying to system configuration."
-        if command -v setup_location >/dev/null 2>&1; then
-            setup_location
+        if setup_location; then
+            debug_log "DEBUG" "System location applied"
         else
-            debug_log "DEBUG" "setup_location function not found. Cannot apply system configuration."
+            debug_log "DEBUG" "System location setup failed"
         fi
-        # --- setup_location 呼び出しここまで ---
+
+        # ★★★ 修正箇所ここから ★★★
+        # 低スペック（CPU=1, Mem<=15MB）の場合のみ翻訳スキップ
+        if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
+            debug_log "DEBUG" "Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping translation generation only."
+        else
+            translate_main
+        fi
+        # ★★★ 修正箇所ここまで ★★★
+
         debug_log "DEBUG" "country_main() completed successfully after attempting system setup."
         return 0
     else
