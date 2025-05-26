@@ -1218,11 +1218,6 @@ country_main() {
     local setup_result=1 # デフォルトは失敗
     local cpucore=""
     local available_memory=""
-    
-    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
-        cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
-    fi
-    available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
 
     debug_log "DEBUG" "Entering country_main() with argument: '$country_arg'"
 
@@ -1262,15 +1257,7 @@ country_main() {
         else
             debug_log "DEBUG" "System location setup failed"
         fi
-
-        # ★★★ 修正箇所ここから ★★★
-        # 低スペック（CPU=1, Mem<=15MB）の場合のみ翻訳スキップ
-        if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
-            debug_log "DEBUG" "Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping translation generation only."
-        else
-            translate_main
-        fi
-        # ★★★ 修正箇所ここまで ★★★
+        translate_main
 
         debug_log "DEBUG" "country_main() completed successfully after attempting system setup."
         return 0
