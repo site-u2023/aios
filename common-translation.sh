@@ -908,7 +908,7 @@ translate_main() {
         cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
     fi
     available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
-    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
+    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 7 ]; then
         debug_log "DEBUG" "Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping translate_main."
         return 0
     fi
