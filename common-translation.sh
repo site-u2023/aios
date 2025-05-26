@@ -901,6 +901,18 @@ display_detected_translation() {
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
 #          propagates create_language_db_parallel exit code on failure.
 translate_main() {
+    # 低スペック環境の場合は即スキップ
+    local cpucore=""
+    local available_memory=""
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
+        cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
+    fi
+    available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 ]; then
+        debug_log "DEBUG" "Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping translate_main."
+        return 0
+    fi
+
     # --- Initialization ---
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
