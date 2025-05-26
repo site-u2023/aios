@@ -901,18 +901,6 @@ display_detected_translation() {
 # @RETURN: 0 on success/no translation needed, 1 on critical error,
 #          propagates create_language_db_parallel exit code on failure.
 translate_main() {
-    # 低スペック環境の場合は即スキップ
-    local cpucore=""
-    local available_memory=""
-    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
-        cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
-    fi
-    available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
-    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 12 ]; then
-        debug_log "DEBUG" "Low spec environment detected (CPU=1, MemAvailable=${available_memory}MB). Skipping translate_main."
-        return 0
-    fi
-
     # --- Initialization ---
     if type detect_wget_capabilities >/dev/null 2>&1; then
         WGET_CAPABILITY_DETECTED=$(detect_wget_capabilities)
@@ -923,13 +911,36 @@ translate_main() {
     fi
     # --- End Initialization ---
 
+    # --- Low Spec Check ---
+    local cpucore=""
+    local available_memory=""
+    if [ -f "${CACHE_DIR}/cpu_core.ch" ]; then
+        cpucore=$(cat "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)
+    else
+        cpucore=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo "1")
+        debug_log "DEBUG" "translate_main: cpu_core.ch not found, directly fetched CPU cores: '${cpucore}'"
+    fi
+    if [ -f /proc/meminfo ]; then
+        available_memory=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+    else
+        available_memory=""
+        debug_log "DEBUG" "translate_main: /proc/meminfo not found, cannot determine available memory."
+    fi
+    debug_log "DEBUG" "translate_main: Low spec check values - CPUCore='${cpucore}', AvailableMemory='${available_memory}MB'"
+    if [ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 12 ]; then
+        debug_log "DEBUG" "translate_main: Low spec environment detected (CPU='${cpucore}', Mem='${available_memory}MB' <= 15MB). Skipping translation."
+        return 0
+    else
+        debug_log "DEBUG" "translate_main: Not a low spec environment or check failed. Proceeding. CPUCore='${cpucore}', AvailableMemory='${available_memory}MB', Threshold=15MB. ConditionMetForSkip='$([ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 && echo true || echo false)'"
+    fi
+    # --- End Low Spec Check ---
+
     # --- Translation Control Logic ---
     local lang_code=""
     local is_default_lang="false"
     local target_db=""
-    local db_creation_result=1 # Default to failure/not run
+    local db_creation_result=1
 
-    # 1. Determine Language Code ONLY from Cache
     if [ -f "${CACHE_DIR}/message.ch" ]; then
         lang_code=$(cat "${CACHE_DIR}/message.ch")
         debug_log "DEBUG" "translate_main: Language code read from cache ${CACHE_DIR}/message.ch: ${lang_code}"
@@ -938,7 +949,6 @@ translate_main() {
         debug_log "DEBUG" "translate_main: Cache file ${CACHE_DIR}/message.ch not found, using default language: ${lang_code}"
     fi
 
-    # 2. Check if it's the default language
     [ "$lang_code" = "$DEFAULT_LANGUAGE" ] && is_default_lang="true"
     if [ "$is_default_lang" = "true" ]; then
         debug_log "DEBUG" "translate_main: Target language is the default language (${lang_code}). No translation needed."
@@ -946,21 +956,18 @@ translate_main() {
     fi
 
     debug_log "DEBUG" "translate_main: Target language (${lang_code}) requires processing."
-    # 3. Check if target DB exists (Simple file existence check)
     target_db="${BASE_DIR}/message_${lang_code}.db"
     debug_log "DEBUG" "translate_main: Checking for existing target DB: ${target_db}"
 
     if [ -f "$target_db" ]; then
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' exists for '${lang_code}'. Displaying info."
-        display_detected_translation "" # 既存DBの場合は処理時間なし
-        return 0 
+        display_detected_translation ""
+        printf "\n" # ★★★ 追加: display_detected_translation の後に改行 ★★★
+        return 0
     else
         debug_log "DEBUG" "translate_main: Target DB '${target_db}' does not exist. Proceeding with creation."
     fi
-    # --- End DB check ---
 
-    # --- Proceed with Translation Process ---
-    # 4. Find the first available translation function...
     local selected_func=""
     local func_name=""
     if [ -z "$AI_TRANSLATION_FUNCTIONS" ]; then
@@ -979,7 +986,6 @@ translate_main() {
     fi
     debug_log "DEBUG" "translate_main: Selected translation function: ${selected_func}"
 
-    # 5. Determine API URL and Domain Name (for context)
     local api_endpoint_url=""
     local domain_name=""
     case "$selected_func" in
@@ -989,24 +995,23 @@ translate_main() {
     esac
     debug_log "DEBUG" "translate_main: Using API info context: URL='${api_endpoint_url}', Domain='${domain_name}'"
 
-    # 6. Call create_language_db_parallel
-    debug_log "DEBUG" "translate_main: Calling create_language_db_parallel for language '${lang_code}' using function '${selected_func}'"
     create_language_db_parallel "$selected_func" "$api_endpoint_url" "$domain_name" "$lang_code"
     db_creation_result=$?
     debug_log "DEBUG" "translate_main: create_language_db_parallel finished with status: ${db_creation_result}. LAST_ELAPSED_SECONDS_TRANSLATION: '$LAST_ELAPSED_SECONDS_TRANSLATION'"
 
-    # 7. Handle Result and Display Info ONLY on Success
     if [ "$db_creation_result" -eq 0 ]; then
         debug_log "DEBUG" "translate_main: Language DB creation successful for ${lang_code}. Calling display_detected_translation."
         display_detected_translation "$LAST_ELAPSED_SECONDS_TRANSLATION"
-        return 0 
+        printf "\n" # ★★★ 追加: display_detected_translation の後に改行 ★★★
+        return 0
     else
         debug_log "DEBUG" "translate_main: Language DB creation failed for ${lang_code} (Exit status: ${db_creation_result}). Not calling display_detected_translation."
-        if [ "$db_creation_result" -eq 2 ]; then # 部分的成功の場合のみメッセージ表示
+        if [ "$db_creation_result" -eq 2 ]; then
              printf "%s\n" "$(color yellow "$(get_message "MSG_ERR_TRANSLATION_FAILED" "l=$lang_code")")"
+             # 失敗時や部分的成功時は、display_detected_translation を呼ばないので、ここでは printf "\n" は不要
         fi
         return "$db_creation_result"
-        printf "\n"
+        # printf "\n" # この行は元々実行されない
     fi
 }
 
