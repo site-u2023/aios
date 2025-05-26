@@ -1257,7 +1257,7 @@ country_main() {
         else
             debug_log "DEBUG" "System location setup failed"
         fi
-        translate_main
+        # translate_main # <<< この行を削除しました
 
         debug_log "DEBUG" "country_main() completed successfully after attempting system setup."
         return 0
