@@ -889,7 +889,7 @@ display_detected_translation() {
 
     debug_log "DEBUG" "Translation information display completed for ${lang_code}"
 
-    printf "\n"
+    # printf "\n"
 }
 
 # @FUNCTION: translate_main
