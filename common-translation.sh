@@ -335,8 +335,7 @@ create_language_db_19() {
 # @param $4: target_lang_code (string) - Target language code (e.g., "ja")
 # @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed.
 # @return: 0:success, 1:critical error, 2:partial success
-# 15s
-OK_create_language_db_all() {
+create_language_db_all() {
 
     local aip_function_name="$1"
     local api_endpoint_url="$2" # Maintained for interface consistency
@@ -545,7 +544,7 @@ OK_create_language_db_all() {
 # @param $4: target_lang_code (string) - Target language code (e.g., "ja")
 # @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed. # NEW ARGUMENT
 # @return: 0:success, 1:critical error, 2:partial success
-create_language_db_all() {
+OK_create_language_db_all() {
     # 引数受け取り (変更なし)
     local aip_function_name="$1"
     local api_endpoint_url="$2"
