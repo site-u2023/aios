@@ -389,24 +389,18 @@ create_language_db_all() {
         debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
         exit_status=1
     else
-        # --- メイン処理: 行ベースで並列翻訳 (Original Logic) ---
-        # Note: awk does not use -v here, it pipes output
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- サブシェル内で translate_single_line を実行 (変更なし) ---
-            ( # サブシェルの開始 (Original Logic)
                 local current_line="$line_from_awk"
                 local lang="$target_lang_code"
                 local func="$aip_function_name"
-                local outfile_base="$final_output_file" # Use the final output file base name
+                local outfile_base="$final_output_file"
 
-                # --- 一時ファイル名の生成と書き込み (Original Logic - v5方式) ---
                 local translated_line
                 translated_line=$(translate_single_line "$current_line" "$lang" "$func")
                 if [ -n "$translated_line" ]; then
                      local partial_suffix=""
-                     # Ensure TR_DIR exists for partial files
                      mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
-                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" # Use TR_DIR for partial files
+                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")"
 
                      if date '+%N' >/dev/null 2>&1; then
                         partial_suffix="$$$(date '+%N')"
@@ -414,16 +408,15 @@ create_language_db_all() {
                         partial_suffix="$$$(date '+%S')"
                      fi
 
-                     # Append to partial file in TR_DIR using printf (MODIFIED: path)
                      printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
                      local write_status=$?
                      if [ "$write_status" -ne 0 ]; then
                          debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
-                         exit 1 # Exit subshell with error (Original Logic)
+                         exit 1
                      fi
                 fi
-                exit 0 # Exit subshell successfully (Original Logic)
-            ) & # Run subshell in background (Original Logic)
+                exit 0
+            ) &
 
             pid=$!
             pids="$pids $pid"
@@ -458,7 +451,6 @@ create_language_db_all() {
              # Don't necessarily set exit_status=1 here, let subsequent steps handle errors
         fi
 
-        # --- BGジョブが全て完了するまで待機 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
             local wait_failed=0
@@ -472,33 +464,23 @@ create_language_db_all() {
                     fi
                 fi
             done
-            # If any wait failed AND current status is success(0), set to partial(2)
             if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
                 exit_status=2
             fi
             debug_log "DEBUG" "create_language_db_all: All background tasks finished."
         fi
 
-        # --- MODIFIED: 部分出力を結合 (find + cat + find delete 方式) ---
         if [ "$exit_status" -ne 1 ]; then
             debug_log "DEBUG" "create_language_db_all: Combining partial results using find..."
-            # Define pattern relative to TR_DIR
             local partial_pattern="$(basename "$final_output_file")"".partial_*"
             local found_partial=0
 
-            # Check if any partial files exist in TR_DIR
-            # --- MODIFIED: Use POSIX compliant find | head -n 1 | grep -q . ---
-            # Use find within TR_DIR, pipe to head, then grep to check for output
             if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
                 found_partial=1
             fi
 
             if [ "$found_partial" -eq 1 ]; then
                  debug_log "DEBUG" "create_language_db_all: Found partial files matching '$partial_pattern' in $TR_DIR."
-                 # Combine using find -exec cat {} + within TR_DIR, append to final output file
-                 # Using a subshell to change directory temporarily
-                 # Note: find -exec cat {} + might still fail on very old BusyBox, but is more likely supported than -quit.
-                 # If this also fails, a loop with `cat "$file" >> "$final_output_file"` would be the fallback.
                  if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} + >> "$final_output_file"); then
                       debug_log "DEBUG" "create_language_db_all: Partial files combined successfully into $final_output_file."
 
@@ -556,7 +538,6 @@ create_language_db_all() {
             fi
         fi
 
-        # --- 完了マーカーを付加 (変更なし) ---
         if [ "$exit_status" -ne 1 ]; then
             printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
             if [ $? -ne 0 ]; then
@@ -620,29 +601,26 @@ create_language_db_parallel() {
     if [ "$osversion" = "19" ]; then
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_19 for OS version 19 with limit from global CORE_COUNT ($CORE_COUNT)"
         create_language_db_19 "$@" "$CORE_COUNT"
-        # create_language_db_new "$@" "$CORE_COUNT"
-        # create_language_db_new "$@" "1"
         exit_status=$?
     else
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion' with limit from global MAX_PARALLEL_TASKS ($MAX_PARALLEL_TASKS)"
-        # create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
-        create_language_db_new "$@" "$MAX_PARALLEL_TASKS"
+        create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
         exit_status=$?
     fi
     debug_log "DEBUG" "create_language_db_parallel: Worker function finished with status: $exit_status"
 
     end_time=$(date +%s)
     [ -n "$start_time" ] && elapsed_seconds=$((end_time - start_time)) || elapsed_seconds=0
-    LAST_ELAPSED_SECONDS_TRANSLATION="$elapsed_seconds" # グローバル変数に処理時間を設定
+    LAST_ELAPSED_SECONDS_TRANSLATION="$elapsed_seconds"
 
     if [ "$spinner_started" = "true" ]; then
         local final_message=""
         local spinner_status="success"
 
         if [ "$exit_status" -eq 0 ]; then
-             if [ "$total_lines" -le 0 ]; then # 翻訳対象がなかった場合
+             if [ "$total_lines" -le 0 ]; then
                  final_message=$(get_message "MSG_TRANSLATION_NO_LINES_COMPLETE" "s=$elapsed_seconds" "default=Translation finished: No lines needed translation (${elapsed_seconds}s)")
-             else # 翻訳成功時は MSG_TRANSLATING_CREATED (固定文字列) を表示
+             else
                  final_message=$(get_message "MSG_TRANSLATING_CREATED" "default=Language file created successfully")
              fi
         elif [ "$exit_status" -eq 2 ]; then
