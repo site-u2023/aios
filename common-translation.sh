@@ -1386,7 +1386,7 @@ translate_main() {
         debug_log "DEBUG" "translate_main: Low spec environment detected (CPU='${cpucore}', Mem='${available_memory}MB' <= 15MB). Skipping translation."
         return 0
     else
-        # debug_log "DEBUG" "translate_main: Not a low spec environment or check failed. Proceeding. CPUCore='${cpucore}', AvailableMemory='${available_memory}MB', Threshold=15MB. ConditionMetForSkip='$([ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 && echo true || echo false)'"
+        debug_log "DEBUG" "translate_main: Not a low spec environment or check failed. Proceeding. CPUCore='${cpucore}', AvailableMemory='${available_memory}MB', Threshold=15MB. ConditionMetForSkip='$([ "$cpucore" = "1" ] && [ -n "$available_memory" ] && [ "$available_memory" -le 15 && echo true || echo false)'"
     fi
     # --- End Low Spec Check ---
 
