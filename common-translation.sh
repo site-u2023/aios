@@ -335,7 +335,8 @@ create_language_db_19() {
 # @param $4: target_lang_code (string) - Target language code (e.g., "ja")
 # @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed.
 # @return: 0:success, 1:critical error, 2:partial success
-create_language_db_all() {
+# 15s
+OK_create_language_db_all() {
 
     local aip_function_name="$1"
     local api_endpoint_url="$2" # Maintained for interface consistency
@@ -529,6 +530,503 @@ create_language_db_all() {
             fi
         fi
     fi 
+
+    return "$exit_status"
+}
+
+# --- Test Function: Based on OK_create_language_db_all, uses subshell, v5 task management, AND v5 temporary file handling ---
+# Modified to accept max parallel tasks limit as an argument.
+# MODIFIED: Uses find for combining partial files for robustness.
+# MODIFIED: Replaced find -quit with POSIX compliant alternative.
+# MODIFIED: Replaced find -delete with POSIX compliant alternative.
+# @param $1: aip_function_name (string) - AIP function (e.g., "translate_with_google")
+# @param $2: api_endpoint_url (string) - API URL (for logging)
+# @param $3: domain_name (string) - Domain name (for logging)
+# @param $4: target_lang_code (string) - Target language code (e.g., "ja")
+# @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed. # NEW ARGUMENT
+# @return: 0:success, 1:critical error, 2:partial success
+create_language_db_all() {
+    # 引数受け取り (変更なし)
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"
+    local domain_name="$3"
+    local target_lang_code="$4"
+    # --- MODIFIED: Receive the parallelism limit as the 5th argument ---
+    local max_tasks_limit="$5"
+
+    # 変数定義 (変更なし)
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    local pids=""
+    local pid=""
+    local exit_status=0
+    local line_from_awk=""
+
+    # --- Input validation for the limit (変更なし) ---
+    case "$max_tasks_limit" in
+        ''|*[!0-9]*) # Empty or not a number
+            debug_log "DEBUG" "create_language_db_all: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
+            max_tasks_limit=1
+            ;;
+        0) # Zero is not valid, default to 1
+            debug_log "DEBUG" "create_language_db_all: Received max_tasks_limit=0. Defaulting to 1."
+            max_tasks_limit=1
+            ;;
+        *) # Valid positive integer
+            : # No action needed
+            ;;
+    esac
+    debug_log "DEBUG" "create_language_db_all: Using parallelism limit: $max_tasks_limit"
+
+    # --- Logging (Original Logic, limit source changed) ---
+    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
+    local current_max_parallel_tasks="$max_tasks_limit" # Use the argument
+    debug_log "DEBUG" "create_language_db_all: Max parallel tasks set from argument: $current_max_parallel_tasks"
+
+
+    # --- MODIFIED: Initialize output file (remove header) ---
+    # Ensure final directory exists before initializing file
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_all: Failed to create final output directory: $final_output_dir"; return 1; }
+    >"$final_output_file"
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
+        exit_status=1
+    else
+        # --- メイン処理: 行ベースで並列翻訳 (Original Logic) ---
+        # Note: awk does not use -v here, it pipes output
+        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+            # --- サブシェル内で translate_single_line を実行 (変更なし) ---
+            ( # サブシェルの開始 (Original Logic)
+                local current_line="$line_from_awk"
+                local lang="$target_lang_code"
+                local func="$aip_function_name"
+                local outfile_base="$final_output_file" # Use the final output file base name
+
+                # --- 一時ファイル名の生成と書き込み (Original Logic - v5方式) ---
+                local translated_line
+                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+                if [ -n "$translated_line" ]; then
+                     local partial_suffix=""
+                     # Ensure TR_DIR exists for partial files
+                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
+                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" # Use TR_DIR for partial files
+
+                     if date '+%N' >/dev/null 2>&1; then
+                        partial_suffix="$$$(date '+%N')"
+                     else
+                        partial_suffix="$$$(date '+%S')"
+                     fi
+
+                     # Append to partial file in TR_DIR using printf (MODIFIED: path)
+                     printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
+                     local write_status=$?
+                     if [ "$write_status" -ne 0 ]; then
+                         debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
+                         exit 1 # Exit subshell with error (Original Logic)
+                     fi
+                fi
+                exit 0 # Exit subshell successfully (Original Logic)
+            ) & # Run subshell in background (Original Logic)
+
+            pid=$!
+            pids="$pids $pid"
+
+            # --- MODIFIED: Use the passed limit for job control ---
+            # Original comment: Parallel task limit control (v5 wait + sed method)
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                oldest_pid=$(echo "$pids" | cut -d' ' -f1)
+                if [ -n "$oldest_pid" ]; then
+                    # Original logic for waiting and removing PID
+                    if wait "$oldest_pid" >/dev/null 2>&1; then
+                        : # Success
+                    else
+                        # Log potential failure, but don't mark overall as failed just for this
+                        debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed or already exited."
+                    fi
+                    # Remove the PID using sed (Original Logic)
+                    pids=$(echo "$pids" | sed "s/^$oldest_pid //")
+                else
+                    # Original logic for handling empty pids list
+                    debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
+                    # --- MODIFIED: Use POSIX compliant sleep ---
+                    sleep 1
+                fi
+            done
+        done
+        # Check pipeline exit status (Original Logic)
+        local pipe_status=$?
+        # Check specific pipe status codes if needed, but generally non-zero indicates an issue
+        if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
+             debug_log "DEBUG" "create_language_db_all: Warning: Error during awk/while processing (pipe status: $pipe_status)."
+             # Don't necessarily set exit_status=1 here, let subsequent steps handle errors
+        fi
+
+        # --- BGジョブが全て完了するまで待機 (変更なし) ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
+            local wait_failed=0
+            for pid in $pids; do
+                if [ -n "$pid" ]; then
+                    if wait "$pid"; then
+                        : # Success
+                    else
+                        wait_failed=1
+                        debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid failed or exited with non-zero status."
+                    fi
+                fi
+            done
+            # If any wait failed AND current status is success(0), set to partial(2)
+            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
+                exit_status=2
+            fi
+            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
+        fi
+
+        # --- MODIFIED: 部分出力を結合 (find + cat + find delete 方式) ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Combining partial results using find..."
+            # Define pattern relative to TR_DIR
+            local partial_pattern="$(basename "$final_output_file")"".partial_*"
+            local found_partial=0
+
+            # Check if any partial files exist in TR_DIR
+            # --- MODIFIED: Use POSIX compliant find | head -n 1 | grep -q . ---
+            # Use find within TR_DIR, pipe to head, then grep to check for output
+            if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
+                found_partial=1
+            fi
+
+            if [ "$found_partial" -eq 1 ]; then
+                 debug_log "DEBUG" "create_language_db_all: Found partial files matching '$partial_pattern' in $TR_DIR."
+                 # Combine using find -exec cat {} + within TR_DIR, append to final output file
+                 # Using a subshell to change directory temporarily
+                 # Note: find -exec cat {} + might still fail on very old BusyBox, but is more likely supported than -quit.
+                 # If this also fails, a loop with `cat "$file" >> "$final_output_file"` would be the fallback.
+                 if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -exec cat {} + >> "$final_output_file"); then
+                      debug_log "DEBUG" "create_language_db_all: Partial files combined successfully into $final_output_file."
+
+                      # --- MODIFIED: Remove using find and rm loop (POSIX compliant) ---
+                      debug_log "DEBUG" "create_language_db_all: Attempting to remove partial files using find and rm loop..."
+                      if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
+                          # Remove the leading './' if present, find might output ./file
+                          file_to_delete="${file_to_delete#./}"
+                          if [ -n "$file_to_delete" ]; then # Ensure filename is not empty after potential stripping
+                              debug_log "DEBUG" "create_language_db_all: Removing partial file: $file_to_delete"
+                              rm -- "$file_to_delete" # Use -- to handle filenames starting with -
+                              if [ $? -ne 0 ]; then
+                                  debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial file: $file_to_delete"
+                                  # Consider setting a flag or incrementing a counter if needed
+                              fi
+                          fi
+                          # Check if read failed unexpectedly, though unlikely with find -print
+                          if [ $? -ne 0 ]; then
+                              debug_log "DEBUG" "create_language_db_all: Warning: read command failed in rm loop."
+                              # break or return error? For now, just log.
+                          fi
+                      done); then
+                          # This checks the exit status of the subshell pipeline (cd && find | while ... done)
+                          debug_log "DEBUG" "create_language_db_all: Warning: Error occurred during find or rm loop for partial files in $TR_DIR."
+                          # This might not be critical if some files were removed, but log it.
+                      else
+                          debug_log "DEBUG" "create_language_db_all: Partial files removal process completed."
+                          # Check again if files still exist (optional, for robustness)
+                          if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
+                              debug_log "DEBUG" "create_language_db_all: Warning: Some partial files might still remain in $TR_DIR after removal attempt."
+                          else
+                              debug_log "DEBUG" "create_language_db_all: Confirmed no partial files remain matching pattern in $TR_DIR."
+                          fi
+                      fi
+                      # --- End MODIFIED section for removal ---
+                 else
+                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using find/cat."
+                     # If cat fails, it's likely a more critical issue
+                     [ "$exit_status" -eq 0 ] && exit_status=1 # Set to critical error if not already failed
+                 fi
+            else
+                debug_log "DEBUG" "create_language_db_all: No partial files found in $TR_DIR matching '$partial_pattern' to combine."
+                # Check if the final output file is empty and no partials were found
+                if [ ! -s "$final_output_file" ]; then
+                    # If base_db had lines but no partials were created and final file is empty,
+                    # it might indicate all subshells failed silently or translation returned nothing.
+                    # Check if base_db actually had lines to process
+                    local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
+                    if [ -n "$base_lines_exist" ]; then
+                         debug_log "DEBUG" "create_language_db_all: Warning: Base DB had lines, but no partial files were generated and final file is empty. Potential issue."
+                         # Set to partial success if currently success
+                         [ "$exit_status" -eq 0 ] && exit_status=2
+                    fi
+                fi
+            fi
+        fi
+
+        # --- 完了マーカーを付加 (変更なし) ---
+        if [ "$exit_status" -ne 1 ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+            if [ $? -ne 0 ]; then
+                debug_log "DEBUG" "create_language_db_all: Failed to append completion marker."
+                # This failure might warrant setting status to 2 if currently 0
+                [ "$exit_status" -eq 0 ] && exit_status=2
+            else
+                debug_log "DEBUG" "create_language_db_all: Completion marker added."
+            fi
+        fi
+    fi # End of initial file initialization check
+
+    return "$exit_status"
+}
+
+# --- Test Function: Based on OK_create_language_db_all, uses subshell, v5 task management, AND v5 temporary file handling ---
+# Modified to accept max parallel tasks limit as an argument.
+# MODIFIED: Uses find for combining partial files for robustness.
+# MODIFIED: Replaced find -quit with POSIX compliant alternative.
+# MODIFIED: Replaced find -delete with POSIX compliant alternative.
+# @param $1: aip_function_name (string) - AIP function (e.g., "translate_with_google")
+# @param $2: api_endpoint_url (string) - API URL (for logging)
+# @param $3: domain_name (string) - Domain name (for logging)
+# @param $4: target_lang_code (string) - Target language code (e.g., "ja")
+# @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed. # NEW ARGUMENT
+# @return: 0:success, 1:critical error, 2:partial success
+create_language_db_new() {
+    # 引数受け取り (変更なし)
+    local aip_function_name="$1"
+    local api_endpoint_url="$2"
+    local domain_name="$3"
+    local target_lang_code="$4"
+    # --- MODIFIED: Receive the parallelism limit as the 5th argument ---
+    local max_tasks_limit="$5"
+
+    # 変数定義 (変更なし)
+    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
+    local final_output_dir="/tmp/aios"
+    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
+    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
+    local pids=""
+    local pid=""
+    local exit_status=0
+    local line_from_awk=""
+
+    # --- Input validation for the limit (変更なし) ---
+    case "$max_tasks_limit" in
+        ''|*[!0-9]*) # Empty or not a number
+            debug_log "DEBUG" "create_language_db_all: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
+            max_tasks_limit=1
+            ;;
+        0) # Zero is not valid, default to 1
+            debug_log "DEBUG" "create_language_db_all: Received max_tasks_limit=0. Defaulting to 1."
+            max_tasks_limit=1
+            ;;
+        *) # Valid positive integer
+            : # No action needed
+            ;;
+    esac
+    debug_log "DEBUG" "create_language_db_all: Using parallelism limit: $max_tasks_limit"
+
+    # --- Logging (Original Logic, limit source changed) ---
+    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
+    local current_max_parallel_tasks="$max_tasks_limit" # Use the argument
+    debug_log "DEBUG" "create_language_db_all: Max parallel tasks set from argument: $current_max_parallel_tasks"
+
+
+    # --- MODIFIED: Initialize output file (remove header) ---
+    # Ensure final directory exists before initializing file
+    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_all: Failed to create final output directory: $final_output_dir"; return 1; }
+    >"$final_output_file"
+    if [ $? -ne 0 ]; then
+        debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
+        exit_status=1 # ユーザー提供コードのロジックを維持
+    else
+        # --- メイン処理: 行ベースで並列翻訳 (Original Logic) ---
+        # Note: awk does not use -v here, it pipes output
+        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+            # --- サブシェル内で translate_single_line を実行 (変更なし) ---
+            ( # サブシェルの開始 (Original Logic)
+                local current_line="$line_from_awk"
+                local lang="$target_lang_code"
+                local func="$aip_function_name"
+                local outfile_base="$final_output_file" # Use the final output file base name
+
+                # --- 一時ファイル名の生成と書き込み (Original Logic - v5方式) ---
+                local translated_line
+                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+                if [ -n "$translated_line" ]; then
+                     local partial_suffix=""
+                     # Ensure TR_DIR exists for partial files
+                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
+                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" # Use TR_DIR for partial files
+
+                     if date '+%N' >/dev/null 2>&1; then
+                        partial_suffix="$$$(date '+%N')"
+                     else
+                        partial_suffix="$$$(date '+%S')"
+                     fi
+
+                     # Append to partial file in TR_DIR using printf (MODIFIED: path)
+                     # ユーザーの元コードのロジックを維持。各サブシェルは結果的に一意なファイルに書き込む。
+                     printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
+                     local write_status=$?
+                     if [ "$write_status" -ne 0 ]; then
+                         debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
+                         exit 1 # Exit subshell with error (Original Logic)
+                     fi
+                fi
+                exit 0 # Exit subshell successfully (Original Logic)
+            ) & # Run subshell in background (Original Logic)
+
+            pid=$!
+            pids="$pids $pid"
+
+            # --- MODIFIED: Use the passed limit for job control ---
+            # Original comment: Parallel task limit control (v5 wait + sed method)
+            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
+                oldest_pid=$(echo "$pids" | cut -d' ' -f1)
+                if [ -n "$oldest_pid" ]; then
+                    # Original logic for waiting and removing PID
+                    if wait "$oldest_pid" >/dev/null 2>&1; then
+                        : # Success
+                    else
+                        # Log potential failure, but don't mark overall as failed just for this
+                        debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed or already exited."
+                    fi
+                    # Remove the PID using sed (Original Logic)
+                    pids=$(echo "$pids" | sed "s/^$oldest_pid //") # ユーザー提供コードのロジックを維持
+                else
+                    # Original logic for handling empty pids list
+                    debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
+                    # --- MODIFIED: Use POSIX compliant sleep ---
+                    sleep 1
+                fi
+            done
+        done
+        # Check pipeline exit status (Original Logic)
+        local pipe_status=$?
+        # Check specific pipe status codes if needed, but generally non-zero indicates an issue
+        if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
+             debug_log "DEBUG" "create_language_db_all: Warning: Error during awk/while processing (pipe status: $pipe_status)."
+             # Don't necessarily set exit_status=1 here, let subsequent steps handle errors
+        fi
+
+        # --- BGジョブが全て完了するまで待機 (変更なし) ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
+            local wait_failed=0
+            for pid_loop in $pids; do # ユーザー提供コードの変数名を維持 (pid -> pid_loop)
+                if [ -n "$pid_loop" ]; then
+                    if wait "$pid_loop"; then
+                        : # Success
+                    else
+                        wait_failed=1
+                        debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid_loop failed or exited with non-zero status."
+                    fi
+                fi
+            done
+            # If any wait failed AND current status is success(0), set to partial(2)
+            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
+                exit_status=2
+            fi
+            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
+        fi
+
+        # --- MODIFIED: 部分出力を結合 (find + cat + find delete 方式) ---
+        if [ "$exit_status" -ne 1 ]; then
+            debug_log "DEBUG" "create_language_db_all: Combining partial results using find..."
+            # Define pattern relative to TR_DIR
+            local partial_pattern="$(basename "$final_output_file")"".partial_*"
+            local found_partial=0
+
+            # Check if any partial files exist in TR_DIR
+            # --- MODIFIED: Use POSIX compliant find | head -n 1 | grep -q . ---
+            # Use find within TR_DIR, pipe to head, then grep to check for output
+            if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
+                found_partial=1
+            fi
+
+            if [ "$found_partial" -eq 1 ]; then
+                 debug_log "DEBUG" "create_language_db_all: Found partial files matching '$partial_pattern' in $TR_DIR."
+                 # --- MODIFIED: Combine using find -print | while read ... cat ... (POSIX compliant) ---
+                 # The final_output_file is an absolute path, so >> "$final_output_file" works even inside (cd "$TR_DIR" ...)
+                 if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_cat; do
+                         file_to_cat="${file_to_cat#./}" # find in . gives ./filename
+                         if [ -n "$file_to_cat" ]; then # Ensure filename is not empty
+                             if ! cat -- "$file_to_cat" >> "$final_output_file"; then
+                                 # If cat fails, exit the subshell pipeline with an error to make the if condition false
+                                 exit 1 
+                             fi
+                         fi
+                     done
+                 ); then
+                      # This block executes if the (cd && find | while) pipeline succeeded
+                      debug_log "DEBUG" "create_language_db_all: Partial files combined successfully into $final_output_file."
+
+                      # --- MODIFIED: Remove using find and rm loop (POSIX compliant) ---
+                      # This is the user's original removal logic, which is already POSIX compliant. Kept as is.
+                      debug_log "DEBUG" "create_language_db_all: Attempting to remove partial files using find and rm loop..."
+                      if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
+                          # Remove the leading './' if present, find might output ./file
+                          file_to_delete="${file_to_delete#./}"
+                          if [ -n "$file_to_delete" ]; then # Ensure filename is not empty after potential stripping
+                              debug_log "DEBUG" "create_language_db_all: Removing partial file: $file_to_delete"
+                              rm -- "$file_to_delete" # Use -- to handle filenames starting with -
+                              if [ $? -ne 0 ]; then
+                                  debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial file: $file_to_delete"
+                                  # Consider setting a flag or incrementing a counter if needed
+                              fi
+                          fi
+                          # Check if read failed unexpectedly, though unlikely with find -print
+                          if [ $? -ne 0 ]; then # ユーザー提供コードのロジックを維持
+                              debug_log "DEBUG" "create_language_db_all: Warning: read command failed in rm loop."
+                              # break or return error? For now, just log.
+                          fi
+                      done); then
+                          # This checks the exit status of the subshell pipeline (cd && find | while ... done)
+                          debug_log "DEBUG" "create_language_db_all: Warning: Error occurred during find or rm loop for partial files in $TR_DIR."
+                          # This might not be critical if some files were removed, but log it.
+                      else
+                          debug_log "DEBUG" "create_language_db_all: Partial files removal process completed."
+                          # Check again if files still exist (optional, for robustness)
+                          if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
+                              debug_log "DEBUG" "create_language_db_all: Warning: Some partial files might still remain in $TR_DIR after removal attempt."
+                          else
+                              debug_log "DEBUG" "create_language_db_all: Confirmed no partial files remain matching pattern in $TR_DIR."
+                          fi
+                      fi
+                      # --- End MODIFIED section for removal ---
+                 else
+                     # This block executes if the (cd && find | while) pipeline failed (e.g., cat exited with non-zero)
+                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using find/cat."
+                     # If cat fails, it's likely a more critical issue
+                     [ "$exit_status" -eq 0 ] && exit_status=1 # Set to critical error if not already failed (ユーザー提供コードのロジックを維持)
+                 fi
+            else # No partial files found
+                debug_log "DEBUG" "create_language_db_all: No partial files found in $TR_DIR matching '$partial_pattern' to combine."
+                # Check if the final output file is empty and no partials were found
+                if [ ! -s "$final_output_file" ]; then
+                    # If base_db had lines but no partials were created and final file is empty,
+                    # it might indicate all subshells failed silently or translation returned nothing.
+                    # Check if base_db actually had lines to process
+                    local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
+                    if [ -n "$base_lines_exist" ]; then
+                         debug_log "DEBUG" "create_language_db_all: Warning: Base DB had lines, but no partial files were generated and final file is empty. Potential issue."
+                         # Set to partial success if currently success
+                         [ "$exit_status" -eq 0 ] && exit_status=2 # ユーザー提供コードのロジックを維持
+                    fi
+                fi
+            fi
+        fi
+
+        # --- 完了マーカーを付加 (変更なし) ---
+        if [ "$exit_status" -ne 1 ]; then
+            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
+            if [ $? -ne 0 ]; then
+                debug_log "DEBUG" "create_language_db_all: Failed to append completion marker."
+                # This failure might warrant setting status to 2 if currently 0
+                [ "$exit_status" -eq 0 ] && exit_status=2 # ユーザー提供コードのロジックを維持
+            else
+                debug_log "DEBUG" "create_language_db_all: Completion marker added."
+            fi
+        fi
+    fi # End of initial file initialization check
 
     return "$exit_status"
 }
@@ -971,258 +1469,4 @@ translate_main() {
         return "$db_creation_result"
         # printf "\n" # この行は元々実行されない
     fi
-}
-
-# --- Test Function: Based on OK_create_language_db_all, uses subshell, v5 task management, AND v5 temporary file handling ---
-# Modified to accept max parallel tasks limit as an argument.
-# MODIFIED: Uses find for combining partial files for robustness.
-# MODIFIED: Replaced find -quit with POSIX compliant alternative.
-# MODIFIED: Replaced find -delete with POSIX compliant alternative.
-# @param $1: aip_function_name (string) - AIP function (e.g., "translate_with_google")
-# @param $2: api_endpoint_url (string) - API URL (for logging)
-# @param $3: domain_name (string) - Domain name (for logging)
-# @param $4: target_lang_code (string) - Target language code (e.g., "ja")
-# @param $5: max_tasks_limit (integer) - The maximum number of parallel tasks allowed. # NEW ARGUMENT
-# @return: 0:success, 1:critical error, 2:partial success
-create_language_db_new() {
-    # 引数受け取り (変更なし)
-    local aip_function_name="$1"
-    local api_endpoint_url="$2"
-    local domain_name="$3"
-    local target_lang_code="$4"
-    # --- MODIFIED: Receive the parallelism limit as the 5th argument ---
-    local max_tasks_limit="$5"
-
-    # 変数定義 (変更なし)
-    local base_db="${BASE_DIR}/message_${DEFAULT_LANGUAGE}.db"
-    local final_output_dir="/tmp/aios"
-    local final_output_file="${final_output_dir}/message_${target_lang_code}.db"
-    local marker_key="AIOS_TRANSLATION_COMPLETE_MARKER"
-    local pids=""
-    local pid=""
-    local exit_status=0
-    local line_from_awk=""
-
-    # --- Input validation for the limit (変更なし) ---
-    case "$max_tasks_limit" in
-        ''|*[!0-9]*) # Empty or not a number
-            debug_log "DEBUG" "create_language_db_all: Invalid or empty max_tasks_limit received ('$max_tasks_limit'). Defaulting to 1."
-            max_tasks_limit=1
-            ;;
-        0) # Zero is not valid, default to 1
-            debug_log "DEBUG" "create_language_db_all: Received max_tasks_limit=0. Defaulting to 1."
-            max_tasks_limit=1
-            ;;
-        *) # Valid positive integer
-            : # No action needed
-            ;;
-    esac
-    debug_log "DEBUG" "create_language_db_all: Using parallelism limit: $max_tasks_limit"
-
-    # --- Logging (Original Logic, limit source changed) ---
-    debug_log "DEBUG" "create_language_db_all: Starting parallel translation (line-by-line, v5 task mgmt, v5 temp file test) for language '$target_lang_code'."
-    local current_max_parallel_tasks="$max_tasks_limit" # Use the argument
-    debug_log "DEBUG" "create_language_db_all: Max parallel tasks set from argument: $current_max_parallel_tasks"
-
-
-    # --- MODIFIED: Initialize output file (remove header) ---
-    # Ensure final directory exists before initializing file
-    mkdir -p "$final_output_dir" || { debug_log "DEBUG" "create_language_db_all: Failed to create final output directory: $final_output_dir"; return 1; }
-    >"$final_output_file"
-    if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
-        exit_status=1 # ユーザー提供コードのロジックを維持
-    else
-        # --- メイン処理: 行ベースで並列翻訳 (Original Logic) ---
-        # Note: awk does not use -v here, it pipes output
-        awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- サブシェル内で translate_single_line を実行 (変更なし) ---
-            ( # サブシェルの開始 (Original Logic)
-                local current_line="$line_from_awk"
-                local lang="$target_lang_code"
-                local func="$aip_function_name"
-                local outfile_base="$final_output_file" # Use the final output file base name
-
-                # --- 一時ファイル名の生成と書き込み (Original Logic - v5方式) ---
-                local translated_line
-                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
-                if [ -n "$translated_line" ]; then
-                     local partial_suffix=""
-                     # Ensure TR_DIR exists for partial files
-                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
-                     local partial_file_path="${TR_DIR}/$(basename "$outfile_base")" # Use TR_DIR for partial files
-
-                     if date '+%N' >/dev/null 2>&1; then
-                        partial_suffix="$$$(date '+%N')"
-                     else
-                        partial_suffix="$$$(date '+%S')"
-                     fi
-
-                     # Append to partial file in TR_DIR using printf (MODIFIED: path)
-                     # ユーザーの元コードのロジックを維持。各サブシェルは結果的に一意なファイルに書き込む。
-                     printf "%s\n" "$translated_line" >> "${partial_file_path}".partial_"$partial_suffix"
-                     local write_status=$?
-                     if [ "$write_status" -ne 0 ]; then
-                         debug_log "ERROR [Subshell]" "Failed to append to partial file: ${partial_file_path}.partial_$partial_suffix"
-                         exit 1 # Exit subshell with error (Original Logic)
-                     fi
-                fi
-                exit 0 # Exit subshell successfully (Original Logic)
-            ) & # Run subshell in background (Original Logic)
-
-            pid=$!
-            pids="$pids $pid"
-
-            # --- MODIFIED: Use the passed limit for job control ---
-            # Original comment: Parallel task limit control (v5 wait + sed method)
-            while [ "$(jobs -p | wc -l)" -ge "$current_max_parallel_tasks" ]; do
-                oldest_pid=$(echo "$pids" | cut -d' ' -f1)
-                if [ -n "$oldest_pid" ]; then
-                    # Original logic for waiting and removing PID
-                    if wait "$oldest_pid" >/dev/null 2>&1; then
-                        : # Success
-                    else
-                        # Log potential failure, but don't mark overall as failed just for this
-                        debug_log "DEBUG" "create_language_db_all: Background task PID $oldest_pid may have failed or already exited."
-                    fi
-                    # Remove the PID using sed (Original Logic)
-                    pids=$(echo "$pids" | sed "s/^$oldest_pid //") # ユーザー提供コードのロジックを維持
-                else
-                    # Original logic for handling empty pids list
-                    debug_log "DEBUG" "create_language_db_all: Could not get oldest_pid, maybe pids list is empty? Waiting briefly."
-                    # --- MODIFIED: Use POSIX compliant sleep ---
-                    sleep 1
-                fi
-            done
-        done
-        # Check pipeline exit status (Original Logic)
-        local pipe_status=$?
-        # Check specific pipe status codes if needed, but generally non-zero indicates an issue
-        if [ "$pipe_status" -ne 0 ] && [ "$exit_status" -eq 0 ]; then
-             debug_log "DEBUG" "create_language_db_all: Warning: Error during awk/while processing (pipe status: $pipe_status)."
-             # Don't necessarily set exit_status=1 here, let subsequent steps handle errors
-        fi
-
-        # --- BGジョブが全て完了するまで待機 (変更なし) ---
-        if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_all: Waiting for remaining background tasks..."
-            local wait_failed=0
-            for pid_loop in $pids; do # ユーザー提供コードの変数名を維持 (pid -> pid_loop)
-                if [ -n "$pid_loop" ]; then
-                    if wait "$pid_loop"; then
-                        : # Success
-                    else
-                        wait_failed=1
-                        debug_log "DEBUG" "create_language_db_all: Remaining task PID $pid_loop failed or exited with non-zero status."
-                    fi
-                fi
-            done
-            # If any wait failed AND current status is success(0), set to partial(2)
-            if [ "$wait_failed" -eq 1 ] && [ "$exit_status" -eq 0 ]; then
-                exit_status=2
-            fi
-            debug_log "DEBUG" "create_language_db_all: All background tasks finished."
-        fi
-
-        # --- MODIFIED: 部分出力を結合 (find + cat + find delete 方式) ---
-        if [ "$exit_status" -ne 1 ]; then
-            debug_log "DEBUG" "create_language_db_all: Combining partial results using find..."
-            # Define pattern relative to TR_DIR
-            local partial_pattern="$(basename "$final_output_file")"".partial_*"
-            local found_partial=0
-
-            # Check if any partial files exist in TR_DIR
-            # --- MODIFIED: Use POSIX compliant find | head -n 1 | grep -q . ---
-            # Use find within TR_DIR, pipe to head, then grep to check for output
-            if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
-                found_partial=1
-            fi
-
-            if [ "$found_partial" -eq 1 ]; then
-                 debug_log "DEBUG" "create_language_db_all: Found partial files matching '$partial_pattern' in $TR_DIR."
-                 # --- MODIFIED: Combine using find -print | while read ... cat ... (POSIX compliant) ---
-                 # The final_output_file is an absolute path, so >> "$final_output_file" works even inside (cd "$TR_DIR" ...)
-                 if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_cat; do
-                         file_to_cat="${file_to_cat#./}" # find in . gives ./filename
-                         if [ -n "$file_to_cat" ]; then # Ensure filename is not empty
-                             if ! cat -- "$file_to_cat" >> "$final_output_file"; then
-                                 # If cat fails, exit the subshell pipeline with an error to make the if condition false
-                                 exit 1 
-                             fi
-                         fi
-                     done
-                 ); then
-                      # This block executes if the (cd && find | while) pipeline succeeded
-                      debug_log "DEBUG" "create_language_db_all: Partial files combined successfully into $final_output_file."
-
-                      # --- MODIFIED: Remove using find and rm loop (POSIX compliant) ---
-                      # This is the user's original removal logic, which is already POSIX compliant. Kept as is.
-                      debug_log "DEBUG" "create_language_db_all: Attempting to remove partial files using find and rm loop..."
-                      if ! (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | while IFS= read -r file_to_delete; do
-                          # Remove the leading './' if present, find might output ./file
-                          file_to_delete="${file_to_delete#./}"
-                          if [ -n "$file_to_delete" ]; then # Ensure filename is not empty after potential stripping
-                              debug_log "DEBUG" "create_language_db_all: Removing partial file: $file_to_delete"
-                              rm -- "$file_to_delete" # Use -- to handle filenames starting with -
-                              if [ $? -ne 0 ]; then
-                                  debug_log "DEBUG" "create_language_db_all: Warning: Failed to remove partial file: $file_to_delete"
-                                  # Consider setting a flag or incrementing a counter if needed
-                              fi
-                          fi
-                          # Check if read failed unexpectedly, though unlikely with find -print
-                          if [ $? -ne 0 ]; then # ユーザー提供コードのロジックを維持
-                              debug_log "DEBUG" "create_language_db_all: Warning: read command failed in rm loop."
-                              # break or return error? For now, just log.
-                          fi
-                      done); then
-                          # This checks the exit status of the subshell pipeline (cd && find | while ... done)
-                          debug_log "DEBUG" "create_language_db_all: Warning: Error occurred during find or rm loop for partial files in $TR_DIR."
-                          # This might not be critical if some files were removed, but log it.
-                      else
-                          debug_log "DEBUG" "create_language_db_all: Partial files removal process completed."
-                          # Check again if files still exist (optional, for robustness)
-                          if (cd "$TR_DIR" && find . -maxdepth 1 -name "$partial_pattern" -print | head -n 1 | grep -q .); then
-                              debug_log "DEBUG" "create_language_db_all: Warning: Some partial files might still remain in $TR_DIR after removal attempt."
-                          else
-                              debug_log "DEBUG" "create_language_db_all: Confirmed no partial files remain matching pattern in $TR_DIR."
-                          fi
-                      fi
-                      # --- End MODIFIED section for removal ---
-                 else
-                     # This block executes if the (cd && find | while) pipeline failed (e.g., cat exited with non-zero)
-                     debug_log "DEBUG" "create_language_db_all: Failed to combine partial files using find/cat."
-                     # If cat fails, it's likely a more critical issue
-                     [ "$exit_status" -eq 0 ] && exit_status=1 # Set to critical error if not already failed (ユーザー提供コードのロジックを維持)
-                 fi
-            else # No partial files found
-                debug_log "DEBUG" "create_language_db_all: No partial files found in $TR_DIR matching '$partial_pattern' to combine."
-                # Check if the final output file is empty and no partials were found
-                if [ ! -s "$final_output_file" ]; then
-                    # If base_db had lines but no partials were created and final file is empty,
-                    # it might indicate all subshells failed silently or translation returned nothing.
-                    # Check if base_db actually had lines to process
-                    local base_lines_exist=$(awk 'NR>1 && !/^#/ && !/^$/ {print "yes"; exit}' "$base_db")
-                    if [ -n "$base_lines_exist" ]; then
-                         debug_log "DEBUG" "create_language_db_all: Warning: Base DB had lines, but no partial files were generated and final file is empty. Potential issue."
-                         # Set to partial success if currently success
-                         [ "$exit_status" -eq 0 ] && exit_status=2 # ユーザー提供コードのロジックを維持
-                    fi
-                fi
-            fi
-        fi
-
-        # --- 完了マーカーを付加 (変更なし) ---
-        if [ "$exit_status" -ne 1 ]; then
-            printf "%s|%s=%s\n" "$target_lang_code" "$marker_key" "true" >> "$final_output_file"
-            if [ $? -ne 0 ]; then
-                debug_log "DEBUG" "create_language_db_all: Failed to append completion marker."
-                # This failure might warrant setting status to 2 if currently 0
-                [ "$exit_status" -eq 0 ] && exit_status=2 # ユーザー提供コードのロジックを維持
-            else
-                debug_log "DEBUG" "create_language_db_all: Completion marker added."
-            fi
-        fi
-    fi # End of initial file initialization check
-
-    return "$exit_status"
 }
