@@ -7,8 +7,8 @@ install_package luci yn hidden
 install_package luci-i18n-base yn hidden
 install_package ttyd yn hidden disabled
 install_package openssh-sftp-server yn hidden
-# install_package coreutils yn hidden
 install_package luci-app-commands yn hidden
+# install_package coreutils yn hidden
 
 # === システム管理 ===
 print_section_header "PKG_SECTION_SYSADMIN"
@@ -41,6 +41,7 @@ install_package nmap yn hidden
 install_package tcpdump yn hidden
 
 # === テーマおよびダッシュボード ===
+print_section_header "PKG_SECTION_THEME"
 install_package luci-theme-openwrt yn hidden
 install_package attendedsysupgrade-common yn hidden
 
