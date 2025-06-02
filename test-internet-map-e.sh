@@ -919,11 +919,11 @@ EOF
         printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
         return 1
     fi
-    
+
     OFFSET=6; RFC=false; IP6PREFIXLEN=""; PSIDLEN=""; IPADDR=""; IPV4=""; PSID=0; PORTS=""; EALEN=""; IP4PREFIXLEN=""; IP6PFX=""; BR=""; CE=""; IPV6PREFIX=""
     local PREFIX31 PREFIX38
     local h0_mul=$(( HEXTET0 * 65536 ))
-    local h1_masked=$(( HEXTET1 ))
+    local h1_masked=$(( HEXTET1 & 0xfffe )) # 下位1bitマスク（JavaScript版と同じ）
     PREFIX31=$(( h0_mul + h1_masked ))
     local h0_mul2=$(( HEXTET0 * 16777216 ))
     local h1_mul=$(( HEXTET1 * 256 ))
@@ -1080,22 +1080,22 @@ EOF
     debug_log "DEBUG" "BR判定: PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=$IP6PREFIXLEN"
 
     BR=""
-if [ "$IP6PREFIXLEN" -eq 31 ]; then
-    # 0x24047a80(604273280)～0x24047a84(604273284)
-    if [ "$PREFIX31" -ge 604273280 ] && [ "$PREFIX31" -lt 604273284 ]; then
-        BR="2001:260:700:1::1:275"
-    # 0x24047a84(604273284)～0x24047a88(604273288)
-    elif [ "$PREFIX31" -ge 604273284 ] && [ "$PREFIX31" -lt 604273288 ]; then
-        BR="2001:260:700:1::1:276"
-    # 0x240b0010(604700688)～0x240b0014(604700692) または 0x240b0250(604701264)～0x240b0254(604701268)
-    elif { [ "$PREFIX31" -ge 604700688 ] && [ "$PREFIX31" -lt 604700692 ]; } || { [ "$PREFIX31" -ge 604701264 ] && [ "$PREFIX31" -lt 604701268 ]; }; then
-        BR="2404:9200:225:100::64"
+    if [ "$IP6PREFIXLEN" -eq 31 ]; then
+        # 0x24047a80(604273280)～0x24047a84(604273284)
+        if [ "$PREFIX31" -ge 604273280 ] && [ "$PREFIX31" -lt 604273284 ]; then
+            BR="2001:260:700:1::1:275"
+        # 0x24047a84(604273284)～0x24047a88(604273288)
+        elif [ "$PREFIX31" -ge 604273284 ] && [ "$PREFIX31" -lt 604273288 ]; then
+            BR="2001:260:700:1::1:276"
+        # 0x240b0010(604700688)～0x240b0014(604700692) または 0x240b0250(604701264)～0x240b0254(604701268)
+        elif { [ "$PREFIX31" -ge 604700688 ] && [ "$PREFIX31" -lt 604700692 ]; } || { [ "$PREFIX31" -ge 604701264 ] && [ "$PREFIX31" -lt 604701268 ]; }; then
+            BR="2404:9200:225:100::64"
+        fi
     fi
-fi
-if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-    BR="2001:380:a120::9"
-fi
-   
+    if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        BR="2001:380:a120::9"
+    fi
+
     # JavaScript版のelse if (ruleprefix38_20[prefix38]) も考慮
     if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         BR="2001:380:a120::9"
