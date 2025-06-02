@@ -856,7 +856,7 @@ EOF
     HEXTET0=$((0x${h0_str:-0})); HEXTET1=$((0x${h1_str:-0})); HEXTET2=$((0x${h2_str:-0})); HEXTET3=$((0x${h3_str:-0}))
    
     if [ $((HEXTET3 & 0xff)) -ne 0 ]; then
-        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
+        printf "\n%s\n" "$(color red "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
         return 1
     fi
     
