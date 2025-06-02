@@ -1671,8 +1671,8 @@ internet_map_main() {
     fi
     
     # 再起動
-    debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
-    reboot
+    # debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
+    # reboot
 
     return 0 # Explicitly exit with success status
 }
