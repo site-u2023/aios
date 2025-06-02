@@ -986,8 +986,8 @@ EOF
         PSIDLEN=6
         OFFSET=6
     else
-        printf "\nERROR: No matching MAP-E rule found for the provided prefix.\n" >&2
-        debug_log "ERROR" "mold_mape: No matching ruleprefix. prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}."
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX")")"
+        debug_log "DEBUG" "mold_mape: No matching ruleprefix. prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}."
         return 1
     fi
 
