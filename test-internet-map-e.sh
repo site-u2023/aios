@@ -855,34 +855,28 @@ pd_decision() {
 mold_mape() {
     local NET_IF6
     if [ -z "$NET_IF6" ]; then
-        # debug_log "DEBUG" "mold_mape: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
         NET_IF6="wan6"
     fi
     if ! pd_decision "$NET_IF6"; then
         printf "ERROR: pd_decision reported failure. Cannot proceed.\n" >&2
-        debug_log "ERROR" "mold_mape: pd_decision reported failure." # Minimal debug
+        debug_log "ERROR" "mold_mape: pd_decision reported failure."
         return 1
     fi
     if ! prompt_for_mape_input; then
-        debug_log "ERROR" "mold_mape: Failed to get user input via prompt_for_mape_input." # Minimal debug
+        debug_log "ERROR" "mold_mape: Failed to get user input via prompt_for_mape_input."
         return 1
     fi
-    debug_log "INFO" "mold_mape: User input successful. NEW_IP6_PREFIX='$NEW_IP6_PREFIX', METHOD='$MAPE_IPV6_ACQUISITION_METHOD'." # Minimal debug
+    debug_log "INFO" "mold_mape: User input successful. NEW_IP6_PREFIX='$NEW_IP6_PREFIX', METHOD='$MAPE_IPV6_ACQUISITION_METHOD'."
 
     local ipv6_addr="$NEW_IP6_PREFIX"
     local h0_str h1_str h2_str h3_str
     local awk_output
 
-    # debug_log "DEBUG" "mold_mape: Input to awk: '${ipv6_addr}'" # Minimal debug: Can be enabled if awk is still problematic
-
-    # awk script from previous proposal to address 'db000' issue
     awk_output=$(echo "$ipv6_addr" | awk '
     BEGIN {
         FS=":"; OFS=" ";
-        # print "AWK_DEBUG: BEGIN" > "/dev/stderr"; # Minimal debug: awk internal debugs commented out for now
     }
     {
-        # print "AWK_DEBUG: Original $0 = [" $0 "], Original NF = " NF > "/dev/stderr";
         num_colons = 0; for (i=1; i<=length($0); i++) { if (substr($0, i, 1) == ":") num_colons++; }
         if (index($0, "::")) {
             left_part = ""; right_part = ""; double_colon_pos = index($0, "::");
@@ -893,92 +887,211 @@ mold_mape() {
             num_fields_right = 0; if (right_part != "") { split(right_part, arr_right, ":"); num_fields_right = length(arr_right); }
             zeros_to_insert = 8 - (num_fields_left + num_fields_right);
             if ($0 == "::") zeros_to_insert = 8;
-            # print "AWK_DEBUG: left_part=[" left_part "], num_fields_left=" num_fields_left > "/dev/stderr";
-            # print "AWK_DEBUG: right_part=[" right_part "], num_fields_right=" num_fields_right > "/dev/stderr";
-            # print "AWK_DEBUG: zeros_to_insert=" zeros_to_insert > "/dev/stderr";
             expanded_addr = left_part;
             for (i=1; i<=zeros_to_insert; i++) { expanded_addr = expanded_addr (expanded_addr == "" && left_part == "" ? "" : ":") "0"; }
             if (right_part != "") { expanded_addr = expanded_addr (zeros_to_insert > 0 || left_part != "" ? ":" : "") right_part; }
             if ($0 == "::") expanded_addr = "0:0:0:0:0:0:0:0";
-            # print "AWK_DEBUG: Expanded address before final split = [" expanded_addr "]" > "/dev/stderr";
             split(expanded_addr, flds, ":"); NF = length(flds); for(i=1; i<=NF; i++) $i = flds[i];
         } else {
             split($0, flds, ":"); NF = length(flds); for(i=1; i<=NF; i++) $i = flds[i];
         }
         for (i = NF + 1; i <= 8; i++) { $i = "0"; }
         NF = 8;
-        # print "AWK_DEBUG: Normalized fields:" > "/dev/stderr";
-        # for(i=1; i<=NF; i++) { print "AWK_DEBUG: $" i " = [" ($i == "" ? "0" : $i) "]" > "/dev/stderr"; }
         h0 = ($1 == "" ? "0" : $1); h1 = ($2 == "" ? "0" : $2); h2 = ($3 == "" ? "0" : $3); h3 = ($4 == "" ? "0" : $4);
-        # print "AWK_DEBUG: Final extracted h0=[" h0 "], h1=[" h1 "], h2=[" h2 "], h3=[" h3 "]" > "/dev/stderr";
         print h0, h1, h2, h3;
     }
-    # END { print "AWK_DEBUG: END" > "/dev/stderr"; }
     ')
 
-    debug_log "DEBUG" "mold_mape: awk_output='${awk_output}'" # Minimal debug
+    debug_log "DEBUG" "mold_mape: awk_output='${awk_output}'"
 
     read -r h0_str h1_str h2_str h3_str <<EOF
 $awk_output
 EOF
-    debug_log "DEBUG" "mold_mape: Parsed hex_strings: h0='${h0_str}', h1='${h1_str}', h2='${h2_str}', h3='${h3_str}'" # Minimal debug
+    debug_log "DEBUG" "mold_mape: Parsed hex_strings: h0='${h0_str}', h1='${h1_str}', h2='${h2_str}', h3='${h3_str}'"
 
     local HEXTET0 HEXTET1 HEXTET2 HEXTET3
-    HEXTET0=$((0x${h0_str:-0})); HEXTET1=$((0x${h1_str:-0})); HEXTET2=$((0x${h2_str:-0})); HEXTET3=$((0x${h3_str:-0}))
-    debug_log "DEBUG" "mold_mape: HEXTET3_dec=${HEXTET3} (expected for 'db00' is 56064)" # Minimal debug
+    HEXTET0=$((0x${h0_str:-0}))
+    HEXTET1=$((0x${h1_str:-0}))
+    HEXTET2=$((0x${h2_str:-0}))
+    HEXTET3=$((0x${h3_str:-0}))
+    debug_log "DEBUG" "mold_mape: HEXTET3_dec=${HEXTET3}"
 
     OFFSET=6; RFC=false; IP6PREFIXLEN=""; PSIDLEN=""; IPADDR=""; IPV4=""; PSID=0; PORTS=""; EALEN=""; IP4PREFIXLEN=""; IP6PFX=""; BR=""; CE=""; IPV6PREFIX=""
-    local PREFIX31 PREFIX38; local h0_mul=$(( HEXTET0 * 65536 )); local h1_masked=$(( HEXTET1 & 65534 )); PREFIX31=$(( h0_mul + h1_masked )); local h0_mul2=$(( HEXTET0 * 16777216 )); local h1_mul=$(( HEXTET1 * 256 )); local h2_masked=$(( HEXTET2 & 64512 )); local h2_shift=$(( h2_masked >> 8 )); PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
-    local prefix31_hex=$(printf 0x%x "$PREFIX31"); local prefix38_hex=$(printf 0x%x "$PREFIX38"); local octet1 octet2 octet3 octet4 octet
+    local PREFIX31 PREFIX38
+    local h0_mul=$(( HEXTET0 * 65536 ))
+    local h1_masked=$(( HEXTET1 & 65534 ))
+    PREFIX31=$(( h0_mul + h1_masked ))
+    local h0_mul2=$(( HEXTET0 * 16777216 ))
+    local h1_mul=$(( HEXTET1 * 256 ))
+    local h2_masked=$(( HEXTET2 & 64512 ))
+    local h2_shift=$(( h2_masked >> 8 ))
+    PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
+    local prefix31_hex=$(printf 0x%x "$PREFIX31")
+    local prefix38_hex=$(printf 0x%x "$PREFIX38")
+    local octet1 octet2 octet3 octet4 octet
 
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
-        octet="$(get_ruleprefix38_value "$prefix38_hex")"; debug_log "INFO" "mold_mape: Matched ruleprefix38 ($octet), setting PSIDLEN=8" # Minimal debug
-        # --- Here Document Syntax Correction ---
+        octet="$(get_ruleprefix38_value "$prefix38_hex")"
+        debug_log "INFO" "mold_mape: Matched ruleprefix38 ($octet), setting PSIDLEN=8"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        # --- End Correction ---
-        local temp1=$(( HEXTET2 & 768 )); local temp2=$(( temp1 >> 8 )); octet3=$(( octet3 | temp2 )); octet4=$(( HEXTET2 & 255 )); IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"; IPV4="${octet1}.${octet2}.0.0"; IP6PREFIXLEN=38; PSIDLEN=8; OFFSET=4
+        local temp1=$(( HEXTET2 & 768 ))
+        local temp2=$(( temp1 >> 8 ))
+        octet3=$(( octet3 | temp2 ))
+        octet4=$(( HEXTET2 & 255 ))
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4="${octet1}.${octet2}.0.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=8
+        OFFSET=4
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
-        octet="$(get_ruleprefix31_value "$prefix31_hex")"; debug_log "INFO" "mold_mape: Matched ruleprefix31 ($octet), setting PSIDLEN=8" # Minimal debug
-        # --- Here Document Syntax Correction ---
+        octet="$(get_ruleprefix31_value "$prefix31_hex")"
+        debug_log "INFO" "mold_mape: Matched ruleprefix31 ($octet), setting PSIDLEN=8"
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
-        # --- End Correction ---
-        octet2=$(( octet2 | (HEXTET1 & 1) )); local temp1=$(( HEXTET2 & 65280 )); octet3=$(( temp1 >> 8 )); octet4=$(( HEXTET2 & 255 )); IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"; IPV4="${octet1}.${octet2}.0.0"; IP6PREFIXLEN=31; PSIDLEN=8; OFFSET=4
+        octet2=$(( octet2 | (HEXTET1 & 1) ))
+        local temp1=$(( HEXTET2 & 65280 ))
+        octet3=$(( temp1 >> 8 ))
+        octet4=$(( HEXTET2 & 255 ))
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4="${octet1}.${octet2}.0.0"
+        IP6PREFIXLEN=31
+        PSIDLEN=8
+        OFFSET=4
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-        octet="$(get_ruleprefix38_20_value "$prefix38_hex")"; debug_log "INFO" "mold_mape: Matched ruleprefix38_20 ($octet), setting PSIDLEN=6" # Minimal debug
-        # --- Here Document Syntax Correction ---
+        octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
+        debug_log "INFO" "mold_mape: Matched ruleprefix38_20 ($octet), setting PSIDLEN=6"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        # --- End Correction ---
-        local temp1=$(( HEXTET2 & 960 )); local temp2=$(( temp1 >> 6 )); octet3=$(( octet3 | temp2 )); local temp3=$(( HEXTET2 & 63 )); local temp4=$(( temp3 << 2 )); local temp5=$(( HEXTET3 & 49152 )); local temp6=$(( temp5 >> 14 )); octet4=$(( temp4 | temp6 )); IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"; IPV4="${octet1}.${octet2}.0.0"; IP6PREFIXLEN=38; PSIDLEN=6; OFFSET=6
+        local temp1=$(( HEXTET2 & 960 ))
+        local temp2=$(( temp1 >> 6 ))
+        octet3=$(( octet3 | temp2 ))
+        local temp3=$(( HEXTET2 & 63 ))
+        local temp4=$(( temp3 << 2 ))
+        local temp5=$(( HEXTET3 & 49152 ))
+        local temp6=$(( temp5 >> 14 ))
+        octet4=$(( temp4 | temp6 ))
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
+        IPV4="${octet1}.${octet2}.0.0"
+        IP6PREFIXLEN=38
+        PSIDLEN=6
+        OFFSET=6
     else
-        printf "\nERROR: No matching MAP-E rule found for the provided prefix.\n" >&2; debug_log "ERROR" "mold_mape: No matching ruleprefix. prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}."; return 1
+        printf "\nERROR: No matching MAP-E rule found for the provided prefix.\n" >&2
+        debug_log "ERROR" "mold_mape: No matching ruleprefix. prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}."
+        return 1
     fi
 
-    debug_log "DEBUG" "mold_mape: PSID calculation: PSIDLEN=${PSIDLEN}" # Minimal debug
-    debug_log "DEBUG" "mold_mape: PSID calculation: HEXTET3_dec_for_PSID_calc=${HEXTET3}" # Minimal debug
+    debug_log "DEBUG" "mold_mape: PSID calculation: PSIDLEN=${PSIDLEN}"
+    debug_log "DEBUG" "mold_mape: PSID calculation: HEXTET3_dec_for_PSID_calc=${HEXTET3}"
     if [ "$PSIDLEN" -eq 8 ]; then
-        local val_masked=$(( HEXTET3 & 65280 )); debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=8): (HEXTET3 & 0xff00)=${val_masked}" # Minimal debug
-        PSID=$(( val_masked >> 8 )); debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=8): PSID_dec=${PSID} (expected for HEXTET3='db00' is 219/0xdb)" # Minimal debug
+        local val_masked=$(( HEXTET3 & 65280 ))
+        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=8): (HEXTET3 & 0xff00)=${val_masked}"
+        PSID=$(( val_masked >> 8 ))
+        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=8): PSID_dec=${PSID}"
     elif [ "$PSIDLEN" -eq 6 ]; then
-        local val_masked=$(( HEXTET3 & 16128 )); debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=6): (HEXTET3 & 0x3f00)=${val_masked}" # Minimal debug
-        PSID=$(( val_masked >> 8 )); debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=6): PSID_dec=${PSID}" # Minimal debug
-    else debug_log "WARN" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID remains ${PSID} (default 0)."; fi # Minimal debug
+        local val_masked=$(( HEXTET3 & 16128 ))
+        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=6): (HEXTET3 & 0x3f00)=${val_masked}"
+        PSID=$(( val_masked >> 8 ))
+        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=6): PSID_dec=${PSID}"
+    else
+        debug_log "WARN" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID remains ${PSID} (default 0)."
+    fi
 
-    # (PORTS, CE Address, IPV6PREFIX, EALEN, IP4PREFIXLEN, IP6PFX, BR calculation - minimal or no debug logs for these sections as per "minimal debug_log" instruction)
-    PORTS=""; local AMAX=$(( (1 << OFFSET) - 1 )); local A; for A in $(seq 1 "$AMAX"); do local shift_bits=$(( 16 - OFFSET )); local port_base=$(( A << shift_bits )); local psid_shift=$(( 16 - OFFSET - PSIDLEN )); if [ "$psid_shift" -lt 0 ]; then psid_shift=0; fi; local psid_part=$(( PSID << psid_shift )); local port=$(( port_base | psid_part )); local port_range_size=$(( 1 << psid_shift )); if [ "$port_range_size" -le 0 ]; then port_range_size=1; fi; local port_end=$(( port + port_range_size - 1 )); PORTS="${PORTS}${port}-${port_end}"; if [ "$A" -lt "$AMAX" ]; then if [ $(( A % 3 )) -eq 0 ]; then PORTS="${PORTS}\\n"; else PORTS="${PORTS} "; fi; fi; done
-    local local_CE_HEXTET0 local_CE_HEXTET1 local_CE_HEXTET2 local_CE_HEXTET3_calc local_CE_HEXTET4 local_CE_HEXTET5 local_CE_HEXTET6 local_CE_HEXTET7_calc; local_CE_HEXTET0=$HEXTET0; local_CE_HEXTET1=$HEXTET1; local_CE_HEXTET2=$HEXTET2; local_CE_HEXTET3_calc=$(( HEXTET3 & 65280 ));
-    local ce_octet1=$(echo "$IPADDR" | cut -d. -f1); local ce_octet2=$(echo "$IPADDR" | cut -d. -f2); local ce_octet3=$(echo "$IPADDR" | cut -d. -f3); local ce_octet4=$(echo "$IPADDR" | cut -d. -f4); if [ "$RFC" = "true" ]; then local_CE_HEXTET4=0; local_CE_HEXTET5=$(( (ce_octet1 << 8) | ce_octet2 )); local_CE_HEXTET6=$(( (ce_octet3 << 8) | ce_octet4 )); local_CE_HEXTET7_calc=$PSID; else local_CE_HEXTET4=$ce_octet1; local_CE_HEXTET5=$(( (ce_octet2 << 8) | ce_octet3 )); local_CE_HEXTET6=$(( ce_octet4 << 8 )); local_CE_HEXTET7_calc=$(( PSID << 8 )); fi;
-    local CE0=$(printf %04x "${local_CE_HEXTET0:-0}"); local CE1=$(printf %04x "${local_CE_HEXTET1:-0}"); local CE2=$(printf %04x "${local_CE_HEXTET2:-0}"); local CE3=$(printf %04x "${local_CE_HEXTET3_calc:-0}"); local CE4=$(printf %04x "${local_CE_HEXTET4:-0}"); local CE5=$(printf %04x "${local_CE_HEXTET5:-0}"); local CE6=$(printf %04x "${local_CE_HEXTET6:-0}"); local CE7=$(printf %04x "${local_CE_HEXTET7_calc:-0}"); CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
-    IPV6PREFIX="${h0_str:-0}:${h1_str:-0}:${h2_str:-0}:${h3_str:-0}::"; EALEN=$(( 56 - IP6PREFIXLEN )); IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
-    local IP6PFX0 IP6PFX1 IP6PFX2; if [ "$IP6PREFIXLEN" -eq 38 ]; then local hextet2_2=$(( HEXTET2 & 64512 )); IP6PFX0=$(printf %x "${HEXTET0:-0}"); IP6PFX1=$(printf %x "${HEXTET1:-0}"); IP6PFX2=$(printf %x "${hextet2_2:-0}"); IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"; elif [ "$IP6PREFIXLEN" -eq 31 ]; then local hextet2_1=$(( HEXTET1 & 65534 )); IP6PFX0=$(printf %x "${HEXTET0:-0}"); IP6PFX1=$(printf %x "${hextet2_1:-0}"); IP6PFX="${IP6PFX0}:${IP6PFX1}"; else IP6PFX=""; fi
-    BR=""; if [ "$IP6PREFIXLEN" -eq 31 ]; then if [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then BR="2001:260:700:1::1:275"; fi; if [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then BR="2001:260:700:1::1:276"; fi; if { [ "$PREFIX31" -ge 604512272 ] && [ "$PREFIX31" -lt 604512276 ]; } || { [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; }; then BR="2404:9200:225:100::64"; fi; fi; if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then BR="2001:380:a120::9"; fi; fi
+    PORTS=""
+    local AMAX=$(( (1 << OFFSET) - 1 ))
+    local A
+    for A in $(seq 1 "$AMAX"); do
+        local shift_bits=$(( 16 - OFFSET ))
+        local port_base=$(( A << shift_bits ))
+        local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
+        if [ "$psid_shift" -lt 0 ]; then psid_shift=0; fi
+        local psid_part=$(( PSID << psid_shift ))
+        local port=$(( port_base | psid_part ))
+        local port_range_size=$(( 1 << psid_shift ))
+        if [ "$port_range_size" -le 0 ]; then port_range_size=1; fi
+        local port_end=$(( port + port_range_size - 1 ))
+        PORTS="${PORTS}${port}-${port_end}"
+        if [ "$A" -lt "$AMAX" ]; then
+            if [ $(( A % 3 )) -eq 0 ]; then
+                PORTS="${PORTS}\\n"
+            else
+                PORTS="${PORTS} "
+            fi
+        fi
+    done
 
-    debug_log "INFO" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}." # Minimal debug
+    local local_CE_HEXTET0 local_CE_HEXTET1 local_CE_HEXTET2 local_CE_HEXTET3_calc local_CE_HEXTET4 local_CE_HEXTET5 local_CE_HEXTET6 local_CE_HEXTET7_calc
+    local_CE_HEXTET0=$HEXTET0
+    local_CE_HEXTET1=$HEXTET1
+    local_CE_HEXTET2=$HEXTET2
+    local_CE_HEXTET3_calc=$(( HEXTET3 & 65280 ))
+    local ce_octet1=$(echo "$IPADDR" | cut -d. -f1)
+    local ce_octet2=$(echo "$IPADDR" | cut -d. -f2)
+    local ce_octet3=$(echo "$IPADDR" | cut -d. -f3)
+    local ce_octet4=$(echo "$IPADDR" | cut -d. -f4)
+    if [ "$RFC" = "true" ]; then
+        local_CE_HEXTET4=0
+        local_CE_HEXTET5=$(( (ce_octet1 << 8) | ce_octet2 ))
+        local_CE_HEXTET6=$(( (ce_octet3 << 8) | ce_octet4 ))
+        local_CE_HEXTET7_calc=$PSID
+    else
+        local_CE_HEXTET4=$ce_octet1
+        local_CE_HEXTET5=$(( (ce_octet2 << 8) | ce_octet3 ))
+        local_CE_HEXTET6=$(( ce_octet4 << 8 ))
+        local_CE_HEXTET7_calc=$(( PSID << 8 ))
+    fi
+    local CE0=$(printf %04x "${local_CE_HEXTET0:-0}")
+    local CE1=$(printf %04x "${local_CE_HEXTET1:-0}")
+    local CE2=$(printf %04x "${local_CE_HEXTET2:-0}")
+    local CE3=$(printf %04x "${local_CE_HEXTET3_calc:-0}")
+    local CE4=$(printf %04x "${local_CE_HEXTET4:-0}")
+    local CE5=$(printf %04x "${local_CE_HEXTET5:-0}")
+    local CE6=$(printf %04x "${local_CE_HEXTET6:-0}")
+    local CE7=$(printf %04x "${local_CE_HEXTET7_calc:-0}")
+    CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
+    IPV6PREFIX="${h0_str:-0}:${h1_str:-0}:${h2_str:-0}:${h3_str:-0}::"
+    EALEN=$(( 56 - IP6PREFIXLEN ))
+    IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
+    local IP6PFX0 IP6PFX1 IP6PFX2
+    if [ "$IP6PREFIXLEN" -eq 38 ]; then
+        local hextet2_2=$(( HEXTET2 & 64512 ))
+        IP6PFX0=$(printf %x "${HEXTET0:-0}")
+        IP6PFX1=$(printf %x "${HEXTET1:-0}")
+        IP6PFX2=$(printf %x "${hextet2_2:-0}")
+        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
+    elif [ "$IP6PREFIXLEN" -eq 31 ]; then
+        local hextet2_1=$(( HEXTET1 & 65534 ))
+        IP6PFX0=$(printf %x "${HEXTET0:-0}")
+        IP6PFX1=$(printf %x "${hextet2_1:-0}")
+        IP6PFX="${IP6PFX0}:${IP6PFX1}"
+    else
+        IP6PFX=""
+    fi
+
+    # --- 修正版: BR自動判定ロジック（JS基準） ---
+    BR=""
+    if [ "$IP6PREFIXLEN" -eq 31 ]; then
+        if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
+            BR="2001:260:700:1::1:275"
+        elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
+            BR="2001:260:700:1::1:276"
+        elif { [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; } || \
+             { [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; }; then
+            BR="2404:9200:225:100::64"
+        fi
+    fi
+    if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
+        if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+            BR="2001:380:a120::9"
+        fi
+    fi
+    # --- ここまで修正 ---
+
+    debug_log "INFO" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
 }
 
