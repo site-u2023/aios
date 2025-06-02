@@ -41,7 +41,7 @@ en|MSG_MAPE_IPV6_AWK_PARSE_FAILED=Failed to process IPv6 address.
 en|MENU_INTERNET_MAPE_TEST=Test mode (will not change actual configuration values)
 en|MENU_INTERNET_MAPE_TEST_MODE=Enter the IPv6 prefix or address for MAP-E calculation{;}
 en|MSG_MAPE_CE_AND_64_DIFFERENT=The upper 64 bits (prefix) of the input and CE address do not match
-en|MSG_MAPE_UNSUPPORTED_PREFIX=Unsupported prefix
+en|MSG_MAPE_UNSUPPORTED_PREFIX=No matching MAP-E rule found for the provided prefix
 
 # internet-ds-lite.sh
 en|MSG_DSLITE_SUCCESS=DS-LITE settings successfully
