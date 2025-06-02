@@ -1080,14 +1080,16 @@ EOF
             BR="2001:260:700:1::1:275"
         elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
             BR="2001:260:700:1::1:276"
-        elif { [ "$PREFIX31" -ge 604700688 ] && [ "$PREFIX31" -lt 604700692 ]; } || { [ "$PREFIX31" -ge 604700752 ] && [ "$PREFIX31" -lt 604700756 ]; }; then
+        elif [ "$PREFIX31" -ge 604700688 ] && [ "$PREFIX31" -lt 604700692 ]; then
+            BR="2404:9200:225:100::64"
+        elif [ "$PREFIX31" -ge 604701264 ] && [ "$PREFIX31" -lt 604701268 ]; then
             BR="2404:9200:225:100::64"
         fi
     fi
     if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         BR="2001:380:a120::9"
     fi
-    
+   
     # JavaScript版のelse if (ruleprefix38_20[prefix38]) も考慮
     if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         BR="2001:380:a120::9"
