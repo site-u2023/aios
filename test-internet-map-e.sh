@@ -916,7 +916,7 @@ EOF
     debug_log "DEBUG" "HEXTET0=${HEXTET0} HEXTET1=${HEXTET1} HEXTET2=${HEXTET2} HEXTET3=${HEXTET3}"
 
     if [ $((HEXTET3 & 0xff)) -ne 0 ]; then
-        printf "\n%s\n" "$(color red "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
         return 1
     fi
     
