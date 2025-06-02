@@ -1152,119 +1152,6 @@ EOF
 #
 # This function takes no arguments.
 # It sets a global variable reflecting the user's choice.
-OK_config_mape() {
-
-    local WANMAP='wanmap'
-    local ZONE_NO='1'
-    local osversion_file="${CACHE_DIR}/osversion.ch"
-    local osversion=""
-    
-    debug_log "DEBUG" "config_mape: Backing up configuration files..."
-    cp /etc/config/network /etc/config/network.map-e.bak && debug_log "DEBUG" "config_mape: network backup created." || debug_log "DEBUG" "config_mape: Failed to backup network config."
-    cp /etc/config/dhcp /etc/config/dhcp.map-e.bak && debug_log "DEBUG" "config_mape: dhcp backup created." || debug_log "DEBUG" "config_mape: Failed to backup dhcp config."
-    cp /etc/config/firewall /etc/config/firewall.map-e.bak && debug_log "DEBUG" "config_mape: firewall backup created." || debug_log "DEBUG" "config_mape: Failed to backup firewall config."
-
-    debug_log "DEBUG" "config_mape: Applying MAP-E configuration using UCI."
-
-    uci -q set network.wan.disabled='1'
-    uci -q set network.wan.auto='0'
-
-    uci -q set dhcp.lan.ra='relay'
-    uci -q set dhcp.lan.dhcpv6='relay'
-    uci -q set dhcp.lan.ndp='relay'
-    uci -q set dhcp.lan.force='1'
-
-    uci -q set dhcp.wan6=dhcp
-    uci -q set dhcp.wan6.interface='wan6'
-    uci -q set dhcp.wan6.master='1'
-    uci -q set dhcp.wan6.ra='relay'
-    uci -q set dhcp.wan6.dhcpv6='relay'
-    uci -q set dhcp.wan6.ndp='relay'
-
-    uci -q set network.wan6.proto='dhcpv6'
-    uci -q set network.wan6.reqaddress='try'
-    uci -q set network.wan6.reqprefix='auto'
-    
-    debug_log "DEBUG" "config_mape: IPv6 acquisition method is '${MAPE_IPV6_ACQUISITION_METHOD}'."
-    if [ "$MAPE_IPV6_ACQUISITION_METHOD" = "gua" ]; then
-        if [ -n "$IPV6PREFIX" ]; then
-            debug_log "DEBUG" "config_mape: Setting network.wan6.ip6prefix to '${IPV6PREFIX}/64' (GUA method)."
-            uci -q set network.wan6.ip6prefix="${IPV6PREFIX}/64"
-        else
-            debug_log "DEBUG" "config_mape: IPV6PREFIX is empty, cannot set network.wan6.ip6prefix for GUA method."
-            uci -q delete network.wan6.ip6prefix
-        fi
-    elif [ "$MAPE_IPV6_ACQUISITION_METHOD" = "pd" ]; then
-        debug_log "DEBUG" "config_mape: Deleting network.wan6.ip6prefix (PD method)."
-        uci -q delete network.wan6.ip6prefix
-    else
-        debug_log "DEBUG" "config_mape: Unknown or no IPv6 acquisition method ('${MAPE_IPV6_ACQUISITION_METHOD}'). No specific action for network.wan6.ip6prefix."
-        uci -q delete network.wan6.ip6prefix
-    fi
-
-    uci -q set network.${WANMAP}=interface
-    uci -q set network.${WANMAP}.proto='map'
-    uci -q set network.${WANMAP}.maptype='map-e'
-    uci -q set network.${WANMAP}.peeraddr="${BR}"
-    uci -q set network.${WANMAP}.ipaddr="${IPV4}"
-    uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::"
-    uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
-    uci -q set network.${WANMAP}.ealen="${EALEN}"
-    uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
-    uci -q set network.${WANMAP}.offset="${OFFSET}"
-    uci -q set network.${WANMAP}.mtu='1460'
-    uci -q set network.${WANMAP}.encaplimit='ignore'
-    
-    if [ -f "$osversion_file" ]; then
-        osversion=$(cat "$osversion_file")
-        debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
-    else
-        osversion="unknown"
-        debug_log "DEBUG" "config_mape: OS version file '$osversion_file' not found. Applying default/latest version settings."
-    fi
-    if echo "$osversion" | grep -q "^19"; then
-        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt 19.x compatible version."
-        uci -q delete network.${WANMAP}.tunlink
-        uci -q add_list network.${WANMAP}.tunlink='wan6'
-        uci -q delete network.${WANMAP}.legacymap
-    else
-        debug_log "DEBUG" "config_mape: Applying settings for OpenWrt non-19.x version (e.g., 21.02+ or undefined)."
-        uci -q set dhcp.wan6.ignore='1'
-        uci -q set network.${WANMAP}.legacymap='1'
-        uci -q set network.${WANMAP}.tunlink='wan6'
-    fi
-    
-    local current_wan_networks
-    current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network)
-    if echo "$current_wan_networks" | grep -q "\bwan\b"; then
-        uci -q del_list firewall.@zone[${ZONE_NO}].network='wan'
-        debug_log "DEBUG" "config_mape: Removed 'wan' from firewall zone ${ZONE_NO} network list."
-    fi
-    if ! echo "$current_wan_networks" | grep -q "\b${WANMAP}\b"; then
-        uci -q add_list firewall.@zone[${ZONE_NO}].network=${WANMAP}
-        debug_log "DEBUG" "config_mape: Added '${WANMAP}' to firewall zone ${ZONE_NO} network list."
-    else
-        debug_log "DEBUG" "config_mape: '${WANMAP}' already in firewall zone ${ZONE_NO} network list."
-    fi
-    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
-    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
-    
-    debug_log "DEBUG" "config_mape: Committing UCI changes..."
-    local commit_ok=1
-    if ! uci commit network; then debug_log "DEBUG" "config_mape: Failed to commit network."; commit_ok=0; fi
-    if ! uci commit dhcp; then debug_log "DEBUG" "config_mape: Failed to commit dhcp."; commit_ok=0; fi
-    if ! uci commit firewall; then debug_log "DEBUG" "config_mape: Failed to commit firewall."; commit_ok=0; fi
-
-    if [ "$commit_ok" -eq 1 ]; then
-        debug_log "DEBUG" "config_mape: All UCI sections committed successfully."
-    else
-        debug_log "DEBUG" "config_mape: One or more UCI sections failed to commit."
-    fi
-    
-    return 0
-}
- 
 config_mape() {
     local WANMAP='wanmap'
 
@@ -1717,8 +1604,8 @@ internet_map_main() {
     fi
     
     # 再起動
-    # debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
-    # reboot
+    debug_log "DEBUG" "internet_map_main: Configuration complete. Rebooting system."
+    reboot
 
     return 0 # Explicitly exit with success status
 }
