@@ -920,6 +920,7 @@ EOF
     local PREFIX31 PREFIX38
     local h0_mul=$(( HEXTET0 * 65536 ))
     local h1_masked=$(( HEXTET1 ))
+    debug_log "DEBUG" "HEXTET0=${HEXTET0} HEXTET1=${HEXTET1}"
     PREFIX31=$(( h0_mul + h1_masked ))
     local h0_mul2=$(( HEXTET0 * 16777216 ))
     local h1_mul=$(( HEXTET1 * 256 ))
