@@ -914,13 +914,13 @@ EOF
     HEXTET1=$((0x${h1_str:-0}))
     HEXTET2=$((0x${h2_str:-0}))
     HEXTET3=$((0x${h3_str:-0}))
-    debug_log "DEBUG" "mold_mape: HEXTET3_dec=${HEXTET3}"
+
+    debug_log "DEBUG" "HEXTET0=${HEXTET0} HEXTET1=${HEXTET1} HEXTET2=${HEXTET2} HEXTET3=${HEXTET3}"
 
     OFFSET=6; RFC=false; IP6PREFIXLEN=""; PSIDLEN=""; IPADDR=""; IPV4=""; PSID=0; PORTS=""; EALEN=""; IP4PREFIXLEN=""; IP6PFX=""; BR=""; CE=""; IPV6PREFIX=""
     local PREFIX31 PREFIX38
     local h0_mul=$(( HEXTET0 * 65536 ))
     local h1_masked=$(( HEXTET1 ))
-    debug_log "DEBUG" "HEXTET0=${HEXTET0} HEXTET1=${HEXTET1}"
     PREFIX31=$(( h0_mul + h1_masked ))
     local h0_mul2=$(( HEXTET0 * 16777216 ))
     local h1_mul=$(( HEXTET1 * 256 ))
@@ -930,6 +930,8 @@ EOF
     local prefix31_hex=$(printf 0x%x "$PREFIX31")
     local prefix38_hex=$(printf 0x%x "$PREFIX38")
     local octet1 octet2 octet3 octet4 octet
+
+    debug_log "DEBUG" "PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), PREFIX38=$PREFIX38 (hex=$(printf 0x%x $PREFIX38))"
 
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
@@ -986,20 +988,17 @@ EOF
         return 1
     fi
 
-    debug_log "DEBUG" "mold_mape: PSID calculation: PSIDLEN=${PSIDLEN}"
-    debug_log "DEBUG" "mold_mape: PSID calculation: HEXTET3_dec_for_PSID_calc=${HEXTET3}"
+    debug_log "DEBUG" "PSIDLEN=${PSIDLEN} HEXTET3=${HEXTET3}"
     if [ "$PSIDLEN" -eq 8 ]; then
         local val_masked=$(( HEXTET3 & 65280 ))
-        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=8): (HEXTET3 & 0xff00)=${val_masked}"
         PSID=$(( val_masked >> 8 ))
-        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=8): PSID_dec=${PSID}"
+        debug_log "DEBUG" "PSID(8) val_masked=${val_masked} PSID=${PSID}"
     elif [ "$PSIDLEN" -eq 6 ]; then
         local val_masked=$(( HEXTET3 & 16128 ))
-        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=6): (HEXTET3 & 0x3f00)=${val_masked}"
         PSID=$(( val_masked >> 8 ))
-        debug_log "DEBUG" "mold_mape: PSID calc (PSIDLEN=6): PSID_dec=${PSID}"
+        debug_log "DEBUG" "PSID(6) val_masked=${val_masked} PSID=${PSID}"
     else
-        debug_log "WARN" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID remains ${PSID} (default 0)."
+        debug_log "WARN" "PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID remains ${PSID} (default 0)."
     fi
 
     PORTS=""
@@ -1025,6 +1024,7 @@ EOF
         fi
     done
 
+    # CE address calculation
     local local_CE_HEXTET0 local_CE_HEXTET1 local_CE_HEXTET2 local_CE_HEXTET3_calc local_CE_HEXTET4 local_CE_HEXTET5 local_CE_HEXTET6 local_CE_HEXTET7_calc
     local_CE_HEXTET0=$HEXTET0
     local_CE_HEXTET1=$HEXTET1
@@ -1073,27 +1073,22 @@ EOF
         IP6PFX=""
     fi
 
-    # --- 修正版: BR自動判定ロジック（JS基準） ---
-# ...（略）...
+    # --- BR自動判定 ---
+    debug_log "DEBUG" "BR判定: PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=$IP6PREFIXLEN"
 
-# BR判定前に値を出力
-debug_log "DEBUG" "BR判定: PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=$IP6PREFIXLEN"
-
-BR=""
-if [ "$IP6PREFIXLEN" -eq 31 ]; then
-    if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
-        BR="2001:260:700:1::1:275"
-    elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
-        BR="2001:260:700:1::1:276"
-    elif [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; then
-        BR="2404:9200:225:100::64"
-    elif [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; then
-        BR="2404:9200:225:100::64"
+    BR=""
+    if [ "$IP6PREFIXLEN" -eq 31 ]; then
+        if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
+            BR="2001:260:700:1::1:275"
+        elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
+            BR="2001:260:700:1::1:276"
+        elif [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; then
+            BR="2404:9200:225:100::64"
+        elif [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; then
+            BR="2404:9200:225:100::64"
+        fi
     fi
-fi
-
-debug_log "DEBUG" "BR after判定: BR='${BR}'"
-    # --- ここまで修正 ---
+    debug_log "DEBUG" "BR after判定: BR='${BR}'"
 
     debug_log "INFO" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
