@@ -5,9 +5,9 @@
 SCRIPT_VERSION="2025.05.18-00-00"
 
 # OpenWrt関数をロード
-. /lib/functions.sh
-. /lib/functions/network.sh
-. /lib/netifd/netifd-proto.sh
+# . /lib/functions.sh
+# . /lib/functions/network.sh
+# . /lib/netifd/netifd-proto.sh
 
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix31用）
 get_ruleprefix31_value() {
