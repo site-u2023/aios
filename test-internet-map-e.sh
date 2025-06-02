@@ -814,7 +814,7 @@ pd_decision() {
                 ;;
             fe80:*)
                 # Only link-local address found, treat as error
-                printf "%s\n" "$(color red "$(get_message "MSG_MAPE_GUA_LINKLOCAL_ONLY")")"
+                printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_GUA_LINKLOCAL_ONLY")")"
                 debug_log "DEBUG" "pd_decision: Only link-local IPv6 address detected: $direct_gua"
                 return 1
                 ;;
@@ -856,7 +856,7 @@ mold_mape() {
         NET_IF6="wan6"
     fi
     if ! pd_decision "$NET_IF6"; then
-        printf "\n%s\n" "$(color red "$(get_message "MSG_MAPE_PD_DECISION")")"
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_PD_DECISION")")"
         debug_log "ERROR" "mold_mape: pd_decision reported failure."
         # return 1
     fi
