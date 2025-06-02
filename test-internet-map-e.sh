@@ -1073,26 +1073,25 @@ EOF
     fi
 
     # --- 修正版: BR自動判定ロジック（JS基準） ---
-    debug_log "DEBUG" "BR判定チェック: PREFIX31=${PREFIX31} (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=${IP6PREFIXLEN}"
-    BR=""
-    if [ "$IP6PREFIXLEN" -eq 31 ]; then
-        if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
-            BR="2001:260:700:1::1:275"
-        elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
-            BR="2001:260:700:1::1:276"
-        elif [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; then
-            BR="2404:9200:225:100::64"
-        elif [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; then
-            BR="2404:9200:225:100::64"
-        fi
+# ...（略）...
+
+# BR判定前に値を出力
+debug_log "DEBUG" "BR判定: PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=$IP6PREFIXLEN"
+
+BR=""
+if [ "$IP6PREFIXLEN" -eq 31 ]; then
+    if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
+        BR="2001:260:700:1::1:275"
+    elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
+        BR="2001:260:700:1::1:276"
+    elif [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; then
+        BR="2404:9200:225:100::64"
+    elif [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; then
+        BR="2404:9200:225:100::64"
     fi
-    
-    if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
-        if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-            BR="2001:380:a120::9"
-        fi
-    fi
-    debug_log "DEBUG" "BR after判定: BR='${BR}'"
+fi
+
+debug_log "DEBUG" "BR after判定: BR='${BR}'"
     # --- ここまで修正 ---
 
     debug_log "INFO" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
