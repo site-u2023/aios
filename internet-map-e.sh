@@ -809,8 +809,8 @@ mold_mape() {
     fi
 
     # pd_decision の呼び出しとエラーハンドリング
-    if ! pd_decision "$NET_IF6"; then
-        printf "ERROR: pd_decision reported failure. Cannot proceed.\n" >&2
+    if ! pd_decision "$NET_IF6"; then    
+        printf "\n%s\n" "$(color red "$(get_message "MSG_MAPE_PD_DECISION")")"
         debug_log "DEBUG" "mold_mape: ERROR: pd_decision reported failure." # ERROR -> DEBUG
         return 1
     fi
@@ -892,7 +892,7 @@ EOF
         octet4=$(( temp4 | temp6 )); IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"; IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=38; PSIDLEN=6; OFFSET=6
     else
-        printf "\nERROR: No matching MAP-E rule found for the provided prefix.\n" >&2
+        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX")")"
         debug_log "DEBUG" "mold_mape: ERROR: No matching ruleprefix. prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}." # ERROR -> DEBUG
         return 1
     fi
