@@ -1569,7 +1569,11 @@ restore_mape() {
 
 internet_map_main() {
 
-    prompt_for_mape_input
+    if ! prompt_for_mape_input; then
+        # Error message already printed by prompt_for_mape_input
+        debug_log "ERROR" "internet_map_main: Failed to get valid manual input. Exiting."
+        return 1 # Exit if prompt_for_mape_input failed
+    fi
     
     # MAP-Eパラメータ計算
     if ! mold_mape; then
