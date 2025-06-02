@@ -2,7 +2,7 @@
 
 # Based on script from https://ipv4.web.fc2.com/map-e.html, with appreciation.
 
-SCRIPT_VERSION="2025.06.03-00-01"
+SCRIPT_VERSION="2025.06.03-00-02"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
