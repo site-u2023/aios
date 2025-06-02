@@ -815,14 +815,6 @@ mold_mape() {
         return 1
     fi
 
-    # prompt_for_mape_input の呼び出しとエラーハンドリング
-    if ! prompt_for_mape_input; then
-        # printf "ERROR: Failed to get user input via prompt_for_mape_input. Cannot proceed.\n" >&2 # 元のprompt_for_mape_input内でエラー表示想定
-        debug_log "DEBUG" "mold_mape: ERROR: Failed to get user input via prompt_for_mape_input." # ERROR -> DEBUG
-        return 1
-    fi
-    debug_log "DEBUG" "mold_mape: User input successful. NEW_IP6_PREFIX='$NEW_IP6_PREFIX', METHOD='$MAPE_IPV6_ACQUISITION_METHOD'." # INFO -> DEBUG
-
     local ipv6_addr="$NEW_IP6_PREFIX"
     local h0_str h1_str h2_str h3_str
     local awk_output
