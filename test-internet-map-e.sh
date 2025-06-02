@@ -1073,20 +1073,28 @@ EOF
         IP6PFX=""
     fi
 
-    # --- BR自動判定 ---
+    # --- BR自動判定（JavaScript版と完全一致） ---
     debug_log "DEBUG" "BR判定: PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=$IP6PREFIXLEN"
 
     BR=""
     if [ "$IP6PREFIXLEN" -eq 31 ]; then
+        # 0x24047a80 = 604111488, 0x24047a84 = 604111492
         if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
             BR="2001:260:700:1::1:275"
+        # 0x24047a84 = 604111492, 0x24047a88 = 604111496
         elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
             BR="2001:260:700:1::1:276"
-        elif [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; then
+        # 0x240b0010 = 604700688, 0x240b0014 = 604700692
+        elif [ "$PREFIX31" -ge 604700688 ] && [ "$PREFIX31" -lt 604700692 ]; then
             BR="2404:9200:225:100::64"
-        elif [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; then
+        # 0x240b0250 = 604701392, 0x240b0254 = 604701396
+        elif [ "$PREFIX31" -ge 604701392 ] && [ "$PREFIX31" -lt 604701396 ]; then
             BR="2404:9200:225:100::64"
         fi
+    fi
+    # JavaScript版のelse if (ruleprefix38_20[prefix38]) も考慮
+    if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+        BR="2001:380:a120::9"
     fi
     debug_log "DEBUG" "BR after判定: BR='${BR}'"
 
