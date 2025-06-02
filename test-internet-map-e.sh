@@ -915,6 +915,11 @@ EOF
 
     debug_log "DEBUG" "HEXTET0=${HEXTET0} HEXTET1=${HEXTET1} HEXTET2=${HEXTET2} HEXTET3=${HEXTET3}"
 
+    if [ $((HEXTET3 & 0xff)) -ne 0 ]; then
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
+        return 1
+    fi
+    
     OFFSET=6; RFC=false; IP6PREFIXLEN=""; PSIDLEN=""; IPADDR=""; IPV4=""; PSID=0; PORTS=""; EALEN=""; IP4PREFIXLEN=""; IP6PFX=""; BR=""; CE=""; IPV6PREFIX=""
     local PREFIX31 PREFIX38
     local h0_mul=$(( HEXTET0 * 65536 ))
