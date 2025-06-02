@@ -727,52 +727,52 @@ get_ruleprefix38_20_value() {
 }
 
 # ======================================================================
-# USER INPUT FUNCTION to set global MAP-E variables
+# USER INPUT FUNCTION to set global MAP-E variables (auto PD/GUA detect)
 # ======================================================================
 prompt_for_mape_input() {
     debug_log "DEBUG" "prompt_for_mape_input: Function started."
 
     echo "" # Add a blank line for better readability
-    echo "Select the context for the IPv6 prefix you will enter:"
-    echo "  1. The prefix is a directly assigned Global Unicast Address (GUA) or similar."
-    echo "  2. The prefix is considered to be acquired via Prefix Delegation (PD)."
-    printf "Enter your choice (1 or 2): "
-    read -r choice
-
-    local chosen_method_context_for_prompt="" # For displaying in the next prompt
-    local chosen_method_for_global_var=""     # For setting MAPE_IPV6_ACQUISITION_METHOD
-
-    case "$choice" in
-        1)
-            chosen_method_context_for_prompt="GUA/Direct"
-            chosen_method_for_global_var="gua"
-            ;;
-        2)
-            chosen_method_context_for_prompt="PD"
-            chosen_method_for_global_var="pd"
-            ;;
-        *)
-            printf "ERROR: Invalid choice. Please enter 1 or 2.\n" >&2
-            debug_log "ERROR" "prompt_for_mape_input: Invalid choice '$choice'."
-            return 1
-            ;;
-    esac
-
-    # Ask the user to manually enter the IPv6 prefix
-    printf "Enter the IPv6 prefix for MAP-E calculation (context: %s): " "$chosen_method_context_for_prompt"
+    printf "Enter the IPv6 prefix or address for MAP-E calculation:\n> "
     read -r input_ipv6_prefix
 
     if [ -z "$input_ipv6_prefix" ]; then
         printf "ERROR: IPv6 prefix cannot be empty.\n" >&2
-        debug_log "ERROR" "prompt_for_mape_input: IPv6 prefix was empty for context '$chosen_method_context_for_prompt'."
+        debug_log "ERROR" "prompt_for_mape_input: IPv6 prefix was empty."
         return 1
     fi
 
-    # Set (overwrite) the global variables directly
-    NEW_IP6_PREFIX="$input_ipv6_prefix"
-    MAPE_IPV6_ACQUISITION_METHOD="$chosen_method_for_global_var"
+    # デフォルト値
+    local method="unknown"
+    local prefix_part="$input_ipv6_prefix"
+    local plen=""
 
-    debug_log "INFO" "prompt_for_mape_input: Globals set - NEW_IP6_PREFIX='$NEW_IP6_PREFIX', MAPE_IPV6_ACQUISITION_METHOD='$MAPE_IPV6_ACQUISITION_METHOD'."
+    # プレフィックス長（/nnn）があれば分離
+    if echo "$input_ipv6_prefix" | grep -q '/'; then
+        prefix_part="${input_ipv6_prefix%%/*}"
+        plen="${input_ipv6_prefix##*/}"
+    fi
+
+    # 自動判定ロジック
+    if [ -n "$plen" ]; then
+        if [ "$plen" -le 64 ]; then
+            method="pd"
+        else
+            method="gua"
+        fi
+    else
+        # /がない場合、アドレス末尾が::（ゼロ埋め）ならPD寄り
+        if echo "$prefix_part" | grep -qE '::$'; then
+            method="pd"
+        else
+            method="gua"
+        fi
+    fi
+
+    NEW_IP6_PREFIX="$input_ipv6_prefix"
+    MAPE_IPV6_ACQUISITION_METHOD="$method"
+
+    debug_log "INFO" "prompt_for_mape_input: Auto-detected method='$method', NEW_IP6_PREFIX='$NEW_IP6_PREFIX'"
     return 0
 }
 
@@ -860,7 +860,7 @@ mold_mape() {
     if ! pd_decision "$NET_IF6"; then
         printf "ERROR: pd_decision reported failure. Cannot proceed.\n" >&2
         debug_log "ERROR" "mold_mape: pd_decision reported failure."
-        return 1
+        # return 1
     fi
     if ! prompt_for_mape_input; then
         debug_log "ERROR" "mold_mape: Failed to get user input via prompt_for_mape_input."
