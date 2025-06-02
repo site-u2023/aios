@@ -1095,12 +1095,14 @@ EOF
         fi
     done
 
-    # CEアドレス計算用のHEXTETを準備
-    local CE_HEXTET0 CE_HEXTET1 CE_HEXTET2 CE_HEXTET3 CE_HEXTET4 CE_HEXTET5 CE_HEXTET6 CE_HEXTET7
-    CE_HEXTET0=$HEXTET0
-    CE_HEXTET1=$HEXTET1
-    CE_HEXTET2=$HEXTET2
-    CE_HEXTET3=$(( HEXTET3 & 65280 )) # 上位バイトのみ保持 (0xff00)
+    # CEアドレス計算用のHEXTETを準備 (デバッグログ強化)
+    local local_CE_HEXTET0 local_CE_HEXTET1 local_CE_HEXTET2 local_CE_HEXTET3_calc local_CE_HEXTET4 local_CE_HEXTET5 local_CE_HEXTET6 local_CE_HEXTET7_calc
+    local_CE_HEXTET0=$HEXTET0
+    local_CE_HEXTET1=$HEXTET1
+    local_CE_HEXTET2=$HEXTET2
+    # local_CE_HEXTET3_calc=$(( HEXTET3 & 65280 )) # 元の行：上位バイトのみ保持 (0xff00)
+    local_CE_HEXTET3_calc=$HEXTET3 # ★変更案: HEXTET3の値をそのまま使用する
+    debug_log "DEBUG" "mold_mape: For CE_HEXTET3: HEXTET3=${HEXTET3} (0x$(printf %04x "$HEXTET3")). local_CE_HEXTET3_calc (direct assignment)=${local_CE_HEXTET3_calc} (0x$(printf %04x "$local_CE_HEXTET3_calc"))"
 
     # CEアドレス計算ロジック (RFCフラグはfalse固定)
     local ce_octet1 ce_octet2 ce_octet3 ce_octet4
