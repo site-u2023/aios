@@ -854,7 +854,12 @@ EOF
 
     local HEXTET0 HEXTET1 HEXTET2 HEXTET3
     HEXTET0=$((0x${h0_str:-0})); HEXTET1=$((0x${h1_str:-0})); HEXTET2=$((0x${h2_str:-0})); HEXTET3=$((0x${h3_str:-0}))
-
+   
+    if [ $((HEXTET3 & 0xff)) -ne 0 ]; then
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_CE_AND_64_DIFFERENT")")"
+        return 1
+    fi
+    
     OFFSET=6; RFC=false; IP6PREFIXLEN=""; PSIDLEN=""; IPADDR=""; IPV4=""
     PSID=0; PORTS=""; EALEN=""; IP4PREFIXLEN=""; IP6PFX=""; BR=""; CE=""
     IPV6PREFIX=""
