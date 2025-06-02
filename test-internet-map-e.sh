@@ -732,8 +732,7 @@ get_ruleprefix38_20_value() {
 prompt_for_mape_input() {
     debug_log "DEBUG" "prompt_for_mape_input: Function started."
 
-    echo "" # Add a blank line for better readability
-    printf "Enter the IPv6 prefix or address for MAP-E calculation:\n> "
+    printf "Enter the IPv6 prefix or address for MAP-E calculation: "
     read -r input_ipv6_prefix
 
     if [ -z "$input_ipv6_prefix" ]; then
@@ -772,7 +771,7 @@ prompt_for_mape_input() {
     NEW_IP6_PREFIX="$input_ipv6_prefix"
     MAPE_IPV6_ACQUISITION_METHOD="$method"
 
-    debug_log "INFO" "prompt_for_mape_input: Auto-detected method='$method', NEW_IP6_PREFIX='$NEW_IP6_PREFIX'"
+    debug_log "DEBUG" "prompt_for_mape_input: Auto-detected method='$method', NEW_IP6_PREFIX='$NEW_IP6_PREFIX'"
     return 0
 }
 
@@ -866,7 +865,7 @@ mold_mape() {
         debug_log "ERROR" "mold_mape: Failed to get user input via prompt_for_mape_input."
         return 1
     fi
-    debug_log "INFO" "mold_mape: User input successful. NEW_IP6_PREFIX='$NEW_IP6_PREFIX', METHOD='$MAPE_IPV6_ACQUISITION_METHOD'."
+    debug_log "DEBUG" "mold_mape: User input successful. NEW_IP6_PREFIX='$NEW_IP6_PREFIX', METHOD='$MAPE_IPV6_ACQUISITION_METHOD'."
 
     local ipv6_addr="$NEW_IP6_PREFIX"
     local h0_str h1_str h2_str h3_str
@@ -935,7 +934,7 @@ EOF
 
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
-        debug_log "INFO" "mold_mape: Matched ruleprefix38 ($octet), setting PSIDLEN=8"
+        debug_log "DEBUG" "mold_mape: Matched ruleprefix38 ($octet), setting PSIDLEN=8"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
@@ -950,7 +949,7 @@ EOF
         OFFSET=4
     elif [ -n "$(get_ruleprefix31_value "$prefix31_hex")" ]; then
         octet="$(get_ruleprefix31_value "$prefix31_hex")"
-        debug_log "INFO" "mold_mape: Matched ruleprefix31 ($octet), setting PSIDLEN=8"
+        debug_log "DEBUG" "mold_mape: Matched ruleprefix31 ($octet), setting PSIDLEN=8"
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
@@ -965,7 +964,7 @@ EOF
         OFFSET=4
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
-        debug_log "INFO" "mold_mape: Matched ruleprefix38_20 ($octet), setting PSIDLEN=6"
+        debug_log "DEBUG" "mold_mape: Matched ruleprefix38_20 ($octet), setting PSIDLEN=6"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
@@ -998,7 +997,7 @@ EOF
         PSID=$(( val_masked >> 8 ))
         debug_log "DEBUG" "PSID(6) val_masked=${val_masked} PSID=${PSID}"
     else
-        debug_log "WARN" "PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID remains ${PSID} (default 0)."
+        debug_log "DEBUG" "PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID remains ${PSID} (default 0)."
     fi
 
     PORTS=""
@@ -1098,7 +1097,7 @@ EOF
     fi
     debug_log "DEBUG" "BR after判定: BR='${BR}'"
 
-    debug_log "INFO" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
+    debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
 }
 
