@@ -923,7 +923,7 @@ EOF
     OFFSET=6; RFC=false; IP6PREFIXLEN=""; PSIDLEN=""; IPADDR=""; IPV4=""; PSID=0; PORTS=""; EALEN=""; IP4PREFIXLEN=""; IP6PFX=""; BR=""; CE=""; IPV6PREFIX=""
     local PREFIX31 PREFIX38
     local h0_mul=$(( HEXTET0 * 65536 ))
-    local h1_masked=$(( HEXTET1 & 0xfffe )) # 下位1bitマスク（JavaScript版と同じ）
+    local h1_masked=$(( HEXTET1 & 0xfffe ))
     PREFIX31=$(( h0_mul + h1_masked ))
     local h0_mul2=$(( HEXTET0 * 16777216 ))
     local h1_mul=$(( HEXTET1 * 256 ))
