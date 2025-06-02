@@ -727,49 +727,28 @@ get_ruleprefix38_20_value() {
 }
 
 # ======================================================================
-# NEW MANUAL INPUT FUNCTION (排他的入力対応版)
+# NEW MANUAL INPUT FUNCTION (PDプレフィックスも手動入力する版)
 # ======================================================================
 prompt_for_mape_input() {
     debug_log "DEBUG" "prompt_for_mape_input: Function started."
 
     echo "" # Add a blank line for better readability
-    echo "Select the type of input for MAP-E calculation:"
-    echo "  1. Enter a specific IPv6 address or prefix directly."
-    echo "  2. Simulate PD (Prefix Delegation) acquisition."
-    echo "     (This will use a predefined test prefix for calculation.)"
+    echo "Select the context for the IPv6 prefix you will enter:"
+    echo "  1. The prefix is a directly assigned Global Unicast Address (GUA) or similar."
+    echo "  2. The prefix is considered to be acquired via Prefix Delegation (PD)."
     printf "Enter your choice (1 or 2): "
     read -r choice
 
+    local input_method_context="" # For display purposes in the next prompt
+
     case "$choice" in
         1)
-            # ユーザーがIPv6アドレス/プレフィックスを直接入力するケース
-            printf "Enter the IPv6 address or prefix: "
-            read -r input_ipv6
-            if [ -z "$input_ipv6" ]; then
-                printf "ERROR: IPv6 address/prefix cannot be empty for direct input.\n" >&2
-                debug_log "ERROR" "prompt_for_mape_input: Choice 1, but no IPv6 prefix entered."
-                return 1
-            fi
-            NEW_IP6_PREFIX="$input_ipv6"
-            # この場合、メソッドは 'gua' (または 'direct_input') と見なすことができます。
-            # mold_mape の計算ロジックはメソッドに依存しないため、主に情報提供用。
-            MAPE_IPV6_ACQUISITION_METHOD="gua"
-            debug_log "INFO" "prompt_for_mape_input: Input type 'Direct IPv6'. Prefix: '$NEW_IP6_PREFIX', Method set to '$MAPE_IPV6_ACQUISITION_METHOD'."
+            input_method_context="GUA/Direct"
+            MAPE_IPV6_ACQUISITION_METHOD="gua" # Set method based on user's choice of context
             ;;
         2)
-            # ユーザーがPD利用を想定するケース
-            # ここで、テスト用の代表的なプレフィックスを設定します。
-            # 注意: このプレフィックスは、テストしたいMAP-Eルールに合致するものである必要があります。
-            #       例えば、OCNのルールをテストしたい場合は、OCNで典型的なプレフィックスの一部を使用します。
-            #       テスト対象に応じて、この値を変更するか、ユーザーに選択させるなどの拡張も考えられます。
-            #       今回は、一例としてOCNでよく見られるプレフィックスパターンの一部を使用します。
-            NEW_IP6_PREFIX="240b:10:bf0b:db00::" # OCNの例
-            # NEW_IP6_PREFIX="2404:7a82::" # v6プラスの例 (必要ならこちら、または別のものに)
-
-            MAPE_IPV6_ACQUISITION_METHOD="pd"
-            printf "[INFO] Simulating PD acquisition.\n"
-            printf "[INFO] Using predefined test prefix for calculation: %s\n" "$NEW_IP6_PREFIX"
-            debug_log "INFO" "prompt_for_mape_input: Input type 'PD Simulation'. Using test prefix: '$NEW_IP6_PREFIX', Method set to '$MAPE_IPV6_ACQUISITION_METHOD'."
+            input_method_context="PD"
+            MAPE_IPV6_ACQUISITION_METHOD="pd" # Set method based on user's choice of context
             ;;
         *)
             printf "ERROR: Invalid choice. Please enter 1 or 2.\n" >&2
@@ -778,8 +757,19 @@ prompt_for_mape_input() {
             ;;
     esac
 
-    # グローバル変数が設定されたことを確認 (デバッグ用)
-    debug_log "DEBUG" "prompt_for_mape_input: NEW_IP6_PREFIX='$NEW_IP6_PREFIX', MAPE_IPV6_ACQUISITION_METHOD='$MAPE_IPV6_ACQUISITION_METHOD'"
+    # Ask the user to manually enter the IPv6 prefix, regardless of the chosen context
+    printf "Enter the IPv6 prefix for MAP-E calculation (context: %s): " "$input_method_context"
+    read -r input_ipv6
+
+    if [ -z "$input_ipv6" ]; then
+        printf "ERROR: IPv6 prefix cannot be empty.\n" >&2
+        debug_log "ERROR" "prompt_for_mape_input: IPv6 prefix was empty for context '$input_method_context'."
+        return 1
+    fi
+
+    NEW_IP6_PREFIX="$input_ipv6" # Store the manually entered prefix
+
+    debug_log "INFO" "prompt_for_mape_input: Input context: '$input_method_context'. Prefix: '$NEW_IP6_PREFIX'. Method set to: '$MAPE_IPV6_ACQUISITION_METHOD'."
     return 0
 }
 
