@@ -850,21 +850,38 @@ pd_decision() {
 }
 
 mold_mape() {
-    # Global variables NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are expected
-    # to be set by the caller (e.g., prompt_for_mape_input in this test script).
+    # グローバル変数 NEW_IP6_PREFIX と MAPE_IPV6_ACQUISITION_METHOD は
+    # pd_decision 関数によって設定される。
+    local NET_IF6
+    
+    network_flush_cache
+    network_find_wan6 NET_IF6
 
-    # Minimal check if NEW_IP6_PREFIX is set (caller should ensure this)
-    if [ -z "$NEW_IP6_PREFIX" ]; then
-        printf "ERROR: mold_mape: NEW_IP6_PREFIX is not set. Cannot proceed.\n" >&2
+    if [ -z "$NET_IF6" ]; then
+        debug_log "DEBUG" "mold_mape: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
+        NET_IF6="wan6" # Default to wan6 if not found
+    fi
+    
+    # Get the source IPv6 information using the new dedicated function
+    if ! pd_decision "$NET_IF6"; then
+        # pd_decision failed, NEW_IP6_PREFIX is empty,
+        # and MAPE_IPV6_ACQUISITION_METHOD is "none".
+        # Error message using existing key MSG_MAPE_IPV6_PREFIX_FAILED.
+        # The pd_decision function would have logged details.
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_PREFIX_FAILED")")"
+        debug_log "DEBUG" "mold_mape: pd_decision reported failure. Cannot proceed."
         return 1
     fi
 
-    debug_log "DEBUG" "mold_mape: Starting calculation. IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: ${MAPE_IPV6_ACQUISITION_METHOD:-unknown})"
-
+    # At this point, NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are set by pd_decision.
+    debug_log "DEBUG" "mold_mape: IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: $MAPE_IPV6_ACQUISITION_METHOD)"
+    
     # --- BEGIN IPv6 HEXTET Parsing Correction (POSIX awk compliant, space output) ---
-    local ipv6_addr="$NEW_IP6_PREFIX"
+    # NEW_IP6_PREFIX should contain a valid IPv6 address string (without /NN)
+    local ipv6_addr="$NEW_IP6_PREFIX" 
     local h0_str h1_str h2_str h3_str # Shell variables to hold hex strings
 
+    # Use awk for robust :: expansion and extraction of first 4 hextets (POSIX compliant)
     local awk_output
     awk_output=$(echo "$ipv6_addr" | awk '
     BEGIN { FS=":"; OFS=":" } # Keep OFS=":" for sub(), but print explicitly spaced
@@ -893,58 +910,70 @@ mold_mape() {
         print h0 " " h1 " " h2 " " h3
     }')
 
+    # Read the space-separated hex strings output by awk into shell variables
     read -r h0_str h1_str h2_str h3_str <<EOF
 $awk_output
 EOF
 
+    # Check if awk produced valid output (at least one value)
     if [ -z "$h0_str" ]; then
-        printf "ERROR: mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '%s'\n" "$ipv6_addr" >&2
-        # debug_log "DEBUG" "mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'" # Retained for consistency if debug_log is active
+        # Using a more specific message key if available, or a generic one
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_IPV6_AWK_PARSE_FAILED")")"
+        debug_log "DEBUG" "mold_mape: Failed to parse IPv6 address part using awk (h0_str is empty). Input to awk was: '${ipv6_addr}'"
         return 1
     fi
+    debug_log "DEBUG" "mold_mape: Parsed HEXTET strings: h0_str='$h0_str', h1_str='$h1_str', h2_str='$h2_str', h3_str='$h3_str'" # 追加
 
+    # Convert hex strings to decimal numbers (HEXTET0-HEXTET3)
     local HEXTET0 HEXTET1 HEXTET2 HEXTET3
     HEXTET0=$(printf %d "0x${h0_str:-0}")
     HEXTET1=$(printf %d "0x${h1_str:-0}")
     HEXTET2=$(printf %d "0x${h2_str:-0}")
     HEXTET3=$(printf %d "0x${h3_str:-0}")
+    debug_log "DEBUG" "mold_mape: Parsed HEXTET decimals: HEXTET0=$HEXTET0, HEXTET1=$HEXTET1, HEXTET2=$HEXTET2, HEXTET3=$HEXTET3" # 追加
+    
     # --- END IPv6 HEXTET Parsing Correction ---
 
-    debug_log "DEBUG" "mold_mape: Parsed HEXTETs (decimal): H0=$HEXTET0, H1=$HEXTET1, H2=$HEXTET2, H3=$HEXTET3"
-    debug_log "DEBUG" "mold_mape: Parsed HEXTETs (hex_str): h0_str=$h0_str, h1_str=$h1_str, h2_str=$h2_str, h3_str=$h3_str"
-
+    # 各種計算 (複雑なネスト計算を分割) 
     local PREFIX31 PREFIX38
-    local h0_mul=$(( HEXTET0 * 65536 ))
-    local h1_masked=$(( HEXTET1 & 65534 ))
+    local h0_mul=$(( HEXTET0 * 65536 ))    # 0x10000
+    local h1_masked=$(( HEXTET1 & 65534 )) # 0xfffe
     PREFIX31=$(( h0_mul + h1_masked ))
+    debug_log "DEBUG" "mold_mape: PREFIX31 calculated: $PREFIX31 (0x$(printf %x "$PREFIX31"))" # 追加
 
-    local h0_mul2=$(( HEXTET0 * 16777216 ))
-    local h1_mul=$(( HEXTET1 * 256 ))
-    local h2_masked=$(( HEXTET2 & 64512 ))
+    local h0_mul2=$(( HEXTET0 * 16777216 )) # 0x1000000
+    local h1_mul=$(( HEXTET1 * 256 ))      # 0x100
+    local h2_masked=$(( HEXTET2 & 64512 )) # 0xfc00
     local h2_shift=$(( h2_masked >> 8 ))
     PREFIX38=$(( h0_mul2 + h1_mul + h2_shift ))
+    debug_log "DEBUG" "mold_mape: PREFIX38 calculated: $PREFIX38 (0x$(printf %x "$PREFIX38"))" # 追加
 
-    OFFSET=6
-    RFC=false
+    # グローバル変数として設定するパラメータの初期化
+    # これらの多くはMAP-Eルールに基づいてこの関数内で決定される
+    OFFSET=6  # デフォルト値
+    RFC=false # デフォルト値
     IP6PREFIXLEN=""
     PSIDLEN=""
-    IPADDR=""
-    IPV4=""
+    IPADDR="" # フルIPv4アドレス用
+    IPV4=""   # 設定用IPv4アドレス (*.*.0.0形式)
     PSID=0
     PORTS=""
     EALEN=""
     IP4PREFIXLEN=""
-    IP6PFX=""
+    IP6PFX="" # MAP-Eルール設定用のIPv6プレフィックス (例: option ip6prefix)
     BR=""
     CE=""
-    IPV6PREFIX=""
-
+    # IPV6PREFIX は check_pd のフォールバックで使用されるCEのLAN側/64プレフィックス
+    # これは NEW_IP6_PREFIX の最初の4つのヘキステットから導出される
+    IPV6PREFIX="" 
+    
+    # プレフィックス値に対応するデータを取得
     local prefix31_hex
     prefix31_hex=$(printf 0x%x "$PREFIX31")
     local prefix38_hex
     prefix38_hex=$(printf 0x%x "$PREFIX38")
-    debug_log "DEBUG" "mold_mape: Calculated rule prefixes: prefix31_hex=$prefix31_hex, prefix38_hex=$prefix38_hex"
 
+    # IPv4アドレスと各種パラメータの決定
     local octet1 octet2 octet3 octet4 octet
     if [ -n "$(get_ruleprefix38_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_value "$prefix38_hex")"
@@ -952,13 +981,13 @@ EOF
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        local temp1=$(( HEXTET2 & 768 ))
+        local temp1=$(( HEXTET2 & 768 ))    # 0x0300
         local temp2=$(( temp1 >> 8 ))
         octet3=$(( octet3 | temp2 ))
-        octet4=$(( HEXTET2 & 255 ))
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
-        IPV4="${octet1}.${octet2}.0.0"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}" # フルアドレス
+        IPV4="${octet1}.${octet2}.0.0"                 # 設定用アドレス (*.*.0.0)
         IP6PREFIXLEN=38
         PSIDLEN=8
         OFFSET=4
@@ -968,57 +997,62 @@ EOF
         IFS=',' read -r octet1 octet2 <<EOF
 $octet
 EOF
-        octet2=$(( octet2 | (HEXTET1 & 1) ))
-        local temp1=$(( HEXTET2 & 65280 ))
+        octet2=$(( octet2 | (HEXTET1 & 1) )) # 0x0001
+        local temp1=$(( HEXTET2 & 65280 ))  # 0xff00
         octet3=$(( temp1 >> 8 ))
-        octet4=$(( HEXTET2 & 255 ))
+        octet4=$(( HEXTET2 & 255 ))         # 0x00ff
 
-        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
-        IPV4="${octet1}.${octet2}.0.0"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}" # フルアドレス
+        IPV4="${octet1}.${octet2}.0.0"                 # 設定用アドレス (*.*.0.0)
         IP6PREFIXLEN=31
         PSIDLEN=8
         OFFSET=4
+        debug_log "DEBUG" "mold_mape: Rule ruleprefix31 applied. IPADDR=$IPADDR, IPV4=$IPV4, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET" # 追加
     elif [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         octet="$(get_ruleprefix38_20_value "$prefix38_hex")"
         debug_log "DEBUG" "mold_mape: Matched ruleprefix38_20: $octet"
         IFS=',' read -r octet1 octet2 octet3 <<EOF
 $octet
 EOF
-        local temp1=$(( HEXTET2 & 960 ))
+        local temp1=$(( HEXTET2 & 960 ))    # 0x03c0
         local temp2=$(( temp1 >> 6 ))
         octet3=$(( octet3 | temp2 ))
-        local temp3=$(( HEXTET2 & 63 ))
+        local temp3=$(( HEXTET2 & 63 ))     # 0x003f
         local temp4=$(( temp3 << 2 ))
-        local temp5=$(( HEXTET3 & 49152 ))
+        local temp5=$(( HEXTET3 & 49152 ))  # 0xc000
         local temp6=$(( temp5 >> 14 ))
         octet4=$(( temp4 | temp6 ))
 
-        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
-        IPV4="${octet1}.${octet2}.0.0"
+        IPADDR="${octet1}.${octet2}.${octet3}.${octet4}" # フルアドレス
+        IPV4="${octet1}.${octet2}.0.0"                 # 設定用アドレス (*.*.0.0)
         IP6PREFIXLEN=38
         PSIDLEN=6
-        OFFSET=6
+        OFFSET=6 # ruleprefix38_20では offset=6 を使用
     else
-        printf "\nERROR: mold_mape: No matching ruleprefix found for prefix31=%s or prefix38=%s.\n" "$prefix31_hex" "$prefix38_hex" >&2
-        # debug_log "DEBUG" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}." # Retained for consistency
+        # Using a more specific message key if available, or a generic one
+        printf "\n"
+        printf "%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX_RULE")")"
+        debug_log "DEBUG" "mold_mape: No matching ruleprefix found for prefix31=${prefix31_hex} or prefix38=${prefix38_hex}."
         return 1
     fi
-    debug_log "DEBUG" "mold_mape: After rule match: IPADDR=$IPADDR, IPV4=$IPV4, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET"
 
+    # PSID計算
     if [ "$PSIDLEN" -eq 8 ]; then
-        PSID=$(( (HEXTET3 & 65280) >> 8 ))
-        debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=8: HEXTET3=$HEXTET3, PSID=$PSID"
+        PSID=$(( (HEXTET3 & 65280) >> 8 )) # 0xff00
+        debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=8: HEXTET3=$HEXTET3 (0x$(printf %04x "$HEXTET3")), PSID=$PSID (0x$(printf %02x "$PSID"))" # 修正
     elif [ "$PSIDLEN" -eq 6 ]; then
-        PSID=$(( (HEXTET3 & 16128) >> 8 ))
-        debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=6: HEXTET3=$HEXTET3, PSID=$PSID"
+        PSID=$(( (HEXTET3 & 16128) >> 8 )) # 0x3f00
+        debug_log "DEBUG" "mold_mape: PSID calculation for PSIDLEN=6: HEXTET3=$HEXTET3 (0x$(printf %04x "$HEXTET3")), PSID=$PSID (0x$(printf %02x "$PSID"))" # 修正
     else
-        PSID=0
+        PSID=0 # フォールバック
         debug_log "DEBUG" "mold_mape: PSIDLEN (${PSIDLEN}) is not 8 or 6, PSID set to 0."
     fi
 
+    # ポート範囲の計算
     PORTS=""
     local AMAX=$(( (1 << OFFSET) - 1 ))
     debug_log "DEBUG" "mold_mape: Calculating port ranges: AMAX=$AMAX, OFFSET=$OFFSET, PSIDLEN=$PSIDLEN, PSID=$PSID"
+
     local A
     for A in $(seq 1 "$AMAX"); do
         local shift_bits=$(( 16 - OFFSET ))
@@ -1048,19 +1082,24 @@ EOF
         fi
     done
 
+    # CEアドレス計算用のHEXTETを準備
     local CE_HEXTET0 CE_HEXTET1 CE_HEXTET2 CE_HEXTET3 CE_HEXTET4 CE_HEXTET5 CE_HEXTET6 CE_HEXTET7
     CE_HEXTET0=$HEXTET0
     CE_HEXTET1=$HEXTET1
     CE_HEXTET2=$HEXTET2
-    CE_HEXTET3=$(( HEXTET3 & 65280 ))
+    CE_HEXTET3=$(( HEXTET3 & 65280 )) # 上位バイトのみ保持 (0xff00)
+    debug_log "DEBUG" "mold_mape: CE_HEXTET3 (pre-calc): $CE_HEXTET3 (0x$(printf %04x "$CE_HEXTET3")) from HEXTET3 $HEXTET3" # 追加
 
+    # CEアドレス計算ロジック (RFCフラグはfalse固定)
     local ce_octet1 ce_octet2 ce_octet3 ce_octet4
+    # IPADDR は既に計算済みなので、ここからパースする
     ce_octet1=$(echo "$IPADDR" | cut -d. -f1)
     ce_octet2=$(echo "$IPADDR" | cut -d. -f2)
     ce_octet3=$(echo "$IPADDR" | cut -d. -f3)
     ce_octet4=$(echo "$IPADDR" | cut -d. -f4)
-
+    
     if [ "$RFC" = "true" ]; then
+        # このブロックはRFC=falseのため通常実行されない
         debug_log "DEBUG" "mold_mape: Calculating CE Address (RFC mode - unexpected)"
         CE_HEXTET4=0
         CE_HEXTET5=$(( (ce_octet1 << 8) | ce_octet2 ))
@@ -1072,8 +1111,10 @@ EOF
         CE_HEXTET5=$(( (ce_octet2 << 8) | ce_octet3 ))
         CE_HEXTET6=$(( ce_octet4 << 8 ))
         CE_HEXTET7=$(( PSID << 8 ))
+        debug_log "DEBUG" "mold_mape: CE_HEXTET7 (pre-calc): $CE_HEXTET7 (0x$(printf %04x "$CE_HEXTET7")) from PSID $PSID (0x$(printf %02x "$PSID"))" # 追加
     fi
 
+    # CEアドレス文字列の生成
     local CE0 CE1 CE2 CE3 CE4 CE5 CE6 CE7
     CE0=$(printf %04x "$CE_HEXTET0")
     CE1=$(printf %04x "$CE_HEXTET1")
@@ -1084,52 +1125,71 @@ EOF
     CE6=$(printf %04x "$CE_HEXTET6")
     CE7=$(printf %04x "$CE_HEXTET7")
     CE="${CE0}:${CE1}:${CE2}:${CE3}:${CE4}:${CE5}:${CE6}:${CE7}"
+    # IPV6PREFIX is used by check_pd for potential manual prefix setting.
+    # It should represent the /64 network prefix derived from the source GUA (NEW_IP6_PREFIX).
     IPV6PREFIX="${h0_str}:${h1_str}:${h2_str}:${h3_str}::"
     debug_log "DEBUG" "mold_mape: Generated CE address (CE): $CE"
     debug_log "DEBUG" "mold_mape: Generated CE Network Prefix for wan6 (global IPV6PREFIX for check_pd): $IPV6PREFIX"
 
+    # EALENとプレフィックス長の計算
     EALEN=$(( 56 - IP6PREFIXLEN ))
     IP4PREFIXLEN=$(( 32 - (EALEN - PSIDLEN) ))
     debug_log "DEBUG" "mold_mape: EALEN=$EALEN, IP4PREFIXLEN=$IP4PREFIXLEN"
 
+    # IPv6プレフィックスの計算 (MAP-Eルール用)
+    # This IP6PFX is specific to the MAP-E rule configuration (e.g., option ip6prefix for map interface)
     local IP6PFX0 IP6PFX1 IP6PFX2
     if [ "$IP6PREFIXLEN" -eq 38 ]; then
-        local hextet2_2=$(( HEXTET2 & 64512 ))
+        local hextet2_2=$(( HEXTET2 & 64512 ))  # 0xfc00
         IP6PFX0=$(printf %x "$HEXTET0")
         IP6PFX1=$(printf %x "$HEXTET1")
         IP6PFX2=$(printf %x "$hextet2_2")
         IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
     elif [ "$IP6PREFIXLEN" -eq 31 ]; then
-        local hextet1_1=$(( HEXTET1 & 65534 )) # Corrected variable name based on previous discussion
+        local hextet2_1=$(( HEXTET1 & 65534 ))  # 0xfffe
         IP6PFX0=$(printf %x "$HEXTET0")
-        IP6PFX1=$(printf %x "$hextet1_1")     # Corrected variable name
+        IP6PFX1=$(printf %x "$hextet2_1")
         IP6PFX="${IP6PFX0}:${IP6PFX1}"
     else
-        IP6PFX=""
+        IP6PFX="" # フォールバック
         debug_log "DEBUG" "mold_mape: Could not determine IP6PFX (for MAP-E rule) for IP6PREFIXLEN=$IP6PREFIXLEN"
     fi
     debug_log "DEBUG" "mold_mape: Generated IPv6 prefix for MAP-E rule (local IP6PFX for UCI): $IP6PFX"
 
+    # ブロードバンドルーターアドレス(BR/Peer)の判定
     BR=""
-    debug_log "DEBUG" "mold_mape: For BR calc: PREFIX31=$PREFIX31, IP6PREFIXLEN=$IP6PREFIXLEN, PSIDLEN=$PSIDLEN, OFFSET=$OFFSET, prefix38_hex=$prefix38_hex"
+    debug_log "DEBUG" "mold_mape: Determining BR. IP6PREFIXLEN=$IP6PREFIXLEN, PREFIX31=0x$(printf %x "$PREFIX31")" # 追加
+    # ruleprefix31 にマッチした場合のBR判定 (IP6PREFIXLENが31であることを確認)
     if [ "$IP6PREFIXLEN" -eq 31 ]; then
-        if [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then
+        debug_log "DEBUG" "mold_mape: Checking BR conditions for IP6PREFIXLEN=31." # 追加
+        if [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then # 0x24047a80 - 0x24047a83
             BR="2001:260:700:1::1:275"
-        elif [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then
+            debug_log "DEBUG" "mold_mape: BR set to 2001:260:700:1::1:275" # 追加
+        elif [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then # 0x24047a84 - 0x24047a87
             BR="2001:260:700:1::1:276"
+            debug_log "DEBUG" "mold_mape: BR set to 2001:260:700:1::1:276" # 追加
         elif { [ "$PREFIX31" -ge 604512272 ] && [ "$PREFIX31" -lt 604512276 ]; } || \
-             { [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; }; then
+             { [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; }; then # 0x240b0010-0x240b0013 or 0x240b0250-0x240b0253
             BR="2404:9200:225:100::64"
+            debug_log "DEBUG" "mold_mape: BR set to 2404:9200:225:100::64" # 追加
+        else
+            debug_log "DEBUG" "mold_mape: BR conditions for IP6PREFIXLEN=31 not met." # 追加
         fi
     fi
+    # 上記でBRが設定されなかった場合、ruleprefix38_20 にマッチした場合のBRを設定
+    # (IP6PREFIXLEN=38, PSIDLEN=6, OFFSET=6 は ruleprefix38_20 の特徴)
     if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
+        debug_log "DEBUG" "mold_mape: Checking BR conditions for ruleprefix38_20." # 追加
         if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
              BR="2001:380:a120::9"
+             debug_log "DEBUG" "mold_mape: BR set to 2001:380:a120::9 for ruleprefix38_20" # 追加
+        else
+             debug_log "DEBUG" "mold_mape: BR conditions for ruleprefix38_20 not met (get_ruleprefix38_20_value was empty)." # 追加
         fi
     fi
-    debug_log "DEBUG" "mold_mape: Selected peer address (BR): $BR"
+    debug_log "DEBUG" "mold_mape: Selected peer address (BR): '$BR'" # クォート追加
 
-    debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD:-unknown}."
+    debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
 }
 
