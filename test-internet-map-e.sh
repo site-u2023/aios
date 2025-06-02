@@ -857,8 +857,8 @@ mold_mape() {
     # pd_decision 関数によって設定される。
     local NET_IF6
     
-    network_flush_cache
-    network_find_wan6 NET_IF6
+    # network_flush_cache
+    # network_find_wan6 NET_IF6
 
     if [ -z "$NET_IF6" ]; then
         debug_log "DEBUG" "mold_mape: WAN IPv6 interface (e.g., 'wan6') not found by network_find_wan6. Defaulting to 'wan6'."
@@ -875,6 +875,21 @@ mold_mape() {
         debug_log "DEBUG" "mold_mape: pd_decision reported failure. Cannot proceed."
         return 1
     fi
+
+    # ======================================================================
+    # ★★★ ここにユーザー入力関数を呼び出し、グローバル変数を上書きする1行を挿入 ★★★
+    # ======================================================================
+    if ! prompt_for_mape_input; then # prompt_for_mape_input はユーザー様が提供した関数
+        debug_log "ERROR" "mold_mape: Failed to get user input via prompt_for_mape_input. Cannot proceed."
+        # エラーメッセージは prompt_for_mape_input 内で表示される想定
+        # printf "%s\n" "$(color red "$(get_message "MSG_MAPE_USER_INPUT_FAILED")")" # color/get_messageが利用可能なら
+        return 1
+    fi
+    # この時点で NEW_IP6_PREFIX と MAPE_IPV6_ACQUISITION_METHOD はユーザー指定の値に確定。
+    debug_log "INFO" "mold_mape: User input successful. Globals are now NEW_IP6_PREFIX='$NEW_IP6_PREFIX', MAPE_IPV6_ACQUISITION_METHOD='$MAPE_IPV6_ACQUISITION_METHOD'."
+    # ======================================================================
+    # ★★★ 挿入ここまで ★★★
+    # ======================================================================
 
     # At this point, NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are set by pd_decision.
     debug_log "DEBUG" "mold_mape: IPv6 source for MAP-E: $NEW_IP6_PREFIX (Method: $MAPE_IPV6_ACQUISITION_METHOD)"
@@ -1625,12 +1640,6 @@ restore_mape() {
 }
 
 internet_map_main() {
-
-    if ! prompt_for_mape_input; then
-        # Error message already printed by prompt_for_mape_input
-        debug_log "ERROR" "internet_map_main: Failed to get valid manual input. Exiting."
-        return 1 # Exit if prompt_for_mape_input failed
-    fi
     
     # MAP-Eパラメータ計算
     if ! mold_mape; then
@@ -1644,9 +1653,9 @@ internet_map_main() {
     #     return 1
     # fi
 
-    if ! replace_map_sh; then
-        return 1
-    fi
+    # if ! replace_map_sh; then
+    #     return 1
+    # fi
     
     # UCI設定の適用
     # if ! config_mape; then
