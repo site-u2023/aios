@@ -892,7 +892,7 @@ EOF
         octet4=$(( temp4 | temp6 )); IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"; IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=38; PSIDLEN=6; OFFSET=6
     else
-        printf "\n%s\n" "$(color yellow "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX")")"
+        printf "\n%s\n" "$(color red "$(get_message "MSG_MAPE_UNSUPPORTED_PREFIX")")"
         debug_log "DEBUG" "mold_mape: ERROR: No matching ruleprefix. prefix31_hex=${prefix31_hex}, prefix38_hex=${prefix38_hex}." # ERROR -> DEBUG
         return 1
     fi
