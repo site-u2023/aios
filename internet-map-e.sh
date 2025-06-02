@@ -937,13 +937,19 @@ EOF
     fi
     BR=""
     if [ "$IP6PREFIXLEN" -eq 31 ]; then
-        if [ "$PREFIX31" -ge 604240512 ] && [ "$PREFIX31" -lt 604240516 ]; then BR="2001:260:700:1::1:275"; fi
-        if [ "$PREFIX31" -ge 604240516 ] && [ "$PREFIX31" -lt 604240520 ]; then BR="2001:260:700:1::1:276"; fi
-        if { [ "$PREFIX31" -ge 604512272 ] && [ "$PREFIX31" -lt 604512276 ]; } || \
-           { [ "$PREFIX31" -ge 604512848 ] && [ "$PREFIX31" -lt 604512852 ]; }; then BR="2404:9200:225:100::64"; fi
+        if [ "$PREFIX31" -ge 604111488 ] && [ "$PREFIX31" -lt 604111492 ]; then
+            BR="2001:260:700:1::1:275"
+        elif [ "$PREFIX31" -ge 604111492 ] && [ "$PREFIX31" -lt 604111496 ]; then
+            BR="2001:260:700:1::1:276"
+        elif { [ "$PREFIX31" -ge 605028368 ] && [ "$PREFIX31" -lt 605028372 ]; } || \
+             { [ "$PREFIX31" -ge 605028944 ] && [ "$PREFIX31" -lt 605028948 ]; }; then
+            BR="2404:9200:225:100::64"
+        fi
     fi
     if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
-        if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then BR="2001:380:a120::9"; fi
+        if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
+            BR="2001:380:a120::9"
+        fi
     fi
 
     debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}." # INFO -> DEBUG
