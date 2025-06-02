@@ -856,7 +856,7 @@ mold_mape() {
         NET_IF6="wan6"
     fi
     if ! pd_decision "$NET_IF6"; then
-        printf "ERROR: pd_decision reported failure. Cannot proceed.\n" >&2
+        printf "\n%s\n" "$(color red "$(get_message "MSG_MAPE_PD_DECISION")")"
         debug_log "ERROR" "mold_mape: pd_decision reported failure."
         # return 1
     fi
