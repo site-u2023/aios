@@ -1095,13 +1095,8 @@ EOF
     if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         BR="2001:380:a120::9"
     fi
-
-    # JavaScript版のelse if (ruleprefix38_20[prefix38]) も考慮
-    if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-        BR="2001:380:a120::9"
-    fi
+    
     debug_log "DEBUG" "BR after判定: BR='${BR}'"
-
     debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}."
     return 0
 }
