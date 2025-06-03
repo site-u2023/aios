@@ -1216,11 +1216,14 @@ display_mape() {
 
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
-    printf "  IPv6 Prefix: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
+    printf "  IPv6 prefix or address: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
     printf "  CE: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
-    printf "  IPv4 Address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
+    printf "  IPv4 address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
     printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
 
+    printf "\n"
+    printf "%s\n" "$(color yellow "Note: True values may differ")"
+    
     printf "\n"
     printf "%s\n" "$(color blue "OpenWrt Configuration Values:")" # "OpenWrt設定値:"
     printf "  option peeraddr '%s'\n" "$BR" # BRが空の場合もあるためクォート
