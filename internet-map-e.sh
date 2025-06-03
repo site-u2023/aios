@@ -1511,6 +1511,17 @@ internet_map_main() {
         debug_log "DEBUG" "internet_map_main: mold_mape function failed. Exiting script."
         return 1
     fi
+    
+    # `map` パッケージのインストール 
+    if ! install_package map hidden; then
+        rc=$?
+        if [ "$rc" -eq 3 ]; then
+            debug_log "DEBUG" "internet_map_main: install_package returned 3 (already installed or new install), continue."
+        else
+            debug_log "DEBUG" "internet_map_main: Failed to install 'map' package (rc=$rc)."
+            return 1
+        fi
+    fi
 
     # UCI設定の適用
     if ! config_mape; then
@@ -1518,12 +1529,6 @@ internet_map_main() {
         return 1
     fi
     
-    # `map` パッケージのインストール 
-    if ! install_package map hidden; then
-        debug_log "DEBUG" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
-        return 1
-    fi
-
     if ! replace_map_sh; then
         return 1
     fi
