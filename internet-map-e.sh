@@ -1512,6 +1512,12 @@ internet_map_main() {
         return 1
     fi
 
+    # UCI設定の適用
+    if ! config_mape; then
+        debug_log "DEBUG" "internet_map_main: config_mape function failed. UCI settings might be inconsistent."
+        return 1
+    fi
+    
     # `map` パッケージのインストール 
     if ! install_package map hidden; then
         debug_log "DEBUG" "internet_map_main: Failed to install 'map' package or it was already installed. Continuing."
@@ -1519,12 +1525,6 @@ internet_map_main() {
     fi
 
     if ! replace_map_sh; then
-        return 1
-    fi
-    
-    # UCI設定の適用
-    if ! config_mape; then
-        debug_log "DEBUG" "internet_map_main: config_mape function failed. UCI settings might be inconsistent."
         return 1
     fi
 
