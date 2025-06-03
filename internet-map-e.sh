@@ -741,6 +741,7 @@ pd_decision() {
     local delegated_prefix_with_length
     local address_part_for_mape
     local direct_gua
+    local ip6assign_current
 
     # Initialize global variables for this attempt
     NEW_IP6_PREFIX=""
@@ -797,29 +798,38 @@ pd_decision() {
         debug_log "DEBUG" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'."
     fi
 
-    # --- ここから追加: PD取得失敗時のみip6assign=64を試行 ---
-    debug_log "INFO" "pd_decision: PD not obtained, setting ip6assign=64 and retrying."
-    uci -q set network."$wan_iface".ip6assign='64'
-    uci -q commit network
-    /etc/init.d/network reload >/dev/null 2>&1
-    sleep 2
+    # --- ここから追加: ip6assign未設定時のみセット ---
+    ip6assign_current="$(uci -q get network."$wan_iface".ip6assign 2>/dev/null)"
+    if [ -z "$ip6assign_current" ]; then
+        debug_log "INFO" "pd_decision: ip6assign not set, setting ip6assign=64 and retrying."
+        uci -q set network."$wan_iface".ip6assign='64'
+        uci -q commit network
+        /etc/init.d/network reload >/dev/null 2>&1
+        sleep 2
 
-    network_get_prefix6 delegated_prefix_with_length "${wan_iface}"
-    if [ -n "$delegated_prefix_with_length" ]; then
-        address_part_for_mape=$(echo "$delegated_prefix_with_length" | cut -d'/' -f1)
-        if [ -n "$address_part_for_mape" ]; then
-            NEW_IP6_PREFIX="$address_part_for_mape"
-            MAPE_IPV6_ACQUISITION_METHOD="pd"
-            debug_log "INFO" "pd_decision: Using address part from PD after ip6assign=64: $NEW_IP6_PREFIX"
-            return 0 # Success with PD after fallback
+        network_get_prefix6 delegated_prefix_with_length "${wan_iface}"
+        if [ -n "$delegated_prefix_with_length" ]; then
+            address_part_for_mape=$(echo "$delegated_prefix_with_length" | cut -d'/' -f1)
+            if [ -n "$address_part_for_mape" ]; then
+                NEW_IP6_PREFIX="$address_part_for_mape"
+                MAPE_IPV6_ACQUISITION_METHOD="pd"
+                debug_log "INFO" "pd_decision: Using address part from PD after ip6assign=64: $NEW_IP6_PREFIX"
+                # クリーンアップ
+                debug_log "WARN" "pd_decision: Cleanup ip6assign after fallback."
+                uci -q delete network."$wan_iface".ip6assign
+                uci -q commit network
+                /etc/init.d/network reload >/dev/null 2>&1
+                return 0 # Success with PD after fallback
+            fi
         fi
+        # クリーンアップ
+        debug_log "WARN" "pd_decision: Cleanup ip6assign (PD still not obtained after fallback)."
+        uci -q delete network."$wan_iface".ip6assign
+        uci -q commit network
+        /etc/init.d/network reload >/dev/null 2>&1
+    else
+        debug_log "DEBUG" "pd_decision: ip6assign already set, not overwriting. (current: $ip6assign_current)"
     fi
-
-    # クリーンアップ
-    debug_log "WARN" "pd_decision: Cleanup ip6assign (PD still not obtained)."
-    uci -q delete network."$wan_iface".ip6assign
-    uci -q commit network
-    /etc/init.d/network reload >/dev/null 2>&1
 
     debug_log "DEBUG" "pd_decision: Failed to obtain any usable IPv6 information (GUA or PD)."
     return 1 # Failure
