@@ -1515,8 +1515,8 @@ internet_map_main() {
     # `map` パッケージのインストール 
     if ! install_package map hidden; then
         rc=$?
-        if [ "$rc" -eq 3 ]; then
-            debug_log "DEBUG" "internet_map_main: install_package returned 3 (already installed or new install), continue."
+        if [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; then
+            debug_log "DEBUG" "internet_map_main: install_package returned $rc (success or already installed), continue."
         else
             debug_log "DEBUG" "internet_map_main: Failed to install 'map' package (rc=$rc)."
             return 1
