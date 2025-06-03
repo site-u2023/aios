@@ -1364,7 +1364,7 @@ display_mape() {
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
     printf "  IPv6 Prefix: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
-    printf "  CE IPv6 Address: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
+    printf "  CE: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
     printf "  IPv4 Address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
     printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
 
