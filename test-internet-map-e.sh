@@ -2,7 +2,7 @@
 
 # Based on script from https://ipv4.web.fc2.com/map-e.html, with appreciation.
 
-SCRIPT_VERSION="2025.06.03-00-07"
+SCRIPT_VERSION="2025.06.03-01-00"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
@@ -1080,20 +1080,18 @@ EOF
     debug_log "DEBUG" "BR判定: PREFIX31=$PREFIX31 (hex=$(printf 0x%x $PREFIX31)), IP6PREFIXLEN=$IP6PREFIXLEN"
 
     BR=""
-    if [ "$IP6PREFIXLEN" -eq 31 ]; then
-        # 0x24047a80(604273280)～0x24047a84(604273284)
-        if [ "$PREFIX31" -ge 604273280 ] && [ "$PREFIX31" -lt 604273284 ]; then
-            BR="2001:260:700:1::1:275"
-        # 0x24047a84(604273284)～0x24047a88(604273288)
-        elif [ "$PREFIX31" -ge 604273284 ] && [ "$PREFIX31" -lt 604273288 ]; then
-            BR="2001:260:700:1::1:276"
-        # 0x240b0010(604700688)～0x240b0014(604700692) または 0x240b0250(604701264)～0x240b0254(604701268)
-        elif { [ "$PREFIX31" -ge 604700688 ] && [ "$PREFIX31" -lt 604700692 ]; } || { [ "$PREFIX31" -ge 604701264 ] && [ "$PREFIX31" -lt 604701268 ]; }; then
-            BR="2404:9200:225:100::64"
-        fi
+    if (( IP6PREFIXLEN == 31 )); then
+      if   (( PREFIX31 >= 0x24047a80 && PREFIX31 < 0x24047a84 )); then
+        BR="2001:260:700:1::1:275"
+      elif (( PREFIX31 >= 0x24047a84 && PREFIX31 < 0x24047a88 )); then
+        BR="2001:260:700:1::1:276"
+      elif (( (PREFIX31 >= 0x240b0010 && PREFIX31 < 0x240b0014) \
+         || (PREFIX31 >= 0x240b0250 && PREFIX31 < 0x240b0254) )); then
+        BR="2404:9200:225:100::64"
+      fi
     fi
     if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-        BR="2001:380:a120::9"
+      BR="2001:380:a120::9"
     fi
     
     debug_log "DEBUG" "BR after判定: BR='${BR}'"
