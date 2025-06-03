@@ -932,6 +932,7 @@ EOF
     else
         IP6PFX=""
     fi
+    
     BR=""
     if [ "$IP6PREFIXLEN" -eq 31 ]; then
         # 0x24047a80(604273280)～0x24047a84(604273284)
@@ -947,12 +948,6 @@ EOF
     fi
     if [ -z "$BR" ] && [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
         BR="2001:380:a120::9"
-    fi
-    
-    if [ -z "$BR" ] && [ "$IP6PREFIXLEN" -eq 38 ] && [ "$PSIDLEN" -eq 6 ] && [ "$OFFSET" -eq 6 ]; then
-        if [ -n "$(get_ruleprefix38_20_value "$prefix38_hex")" ]; then
-            BR="2001:380:a120::9"
-        fi
     fi
 
     debug_log "DEBUG" "mold_mape: Exiting mold_mape() function successfully. IPv6 acquisition method: ${MAPE_IPV6_ACQUISITION_METHOD}." # INFO -> DEBUG
