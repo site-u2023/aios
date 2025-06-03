@@ -1216,7 +1216,19 @@ display_mape() {
 
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
-    printf "  IPv6 prefix or address: %s\n" "$NEW_IP6_PREFIX" # "  IPv6プレフィックス: $NEW_IP6_PREFIX"
+    local ipv6_label
+    case "$MAPE_IPV6_ACQUISITION_METHOD" in
+        gua)
+            ipv6_label="IPv6 address:"
+            ;;
+        pd)
+            ipv6_label="IPv6 prefix:"
+            ;;
+        *)
+            ipv6_label="IPv6 prefix or address:"
+            ;;
+    esac
+    printf "  %s %s\n" "$ipv6_label" "$NEW_IP6_PREFIX"
     printf "  CE: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
     printf "  IPv4 address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
     printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
