@@ -731,6 +731,7 @@ get_ruleprefix38_20_value() {
 # ======================================================================
 prompt_for_mape_input() {
     debug_log "DEBUG" "prompt_for_mape_input: Function started."
+    printf "\n" 
     printf "%s" "$(color yellow "$(get_message "MENU_INTERNET_MAPE_TEST_MODE")")"
     read -r input_ipv6_prefix
 
