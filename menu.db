@@ -19,7 +19,7 @@ MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
 [MENU_INTERNET_MAPE]
 MENU_INTERNET_MAPE_MAPOCNV6PLUS menu_yn && download "internet-map-e.sh" "chmod" "load" && internet_map_main
 MENU_INTERNET_RESTORE download "internet-map-e.sh" "chmod" "load"; restore_mape
-# MENU_INTERNET_MAPE_TEST menu_yn && download "test-internet-map-e.sh" "chmod" "load" && internet_map_main
+MENU_INTERNET_MAPE_TEST menu_yn && download "test-internet-map-e.sh" "chmod" "load" && internet_map_main
 
 [MENU_INTERNET_DSLITE]
 MENU_INTERNET_DSLITE_TRANS_EAST menu_yn && download "internet-ds-lite-config.sh" "chmod" "load" && internet_dslite_main "2403:7f00:4000:2000::126"
