@@ -1,6 +1,6 @@
 # all in one scripts
 
-Supported since version 19.07
+Supported since version 19.07~ (snapshot compatible)
 
 New config software is being tested
 
@@ -45,3 +45,8 @@ aios JP
 ```
 https://location-api-worker.site-u.workers.dev/
 ```
+
+### Qiita
+Japanese notation
+
+https://qiita.com/site_u/items/bd331296ce535ed7a69e
