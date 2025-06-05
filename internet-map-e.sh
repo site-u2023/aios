@@ -736,7 +736,7 @@ get_ruleprefix38_20_value() {
 # Returns:
 #   0 on success (NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are set).
 #   1 on failure (NEW_IP6_PREFIX is empty, MAPE_IPV6_ACQUISITION_METHOD is "none").
-pd_decision() {
+NG_pd_decision() {
     local wan_iface="$1"
     local delegated_prefix_with_length
     local address_part_for_mape
@@ -835,7 +835,7 @@ pd_decision() {
     return 1 # Failure
 }
 
-OK_pd_decision() {
+pd_decision() {
     local wan_iface="$1"
     local delegated_prefix_with_length
     local address_part_for_mape
