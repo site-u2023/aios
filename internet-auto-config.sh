@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.05.17-00-11"
+SCRIPT_VERSION="2025.06.05-00-00"
 
 # OpenWrt network helper functions
 . /lib/functions/network.sh
