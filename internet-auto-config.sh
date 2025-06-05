@@ -20,6 +20,7 @@ provider_data_definitions() {
     add_provider_record " |2001:0f70::/29|xpass.jp|cross_generic_dslite|Cross Pass|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
     add_provider_record " |2405:6580::/29|gw.v6connect.jp|v6connect_generic_dslite|v6 Connect|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
     add_provider_record "2515|240d:f::/32| |nuro|NURO Hikari|map-e|download internet-map-e-nuro.sh chmod load; internet_map_nuro_main"
+    add_provider_record "2497|2404:8e00::/32| |iijmio|IIJmio|map-e|download internet-map-e.sh chmod load; internet_map_main"
 }
 
 get_device_network_info() {
