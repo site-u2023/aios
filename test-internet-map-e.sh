@@ -785,11 +785,12 @@ prompt_for_mape_input() {
 # Returns:
 #   0 on success (NEW_IP6_PREFIX and MAPE_IPV6_ACQUISITION_METHOD are set).
 #   1 on failure (NEW_IP6_PREFIX is empty, MAPE_IPV6_ACQUISITION_METHOD is "none").
-pd_decision() {
+NG_pd_decision() {
     local wan_iface="$1"
     local delegated_prefix_with_length
     local address_part_for_mape
     local direct_gua
+    local ip6assign_current
 
     # Initialize global variables for this attempt
     NEW_IP6_PREFIX=""
@@ -846,30 +847,105 @@ pd_decision() {
         debug_log "DEBUG" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'."
     fi
 
-    # --- ここから追加: PD取得失敗時のみip6assign=64を試行 ---
-    debug_log "INFO" "pd_decision: PD not obtained, setting ip6assign=64 and retrying."
-    uci -q set network."$wan_iface".ip6assign='64'
-    uci -q commit network
-    /etc/init.d/network reload >/dev/null 2>&1
-    sleep 2
+    # --- ここから追加: ip6assign未設定時のみセット ---
+    ip6assign_current="$(uci -q get network."$wan_iface".ip6assign 2>/dev/null)"
+    if [ -z "$ip6assign_current" ]; then
+        debug_log "INFO" "pd_decision: ip6assign not set, setting ip6assign=64 and retrying."
+        uci -q set network."$wan_iface".ip6assign='64'
+        uci -q commit network
+        /etc/init.d/network reload >/dev/null 2>&1
+        sleep 2
 
+        network_get_prefix6 delegated_prefix_with_length "${wan_iface}"
+        if [ -n "$delegated_prefix_with_length" ]; then
+            address_part_for_mape=$(echo "$delegated_prefix_with_length" | cut -d'/' -f1)
+            if [ -n "$address_part_for_mape" ]; then
+                NEW_IP6_PREFIX="$address_part_for_mape"
+                MAPE_IPV6_ACQUISITION_METHOD="pd"
+                debug_log "INFO" "pd_decision: Using address part from PD after ip6assign=64: $NEW_IP6_PREFIX"
+                # クリーンアップ
+                debug_log "WARN" "pd_decision: Cleanup ip6assign after fallback."
+                uci -q delete network."$wan_iface".ip6assign
+                uci -q commit network
+                /etc/init.d/network reload >/dev/null 2>&1
+                return 0 # Success with PD after fallback
+            fi
+        fi
+        # クリーンアップ
+        debug_log "WARN" "pd_decision: Cleanup ip6assign (PD still not obtained after fallback)."
+        uci -q delete network."$wan_iface".ip6assign
+        uci -q commit network
+        /etc/init.d/network reload >/dev/null 2>&1
+    else
+        debug_log "DEBUG" "pd_decision: ip6assign already set, not overwriting. (current: $ip6assign_current)"
+    fi
+
+    debug_log "DEBUG" "pd_decision: Failed to obtain any usable IPv6 information (GUA or PD)."
+    return 1 # Failure
+}
+
+pd_decision() {
+    local wan_iface="$1"
+    local delegated_prefix_with_length
+    local address_part_for_mape
+    local direct_gua
+
+    # Initialize global variables for this attempt
+    NEW_IP6_PREFIX=""
+    MAPE_IPV6_ACQUISITION_METHOD="none"
+
+    if [ -z "$wan_iface" ]; then
+        debug_log "DEBUG" "pd_decision: WAN interface name not provided."
+        return 1
+    fi
+
+    # Try to get direct GUA (global unicast address) first
+    debug_log "DEBUG" "pd_decision: Attempting to get direct GUA from interface '${wan_iface}'."
+    network_get_ipaddr6 direct_gua "${wan_iface}"
+
+    if [ -n "$direct_gua" ]; then
+        # Check if the obtained address is global (2000::/3)
+        case "$direct_gua" in
+            2[0-9a-fA-F]*|3[0-9a-fA-F]*)
+                NEW_IP6_PREFIX="$direct_gua"
+                MAPE_IPV6_ACQUISITION_METHOD="gua"
+                debug_log "DEBUG" "pd_decision: Using direct global GUA: $NEW_IP6_PREFIX"
+                return 0 # Success with GUA
+                ;;
+            fe80:*)
+                # Only link-local address found, treat as error
+                printf "%s\n" "$(color red "$(get_message "MSG_MAPE_GUA_LINKLOCAL_ONLY")")"
+                debug_log "DEBUG" "pd_decision: Only link-local IPv6 address detected: $direct_gua"
+                return 1
+                ;;
+            *)
+                # Not a recognized global address, fallback to PD
+                debug_log "DEBUG" "pd_decision: Not a global GUA, trying PD. Got: $direct_gua"
+                ;;
+        esac
+    else
+        debug_log "DEBUG" "pd_decision: No GUA address found, fallback to PD."
+    fi
+
+    # Try to get delegated prefix (PD)
+    debug_log "DEBUG" "pd_decision: Attempting to get delegated prefix from interface '${wan_iface}'."
     network_get_prefix6 delegated_prefix_with_length "${wan_iface}"
+
     if [ -n "$delegated_prefix_with_length" ]; then
         address_part_for_mape=$(echo "$delegated_prefix_with_length" | cut -d'/' -f1)
         if [ -n "$address_part_for_mape" ]; then
             NEW_IP6_PREFIX="$address_part_for_mape"
             MAPE_IPV6_ACQUISITION_METHOD="pd"
-            debug_log "INFO" "pd_decision: Using address part from PD after ip6assign=64: $NEW_IP6_PREFIX"
-            return 0 # Success with PD after fallback
+            debug_log "DEBUG" "pd_decision: Using address part from PD: $NEW_IP6_PREFIX"
+            return 0 # Success with PD
+        else
+            debug_log "DEBUG" "pd_decision: Delegated prefix obtained, but failed to extract address part from '${delegated_prefix_with_length}'."
         fi
+    else
+        debug_log "DEBUG" "pd_decision: Failed to obtain delegated prefix on '${wan_iface}'."
     fi
 
-    # クリーンアップ
-    debug_log "WARN" "pd_decision: Cleanup ip6assign (PD still not obtained)."
-    uci -q delete network."$wan_iface".ip6assign
-    uci -q commit network
-    /etc/init.d/network reload >/dev/null 2>&1
-
+    # If both methods failed
     debug_log "DEBUG" "pd_decision: Failed to obtain any usable IPv6 information (GUA or PD)."
     return 1 # Failure
 }
