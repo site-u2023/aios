@@ -328,105 +328,6 @@ parse_user_ipv6() {
     return 0
 }
 
-OK_calculate_mape_params() {
-    if [ -z "$API_RULE_JSON" ]; then
-        printf "ERROR: API_RULE_JSON is empty in calculate_mape_params.\n" >&2
-        return 1
-    fi
-    if [ -z "$USER_IPV6_HEXTETS" ]; then
-        printf "ERROR: USER_IPV6_HEXTETS is empty in calculate_mape_params.\n" >&2
-        return 1
-    fi
-
-    echo "DEBUG: API_RULE_JSON content:"
-    echo "$API_RULE_JSON"
-    echo "DEBUG: End of API_RULE_JSON"
-
-    local api_br_ipv6_address api_ea_bit_length api_ipv4_prefix api_ipv4_prefix_length \
-          api_ipv6_prefix_rule api_ipv6_prefix_length_rule api_psid_offset
-
-    api_br_ipv6_address=$(echo "$API_RULE_JSON" | sed -n 's/.*"brIpv6Address":\s*"\([^"]*\)".*/\1/p')
-    api_ea_bit_length=$(echo "$API_RULE_JSON"   | sed -n 's/.*"eaBitLength":\s*"\([^"]*\)".*/\1/p')
-    api_ipv4_prefix=$(echo "$API_RULE_JSON"     | sed -n 's/.*"ipv4Prefix":\s*"\([^"]*\)".*/\1/p')
-    api_ipv4_prefix_length=$(echo "$API_RULE_JSON" | sed -n 's/.*"ipv4PrefixLength":\s*"\([^"]*\)".*/\1/p')
-    api_ipv6_prefix_rule=$(echo "$API_RULE_JSON"   | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
-    api_ipv6_prefix_length_rule=$(echo "$API_RULE_JSON" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
-    api_psid_offset=$(echo "$API_RULE_JSON"    | sed -n 's/.*"psIdOffset":\s*"\([^"]*\)".*/\1/p')
-
-    echo "DEBUG: Extracted values:"
-    echo "  brIpv6Address: $api_br_ipv6_address"
-    echo "  eaBitLength: $api_ea_bit_length"
-    echo "  ipv4Prefix: $api_ipv4_prefix"
-    echo "  ipv4PrefixLength: $api_ipv4_prefix_length"
-    echo "  ipv6Prefix: $api_ipv6_prefix_rule"
-    echo "  ipv6PrefixLength: $api_ipv6_prefix_length_rule"
-    echo "  psIdOffset: $api_psid_offset"
-
-    for var_val in "$api_ea_bit_length" \
-                   "$api_ipv4_prefix_length" \
-                   "$api_ipv6_prefix_length_rule" \
-                   "$api_psid_offset"; do
-        if [ -z "$var_val" ] || ! echo "$var_val" | grep -qE '^[0-9]+$'; then
-            printf "ERROR: API parameter '%s' is not a valid number.\n" "$var_val" >&2
-            return 1
-        fi
-    done
-    for var_val in "$api_br_ipv6_address" "$api_ipv4_prefix" "$api_ipv6_prefix_rule"; do
-        if [ -z "$var_val" ]; then
-            printf "ERROR: Required API string parameter is empty.\n" >&2
-            return 1
-        fi
-    done
-
-    BR="$api_br_ipv6_address"
-    IPV4_NET_PREFIX="$api_ipv4_prefix"
-    IP4PREFIXLEN="$api_ipv4_prefix_length"
-    IPV6_RULE_PREFIX="$api_ipv6_prefix_rule"
-    IPV6_RULE_PREFIXLEN="$api_ipv6_prefix_length_rule"
-    EALEN="$api_ea_bit_length"
-    OFFSET="$api_psid_offset"
-
-    local h0 h1 h2 h3 h4 h5 h6 h7
-    read -r h0 h1 h2 h3 h4 h5 h6 h7 <<EOF
-$USER_IPV6_HEXTETS
-EOF
-
-    local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
-    PSIDLEN=$((EALEN - ipv4_suffix_len))
-    if [ "$PSIDLEN" -lt 0 ]; then
-        printf "ERROR: Calculated PSIDLEN is negative (%s).\n" "$PSIDLEN" >&2
-        return 1
-    fi
-
-    PSID=$(( ( (0x$h3) & 0x3F00) >> 8 ))
-
-    local o1 o2 o3_base o4_base o3_val o4_val
-    o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1); o1=$((o1)) 2>/dev/null||o1=0
-    o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2); o2=$((o2)) 2>/dev/null||o2=0
-    o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3); o3_base=$((o3_base))2>/dev/null||o3_base=0
-    o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4); o4_base=$((o4_base))2>/dev/null||o4_base=0
-
-    o3_val=$((o3_base | ( ( (0x$h2) & 0x03C0) >> 6 ) ))
-    o4_val=$(( ( ( (0x$h2) & 0x003F) << 2 ) | ( ( (0x$h3) & 0xC000) >> 14 ) ))
-
-    IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
-
-    local ce_h3_masked
-    ce_h3_masked=$(printf "%04x" "$(( 0x$h3 & 0xFF00 ))")
-    local ce_h4
-    ce_h4=$(printf "%04x" "$o1")
-    local ce_h5
-    ce_h5=$(printf "%04x" "$((o2 * 256 + o3_val))")
-    local ce_h6
-    ce_h6=$(printf "%04x" "$((o4_val * 256))")
-    local ce_h7
-    ce_h7=$(printf "%04x" "$((PSID * 256))")
-
-    CE="${h0}:${h1}:${h2}:${ce_h3_masked}:${ce_h4}:${ce_h5}:${ce_h6}:${ce_h7}"
-
-    return 0
-}
-
 calculate_mape_params() {
     if [ -z "$API_RULE_JSON" ]; then
         printf "ERROR: API_RULE_JSON is empty in calculate_mape_params.\n" >&2
@@ -437,9 +338,10 @@ calculate_mape_params() {
         return 1
     fi
 
-    echo "DEBUG: API_RULE_JSON content:"
-    echo "$API_RULE_JSON"
-    echo "DEBUG: End of API_RULE_JSON"
+    # printf  "\n"
+    # echo "API_RULE_JSON content:"
+    # echo "$API_RULE_JSON"
+    # echo "End of API_RULE_JSON"
 
     local api_br_ipv6_address api_ea_bit_length api_ipv4_prefix api_ipv4_prefix_length
     local api_ipv6_prefix_rule api_ipv6_prefix_length_rule api_psid_offset
