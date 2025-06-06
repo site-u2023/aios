@@ -1,11 +1,9 @@
 #!/bin/ash
 
-# --- Global Settings ---
 SCRIPT_VERSION="0.1.0-ocn" # 新しいスクリプト用のバージョン
 SCRIPT_DEBUG="${SCRIPT_DEBUG:-false}" # デバッグモード (trueで有効)
 OCN_API_CODE="" # OCN API Code (プロンプトで入力)
 
-# MAP-E設定パラメータ用グローバル変数 (calculate_mape_paramsで設定)
 BR=""
 IPV4_NET_PREFIX=""
 IP4PREFIXLEN=""
@@ -24,29 +22,20 @@ WAN6_IF_NAME="wan6"     # デフォルトのIPv6 WANインターフェース名
 MAP_IF_NAME="wanmap"    # MAPインターフェース名
 LAN_IF_NAME="lan"       # デフォルトのLANインターフェース名
 
-# ユーザーのIPv6情報用グローバル変数
 USER_IPV6_ADDR=""
-USER_IPV6_HEXTETS="" # h0 h1 h2 h3 h4 h5 h6 h7 (スペース区切り)
+USER_IPV6_HEXTETS=""
 
-# APIから取得したルールJSON用グローバル変数
 API_RULE_JSON=""
 
-# --- Helper Functions ---
-
-# デバッグメッセージ出力関数
 debug_log() {
     if [ "$SCRIPT_DEBUG" = "true" ]; then
         printf "DEBUG: %s\n" "$1" >&2
     fi
 }
 
-# --- Core Functions ---
-
-# IPv6取得方法を判定してUSER_IPV6_ADDRとMAPE_IPV6_ACQUISITION_METHODを設定する関数
 determine_ipv6_acquisition_method() {
     debug_log "Starting IPv6 acquisition method determination"
     
-    # wan6インターフェース存在確認
     if ! uci get network.wan6 >/dev/null 2>&1; then
         debug_log "wan6 interface not found, creating it"
         uci set network.wan6=interface
@@ -57,7 +46,6 @@ determine_ipv6_acquisition_method() {
         sleep 30
     fi
     
-    # 疎通確認
     debug_log "Checking IPv6 connectivity"
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
        ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
@@ -65,7 +53,6 @@ determine_ipv6_acquisition_method() {
         return 1
     fi
     
-    # GUA判定（優先）
     local ipv6_addr=""
     if command -v network_get_ipaddr6 >/dev/null 2>&1; then
         network_get_ipaddr6 ipv6_addr "wan6"
@@ -78,7 +65,6 @@ determine_ipv6_acquisition_method() {
         return 0
     fi
     
-    # PDフォールバック
     local ipv6_prefix=""
     if command -v network_get_prefix6 >/dev/null 2>&1; then
         network_get_prefix6 ipv6_prefix "wan6"
@@ -91,13 +77,11 @@ determine_ipv6_acquisition_method() {
         return 0
     fi
     
-    # 回線不適合
     debug_log "No IPv6 address or prefix found - line incompatible"
     printf "回線がMAP-Eに対応していません\n"
     return 1
 }
 
-# IPv6アドレスが指定されたプレフィックス範囲内かチェック（ビット単位）
 check_ipv6_in_range() {
     local target_ipv6="$1"
     local prefix_ipv6="$2"
@@ -137,7 +121,6 @@ check_ipv6_in_range() {
         print toupper(substr(result, 1, 32))
     }')
     
-    # プレフィックス長に基づいて比較する16進数の文字数を計算
     local hex_chars=$(( (prefix_len + 3) / 4 ))
     
     local target_masked=$(echo "$target_hex" | cut -c1-"$hex_chars")
@@ -257,7 +240,6 @@ $line"
     return 1
 }
 
-# ユーザーのIPv6アドレスを解析してヘキステットに分解する関数
 parse_user_ipv6() {
     local ipv6_to_parse="$1"
     if [ -z "$ipv6_to_parse" ]; then
@@ -378,17 +360,6 @@ calculate_mape_params() {
     api_ipv6_prefix_length_rule=$(echo "$API_RULE_JSON" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
     api_psid_offset=$(echo "$API_RULE_JSON"    | sed -n 's/.*"psIdOffset":\s*"\([^"]*\)".*/\1/p')
 
-    # テスト用JSON表示
-    echo "API JSON values:"
-    echo "  brIpv6Address: $api_br_ipv6_address"
-    echo "  eaBitLength: $api_ea_bit_length"
-    echo "  ipv4Prefix: $api_ipv4_prefix"
-    echo "  ipv4PrefixLength: $api_ipv4_prefix_length"
-    echo "  ipv6Prefix: $api_ipv6_prefix_rule"
-    echo "  ipv6PrefixLength: $api_ipv6_prefix_length_rule"
-    echo "  psIdOffset: $api_psid_offset"
-    echo "---"
-
     for var_val in "$api_ea_bit_length" \
                    "$api_ipv4_prefix_length" \
                    "$api_ipv6_prefix_length_rule" \
@@ -425,13 +396,6 @@ EOF
         return 1
     fi
 
-    echo "Calculated values:"
-    echo "  IPv4 suffix length: $ipv4_suffix_len"
-    echo "  PSIDLEN: $PSIDLEN"
-    # 変更：スペース区切りからコロン区切りの完全アドレス表示に修正
-    echo "  User IPv6 address: ${h0}:${h1}:${h2}:${h3}:${h4}:${h5}:${h6}:${h7}"
-    echo "---"
-
     PSID=$(( ( (0x$h3) & 0x3F00) >> 8 ))
 
     local o1 o2 o3_base o4_base suffix_o3_part suffix_o4_part1 suffix_o4_part2 o3_val o4_val
@@ -447,14 +411,15 @@ EOF
     o4_val=$((o4_base | suffix_o4_part1 | suffix_o4_part2))
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
-    echo "  Final IPv4: $IPADDR"
-    echo "---"
 
-    # 以下略（CE計算以降は変更なし）
+    local ce_h0 ce_h1 ce_h2 ce_h3_calc ce_h4 ce_h5 ce_h6 ce_h7_calc
+    ce_h0=$h0; ce_h1=$h1; ce_h2=$h2; ce_h3_calc=$(( 0x$h3 & 0xFF00 ))
+    ce_h4=$o1; ce_h5=$(( (o2 << 8) | o3_val )); ce_h6=$(( o4_val << 8 )); ce_h7_calc=$(( PSID << 8 ))
+    CE=$(printf "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x" "$ce_h0" "$ce_h1" "$ce_h2" "$ce_h3_calc" "$ce_h4" "$ce_h5" "$ce_h6" "$ce_h7_calc")
+
     return 0
 }
 
-# MAP-E設定をOpenWrtに適用する関数
 configure_openwrt_mape() {
     debug_log "Applying MAP-E configuration to OpenWrt..."
 
@@ -536,7 +501,6 @@ install_map_package() {
     local pkg_manager=""
     local is_installed=0
     
-    # パッケージマネージャーの判定
     if command -v opkg >/dev/null 2>&1; then
         pkg_manager="opkg"
     elif command -v apk >/dev/null 2>&1; then
@@ -607,7 +571,6 @@ display_mape() {
     printf "  PSID (decimal): %s\n" "$PSID"
 
     printf "\nPort Information:\n"
-    # calculate how many ports are available
     local max_blocks=$((1 << OFFSET))
     local ports_per_block=$((1 << (16 - OFFSET - PSIDLEN)))
     local total_ports=$((ports_per_block * (max_blocks - 1)))
@@ -647,11 +610,9 @@ display_mape() {
     return 0
 }
 
-# メイン処理
 main() {
-    # SCRIPT_DEBUG="true"
     if [ "$SCRIPT_DEBUG" = "true" ]; then
-        printf "INFO: Script running in DEBUG mode.\n"
+        printf "Script running in DEBUG mode.\n"
     fi
 
     if [ -f /lib/functions.sh ]; then
@@ -671,7 +632,6 @@ main() {
         printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
         return 1
     fi
-    printf "INFO: IPv6 acquisition method determined: %s\n" "$MAPE_IPV6_ACQUISITION_METHOD"
 
     if [ -n "$1" ]; then
         OCN_API_CODE="$1"
@@ -696,7 +656,6 @@ main() {
         printf "FATAL: Could not retrieve MAP-E rule from API. Exiting.\n" >&2
         return 1
     fi
-    printf "INFO: Successfully retrieved MAP-E rule from API.\n"
 
     if ! install_map_package; then
         printf "FATAL: Failed to install MAP package. Exiting.\n" >&2
@@ -711,29 +670,18 @@ main() {
         printf "FATAL: Failed to parse user IPv6 address (%s). Exiting.\n" "$USER_IPV6_ADDR" >&2
         return 1
     fi
-    printf "INFO: Successfully parsed user IPv6 address.\n"
 
     if ! calculate_mape_params; then
         printf "FATAL: Failed to calculate MAP-E parameters. Exiting.\n" >&2
         return 1
     fi
-    printf "INFO: Successfully calculated MAP-E parameters.\n"
-
-    # if ! configure_openwrt_mape; then
-    #     printf "FATAL: Failed to apply MAP-E configuration to OpenWrt. Exiting.\n" >&2
-    #     return 1
-    # fi
-    printf "INFO: OpenWrt configuration skipped for testing.\n"
 
     if ! display_mape; then
         printf "FATAL: Failed to display MAP-E parameters. Exiting.\n" >&2
         return 1
     fi
     
-    printf "INFO: OCN MAP-E setup script finished successfully.\n"
-    
     return 0
 }
 
-# --- スクリプト実行 ---
 main "$@"
