@@ -62,6 +62,8 @@ LOCATION_API_MAX_RETRIES="${LOCATION_API_MAX_RETRIES:-5}"
 
 USER_AGENT="${USER_AGENT:-curl/7.74.0}"
 
+API_SETUP="TlRVMU1UUTVOall0TmpNM015MDBOV0pqTFdFd1l6TXROV0poWW1OaE9UQTBNRGswQ2c9PUhUVFAgZXJyb3IgNDAx"
+
 # キャッシュファイルの存在と有効性を確認する関数
 check_location_cache() {
     local cache_language="${CACHE_DIR}/language.ch"
