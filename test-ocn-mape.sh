@@ -670,7 +670,6 @@ main() {
         printf "\n"
         printf "OCN API コードを入力してください: "
         if ! read OCN_API_CODE_INPUT; then
-            printf "\n"
             printf "\nERROR: Failed to read OCN API Code.\n" >&2
             return 1
         fi
