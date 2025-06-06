@@ -756,7 +756,8 @@ test_manual_ipv6_input() {
     return 0
 }
 
-main() {
+ocn_main() {
+
     if [ "$SCRIPT_DEBUG" = "true" ]; then
         printf "Script running in DEBUG mode.\n"
     fi
@@ -774,18 +775,16 @@ main() {
         return 1
     fi
 
-    # 通常モード (コメントアウト)
-    # if ! determine_ipv6_acquisition_method; then
-    #     printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
-    #     return 1
-    # fi
+    if ! determine_ipv6_acquisition_method; then
+        printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
+        return 1
+    fi
 
     if [ -n "$1" ]; then
         OCN_API_CODE="$1"
         debug_log "OCN API Code received from argument."
     elif [ -z "$OCN_API_CODE" ]; then
-        printf "\n"
-        printf "OCN API コードを入力してください: "
+        printf "\nOCN API コードを入力してください: "
         if ! read OCN_API_CODE_INPUT; then
             printf "\nERROR: Failed to read OCN API Code.\n" >&2
             return 1
@@ -796,12 +795,6 @@ main() {
 
     if [ -z "$OCN_API_CODE" ]; then
         printf "ERROR: OCN API Code was not provided. Exiting.\n" >&2
-        return 1
-    fi
-
-    # テストモード (手動IPv6アドレス入力を先に実行)
-    if ! test_manual_ipv6_input; then
-        printf "FATAL: Failed to get manual IPv6 address. Exiting.\n" >&2
         return 1
     fi
 
@@ -833,8 +826,15 @@ main() {
         printf "FATAL: Failed to display MAP-E parameters. Exiting.\n" >&2
         return 1
     fi
-    
+
+    # if ! configure_openwrt_mape; then
+    #     printf "FATAL: Failed to apply MAP-E configuration. Exiting.\n" >&2
+    #     return 1
+    # fi
+
+    # printf "INFO: Rebooting system to apply changes...\n"
+    # reboot
+
     return 0
 }
-
-main "$@"
+ocn_main "$@"
