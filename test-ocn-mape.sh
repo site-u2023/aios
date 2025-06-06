@@ -607,33 +607,34 @@ display_mape() {
     printf "  PSID (decimal): %s\n" "$PSID"
 
     printf "\nPort Information:\n"
-    # 利用可能なポート数
+    # calculate how many ports are available
     local max_blocks=$((1 << OFFSET))
     local ports_per_block=$((1 << (16 - OFFSET - PSIDLEN)))
     local total_ports=$((ports_per_block * (max_blocks - 1)))
     printf "  Available ports: %d\n" "$total_ports"
 
-    # ポート範囲
     printf "\nPort Ranges:\n"
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
     local range_size=$((1 << psid_shift))
     local last=$((max_blocks - 1))
-    local line=""
-    local cnt=0
+    local line="" cnt=0
+
     for A in $(seq 1 "$last"); do
         local base=$((A << shift_bits))
         local part=$((PSID << psid_shift))
         local start=$((base | part))
         local end=$((start + range_size - 1))
         local entry="${start}-${end}"
+
         if [ "$cnt" -eq 0 ]; then
             line="  $entry"
         else
             line="$line $entry"
         fi
         cnt=$((cnt+1))
+
         if [ "$cnt" -ge 3 ] || [ "$A" -eq "$last" ]; then
             printf "%s\n" "$line"
             cnt=0
