@@ -35,17 +35,7 @@ debug_log() {
 
 determine_ipv6_acquisition_method() {
     debug_log "Starting IPv6 acquisition method determination"
-    
-    if ! uci get network.wan6 >/dev/null 2>&1; then
-        debug_log "wan6 interface not found, creating it"
-        uci set network.wan6=interface
-        uci set network.wan6.proto=dhcpv6
-        uci set network.wan6.ifname=eth1
-        uci commit network
-        /etc/init.d/network restart
-        sleep 30
-    fi
-    
+      
     debug_log "Checking IPv6 connectivity"
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
        ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
