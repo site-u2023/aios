@@ -573,11 +573,11 @@ display_mape() {
         *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
     esac
     
-    printf "  %s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
-    printf "  CE: %s\n" "$CE"
-    printf "  IPv4アドレス: %s\n" "$IPADDR"
+    printf "• %s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
+    printf "• CE: %s\n" "$CE"
+    printf "• IPv4アドレス: %s\n" "$IPADDR"
     
-    printf "  ポート番号:\n"
+    printf "• ポート番号:\n"
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
@@ -606,7 +606,7 @@ display_mape() {
     done
     printf "\n"
     
-    printf "  PSID: %s (10進)\n" "$PSID"
+    printf "• PSID: %s (10進)\n" "$PSID"
     printf "\n"
     printf "------------------------------------------------------\n"
     printf "注: 本当の値とは違う場合があります。\n"
