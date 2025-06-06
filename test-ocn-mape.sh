@@ -566,7 +566,6 @@ install_map_package() {
 
 display_mape() {
     printf "\n"
-    printf "プレフィックス情報:\n"
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
         gua) ipv6_label="IPv6アドレス:" ;;
@@ -586,29 +585,22 @@ display_mape() {
     local max_blocks=$((1 << OFFSET))
     local last=$((max_blocks - 1))
     
-    local display_count=0
-    local max_display=12
     local line_items=0
     printf "    "
     
     for A in $(seq 1 "$last"); do
-        if [ "$display_count" -ge "$max_display" ]; then
-            break
-        fi
-        
         local base=$((A << shift_bits))
         local part=$((PSID << psid_shift))
         local start=$((base | part))
         local end=$((start + range_size - 1))
         
         printf "%d-%d" "$start" "$end"
-        display_count=$((display_count + 1))
         line_items=$((line_items + 1))
         
-        if [ "$line_items" -eq 3 ] && [ "$display_count" -lt "$max_display" ]; then
+        if [ "$line_items" -eq 3 ] && [ "$A" -lt "$last" ]; then
             printf "\n    "
             line_items=0
-        elif [ "$display_count" -lt "$max_display" ] && [ "$A" -lt "$last" ]; then
+        elif [ "$A" -lt "$last" ]; then
             printf " "
         fi
     done
