@@ -995,6 +995,7 @@ display_mape() {
 
 # メイン処理
 main() {
+    SCRIPT_DEBUG="true"
     if [ "$SCRIPT_DEBUG" = "true" ]; then
         printf "INFO: Script running in DEBUG mode.\n"
     fi
