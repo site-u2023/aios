@@ -231,6 +231,7 @@ $line"
 
 get_ocn_rule_from_api() {
     local wan_iface="${1:-$WAN6_IF_NAME}"
+    local encrypted_key="$2"   
     local current_user_ipv6_addr="$USER_IPV6_ADDR"
     local normalized_prefix=""
     local prefix_len_for_api="64"
