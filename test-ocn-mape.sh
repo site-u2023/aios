@@ -257,14 +257,6 @@ get_ocn_rule_from_api() {
             if [ -n "$ENCRYPTED_KEY" ]; then
                 generate "$password_seed" "$ENCRYPTED_KEY"
             fi
-            if [ -z "$OCN_API_CODE" ]; then
-                printf "\nPlease input OCN API code: "
-                if ! read OCN_API_CODE_INPUT; then
-                    printf "Error: failed to read OCN API code.\n" >&2
-                    return 1
-                fi
-                OCN_API_CODE="$OCN_API_CODE_INPUT"
-            fi
         else
             wget_result=$(wget -6 -qO- "$api_url" 2>/dev/null)
             if [ $? -ne 0 ] || [ -z "$wget_result" ]; then
