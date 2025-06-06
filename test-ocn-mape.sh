@@ -578,7 +578,6 @@ display_mape() {
     printf "  CE: %s\n" "$CE"
     printf "  IPv4 address: %s\n" "$IPADDR"
     
-    # ポート範囲計算と表示
     printf "  Port ranges:\n"
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
@@ -587,7 +586,6 @@ display_mape() {
     local max_blocks=$((1 << OFFSET))
     local last=$((max_blocks - 1))
     
-    # 最初の4行分のポート範囲を表示
     local display_count=0
     local max_display=12
     local line_items=0
@@ -619,7 +617,9 @@ display_mape() {
     printf "  PSID: %s (10進)\n" "$PSID"
 
     printf "\n"
+    printf "------------------------------------------------------\n"
     printf "注: 本当の値とは違う場合があります。\n"
+    printf "------------------------------------------------------\n"
     printf "\n"
     
     printf "option peeraddr %s\n" "$BR"
@@ -633,10 +633,12 @@ display_mape() {
     printf "\n"
     printf "export LEGACY=1\n"
     printf "\n"
+    printf "------------------------------------------------------\n"
+    printf "\n"
     
     printf "(config-softwire)# map-version draft\n"
-    printf "(config-softwire)# rule <%s> ipv4-prefix %s/%s ipv6-prefix %s::/%s [ea-length %s][psid-length %s [psid %s]] [offset 6] [forwarding]\n" \
-           "$PSID" "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID"
+    printf "(config-softwire)# rule <%s> ipv4-prefix %s/%s ipv6-prefix %s::/%s [ea-length %s][psid-length %s [psid %s]] [offset %s] [forwarding]\n" \
+           "$PSID" "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
 
     printf "\n"
     printf "Powered by config-softwire\n"
