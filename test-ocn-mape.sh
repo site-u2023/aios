@@ -104,82 +104,43 @@ check_ipv6_in_range() {
 
     local target_hex=$(echo "$target_ipv6" | awk -F: '{
         result = ""
+        zero_fill = 8 - NF
         for(i=1; i<=NF; i++) {
             if($i == "") {
-                missing_fields = 8 - (NF - 1)
-                for(j=1; j<=missing_fields; j++) {
-                    result = result "0000"
-                }
+                for(j=0; j<zero_fill; j++) result = result "0000"
+                zero_fill = 0 
             } else {
                 seg = $i
                 while(length(seg) < 4) seg = "0" seg
                 result = result seg
             }
         }
-        while(length(result) < 32) result = result "0"
+        while(length(result) < 32) result = result "0000"
         print toupper(substr(result, 1, 32))
     }')
     
     local prefix_hex=$(echo "$prefix_ipv6" | awk -F: '{
         result = ""
+        zero_fill = 8 - NF
         for(i=1; i<=NF; i++) {
             if($i == "") {
-                missing_fields = 8 - (NF - 1)
-                for(j=1; j<=missing_fields; j++) {
-                    result = result "0000"
-                }
+                for(j=0; j<zero_fill; j++) result = result "0000"
+                zero_fill = 0
             } else {
                 seg = $i
                 while(length(seg) < 4) seg = "0" seg
                 result = result seg
             }
         }
-        while(length(result) < 32) result = result "0"
+        while(length(result) < 32) result = result "0000"
         print toupper(substr(result, 1, 32))
     }')
     
-    local bits_to_check="$prefix_len"
-    local hex_chars=$(( (bits_to_check + 3) / 4 ))
-    
+    local hex_chars=$(( (prefix_len + 3) / 4 ))
     local target_masked=$(echo "$target_hex" | cut -c1-"$hex_chars")
     local prefix_masked=$(echo "$prefix_hex" | cut -c1-"$hex_chars")
     
-    local remaining_bits=$(( bits_to_check % 4 ))
-    
-    if [ "$remaining_bits" -eq 0 ]; then
-        [ "$target_masked" = "$prefix_masked" ]
-        return $?
-    fi
-    
-    if [ "$hex_chars" -le 1 ]; then
-        local target_dec=$(printf "%d" "0x${target_masked}")
-        local prefix_dec=$(printf "%d" "0x${prefix_masked}")
-        local mask=$(( 0xF << (4 - remaining_bits) ))
-        local target_bits=$(( target_dec & mask ))
-        local prefix_bits=$(( prefix_dec & mask ))
-        [ "$target_bits" -eq "$prefix_bits" ]
-        return $?
-    fi
-    
-    local full_hex_part=$(( hex_chars - 1 ))
-    local target_full=$(echo "$target_masked" | cut -c1-"$full_hex_part")
-    local prefix_full=$(echo "$prefix_masked" | cut -c1-"$full_hex_part")
-    
-    if [ "$target_full" != "$prefix_full" ]; then
-        return 1
-    fi
-    
-    local last_target_char=$(echo "$target_masked" | cut -c"$hex_chars")
-    local last_prefix_char=$(echo "$prefix_masked" | cut -c"$hex_chars")
-    
-    local target_dec=$(printf "%d" "0x${last_target_char}")
-    local prefix_dec=$(printf "%d" "0x${last_prefix_char}")
-    
-    local mask=$(( 0xF << (4 - remaining_bits) ))
-    local target_bits=$(( target_dec & mask ))
-    local prefix_bits=$(( prefix_dec & mask ))
-    
-    [ "$target_bits" -eq "$prefix_bits" ]
+    [ "$target_masked" = "$prefix_masked" ]
 }
 
 # OCN APIからマッチするルールを取得する関数
