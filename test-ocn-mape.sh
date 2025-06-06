@@ -565,46 +565,72 @@ display_mape() {
         pd)  ipv6_label="IPv6 prefix:"  ;;
         *)   ipv6_label="IPv6 prefix/address:" ;;
     esac
-    printf "  %s %s\n" "$ipv6_label" "$USER_IPV6_ADDR"
-    printf "  CE: %s\n"        "$CE"
+    
+    printf "  %s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
+    printf "  CE: %s\n" "$CE"
     printf "  IPv4 address: %s\n" "$IPADDR"
-    printf "  PSID (decimal): %s\n" "$PSID"
-
-    printf "\nPort Information:\n"
-    local max_blocks=$((1 << OFFSET))
-    local ports_per_block=$((1 << (16 - OFFSET - PSIDLEN)))
-    local total_ports=$((ports_per_block * (max_blocks - 1)))
-    printf "  Available ports: %d\n" "$total_ports"
-
-    printf "\nPort Ranges:\n"
+    
+    printf "  Port ranges:\n"
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
     local range_size=$((1 << psid_shift))
     local last=$((max_blocks - 1))
-    local line="" cnt=0
-
+    
+    local display_lines=0
+    local max_display_lines=4
     for A in $(seq 1 "$last"); do
         local base=$((A << shift_bits))
         local part=$((PSID << psid_shift))
         local start=$((base | part))
         local end=$((start + range_size - 1))
-        local entry="${start}-${end}"
-
-        if [ "$cnt" -eq 0 ]; then
-            line="  $entry"
-        else
-            line="$line $entry"
+        
+        if [ "$display_lines" -lt "$max_display_lines" ]; then
+            if [ "$display_lines" -eq 0 ]; then
+                printf "    %d-%d" "$start" "$end"
+            else
+                printf " %d-%d" "$start" "$end"
+            fi
+            
+            if [ $(( (display_lines + 1) % 3 )) -eq 0 ]; then
+                printf "\n"
+                if [ "$display_lines" -lt $((max_display_lines - 1)) ]; then
+                    printf "    "
+                fi
+            fi
         fi
-        cnt=$((cnt+1))
-
-        if [ "$cnt" -ge 3 ] || [ "$A" -eq "$last" ]; then
-            printf "%s\n" "$line"
-            cnt=0
+        display_lines=$((display_lines + 1))
+        
+        if [ "$display_lines" -ge "$max_display_lines" ]; then
+            break
         fi
     done
+    printf "\n"
+    
+    printf "  PSID: %s (10進)\n" "$PSID"
 
-    printf "\nPowered by config-softwire\n"
+    printf "\n"
+    printf "注: 本当の値とは違う場合があります。\n"
+    printf "\n"
+    
+    printf "option peeraddr %s\n" "$BR"
+    printf "option ipaddr %s\n" "$IPV4_NET_PREFIX"
+    printf "option ip4prefixlen %s\n" "$IP4PREFIXLEN"
+    printf "option ip6prefix %s::\n" "$IPV6_RULE_PREFIX"
+    printf "option ip6prefixlen %s\n" "$IPV6_RULE_PREFIXLEN"
+    printf "option ealen %s\n" "$EALEN"
+    printf "option psidlen %s\n" "$PSIDLEN"
+    printf "option offset %s\n" "$OFFSET"
+    printf "\n"
+    printf "export LEGACY=1\n"
+    printf "\n"
+    
+    printf "(config-softwire)# map-version draft\n"
+    printf "(config-softwire)# rule <%s> ipv4-prefix %s/%s ipv6-prefix %s::/%s [ea-length %s][psid-length %s [psid %s]] [offset %s] [forwarding]\n" \
+           "$PSID" "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
+
+    printf "\n"
+    printf "Powered by config-softwire\n"
     printf "Press any key to apply and reboot...\n"
     read -r -n1 -s
     return 0
