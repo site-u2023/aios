@@ -572,6 +572,10 @@ display_mape() {
         pd)  ipv6_label="IPv6プレフィックス:"  ;;
         *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
     esac
+
+    printf "\n"
+    printf "------------------------------------------------------\n"
+    printf "\n"   
     
     printf "• %s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "• CE: %s\n" "$CE"
@@ -604,9 +608,7 @@ display_mape() {
             printf " "
         fi
     done
-    printf "\n"
-    printf "------------------------------------------------------\n"
-    printf "\n"    
+    printf "\n" 
     printf "• PSID: %s (10進)\n" "$PSID"
     printf "\n"
     printf "------------------------------------------------------\n"
