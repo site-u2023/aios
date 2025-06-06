@@ -349,6 +349,10 @@ calculate_mape_params() {
         return 1
     fi
 
+    echo "DEBUG: API_RULE_JSON content:"
+    echo "$API_RULE_JSON"
+    echo "DEBUG: End of API_RULE_JSON"
+
     local api_br_ipv6_address api_ea_bit_length api_ipv4_prefix api_ipv4_prefix_length \
           api_ipv6_prefix_rule api_ipv6_prefix_length_rule api_psid_offset
 
@@ -359,6 +363,15 @@ calculate_mape_params() {
     api_ipv6_prefix_rule=$(echo "$API_RULE_JSON"   | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
     api_ipv6_prefix_length_rule=$(echo "$API_RULE_JSON" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
     api_psid_offset=$(echo "$API_RULE_JSON"    | sed -n 's/.*"psIdOffset":\s*"\([^"]*\)".*/\1/p')
+
+    echo "DEBUG: Extracted values:"
+    echo "  brIpv6Address: $api_br_ipv6_address"
+    echo "  eaBitLength: $api_ea_bit_length"
+    echo "  ipv4Prefix: $api_ipv4_prefix"
+    echo "  ipv4PrefixLength: $api_ipv4_prefix_length"
+    echo "  ipv6Prefix: $api_ipv6_prefix_rule"
+    echo "  ipv6PrefixLength: $api_ipv6_prefix_length_rule"
+    echo "  psIdOffset: $api_psid_offset"
 
     for var_val in "$api_ea_bit_length" \
                    "$api_ipv4_prefix_length" \
