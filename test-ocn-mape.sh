@@ -701,6 +701,12 @@ main() {
         return 1
     fi
 
+    # テストモード (手動IPv6アドレス入力を先に実行)
+    if ! test_manual_ipv6_input; then
+        printf "FATAL: Failed to get manual IPv6 address. Exiting.\n" >&2
+        return 1
+    fi
+
     if ! get_ocn_rule_from_api "$WAN6_IF_NAME"; then
         printf "FATAL: Could not retrieve MAP-E rule from API. Exiting.\n" >&2
         return 1
@@ -708,12 +714,6 @@ main() {
 
     if ! install_map_package; then
         printf "FATAL: Failed to install MAP package. Exiting.\n" >&2
-        return 1
-    fi
-
-    # テストモード (手動IPv6アドレス入力)
-    if ! test_manual_ipv6_input; then
-        printf "FATAL: Failed to get manual IPv6 address. Exiting.\n" >&2
         return 1
     fi
 
