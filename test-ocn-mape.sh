@@ -641,7 +641,7 @@ display_mape() {
 }
 
 test_manual_ipv6_input() {
-    printf "テスト用IPv6アドレスを入力してください: "
+    printf "IPv6アドレスを入力してください: "
     if ! read USER_IPV6_ADDR_INPUT; then
         printf "ERROR: Failed to read IPv6 address.\n" >&2
         return 1
