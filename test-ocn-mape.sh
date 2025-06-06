@@ -100,7 +100,7 @@ determine_ipv6_acquisition_method() {
 check_ipv6_in_range() {
     local target_ipv6="$1"
     local prefix_ipv6="$2"
-    local prefix_len="$3"
+    local prefix_len="$3" 
 
     local target_hex=$(echo "$target_ipv6" | awk -F: '{
         result = ""
