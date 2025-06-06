@@ -592,93 +592,57 @@ install_map_package() {
     return 0
 }
 
-# MAP-E設定情報を表示する関数
 display_mape() {
     printf "\n"
-    printf "プレフィックス情報:\n"
+    printf "Prefix Information:\n"
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
-        gua)
-            ipv6_label="IPv6アドレス:"
-            ;;
-        pd)
-            ipv6_label="IPv6プレフィックス:"
-            ;;
-        *)
-            ipv6_label="IPv6プレフィックスまたはアドレス:"
-            ;;
+        gua) ipv6_label="IPv6 address:" ;;
+        pd)  ipv6_label="IPv6 prefix:"  ;;
+        *)   ipv6_label="IPv6 prefix/address:" ;;
     esac
-    printf "  %s %s\n" "$ipv6_label" "$USER_IPV6_ADDR"
-    printf "  CE: %s\n" "$CE"
-    printf "  IPv4アドレス: %s\n" "$IPADDR"
-    printf "  PSID (10進数): %s\n" "$PSID"
+    printf "  %s %s\n" "$ipv6_label" "$NEW_IP6_PREFIX"
+    printf "  CE: %s\n"        "$CE"
+    printf "  IPv4 address: %s\n" "$IPADDR"
+    printf "  PSID (decimal): %s\n" "$PSID"
 
-    printf "\n"
-    printf "注意: 実際の値は異なる可能性があります\n"
-    
-    printf "\n"
-    printf "OpenWrt設定値:\n"
-    printf "  option peeraddr '%s'\n" "$BR"
-    printf "  option ipaddr %s\n" "$IPV4_NET_PREFIX"
-    printf "  option ip4prefixlen '%s'\n" "$IP4PREFIXLEN"
-    printf "  option ip6prefix '%s::'\n" "$IPV6_RULE_PREFIX"
-    printf "  option ip6prefixlen '%s'\n" "$IPV6_RULE_PREFIXLEN"
-    printf "  option ealen '%s'\n" "$EALEN"
-    printf "  option psidlen '%s'\n" "$PSIDLEN"
-    printf "  option offset '%s'\n" "$OFFSET"
-    printf "\n"
-    printf "  export LEGACY=1\n"
+    printf "\nPort Information:\n"
+    # 利用可能なポート数
+    local max_blocks=$((1 << OFFSET))
+    local ports_per_block=$((1 << (16 - OFFSET - PSIDLEN)))
+    local total_ports=$((ports_per_block * (max_blocks - 1)))
+    printf "  Available ports: %d\n" "$total_ports"
 
-    local max_port_blocks=$(( (1 << OFFSET) ))
-    local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) 
-
-    printf "\n"
-    printf "ポート情報:\n"
-    printf "  利用可能なポート数: %s\n" "$total_ports"
-
-    printf "\n"
-    printf "ポート範囲:\n"
-    
-    local shift_bits=$(( 16 - OFFSET ))
-    local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
-    if [ "$psid_shift" -lt 0 ]; then
-        psid_shift=0
-    fi
-    local port_range_size=$(( 1 << psid_shift ))
-    local port_max_index=$(( (1 << OFFSET) - 1 ))
-    local line_buffer=""
-    local items_in_line=0
-    local max_items_per_line=3
-    
-    for A in $(seq 1 "$port_max_index"); do
-        local port_base=$(( A << shift_bits ))
-        local psid_part=$(( PSID << psid_shift ))
-        local port_start_val=$(( port_base | psid_part ))
-        local port_end_val=$(( port_start_val + port_range_size - 1 ))
-        
-        if [ "$items_in_line" -eq 0 ]; then
-            line_buffer="${port_start_val}-${port_end_val}"
+    # ポート範囲
+    printf "\nPort Ranges:\n"
+    local shift_bits=$((16 - OFFSET))
+    local psid_shift=$((16 - OFFSET - PSIDLEN))
+    [ "$psid_shift" -lt 0 ] && psid_shift=0
+    local range_size=$((1 << psid_shift))
+    local last=$((max_blocks - 1))
+    local line=""
+    local cnt=0
+    for A in $(seq 1 "$last"); do
+        local base=$((A << shift_bits))
+        local part=$((PSID << psid_shift))
+        local start=$((base | part))
+        local end=$((start + range_size - 1))
+        local entry="${start}-${end}"
+        if [ "$cnt" -eq 0 ]; then
+            line="  $entry"
         else
-            line_buffer="${line_buffer} ${port_start_val}-${port_end_val}"
+            line="$line $entry"
         fi
-        
-        items_in_line=$((items_in_line + 1))
-        
-        if [ "$items_in_line" -ge "$max_items_per_line" ] || [ "$A" -eq "$port_max_index" ]; then
-            printf "  %s\n" "$line_buffer"
-            line_buffer=""
-            items_in_line=0
+        cnt=$((cnt+1))
+        if [ "$cnt" -ge 3 ] || [ "$A" -eq "$last" ]; then
+            printf "%s\n" "$line"
+            cnt=0
         fi
     done
 
-    printf "\n"
-    printf "Powered by config-softwire\n"
-    printf "\n"
-    printf "MAP-Eパラメータの計算が成功しました。\n"
-    printf "何かキーを押すと設定を適用して再起動します...\n"
-    read -r -n 1 -s
-    
+    printf "\nPowered by config-softwire\n"
+    printf "Press any key to apply and reboot...\n"
+    read -r -n1 -s
     return 0
 }
 
