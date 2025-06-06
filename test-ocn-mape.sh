@@ -44,6 +44,61 @@ debug_log() {
 
 # --- Core Functions ---
 
+# IPv6取得方法を判定してUSER_IPV6_ADDRとMAPE_IPV6_ACQUISITION_METHODを設定する関数
+determine_ipv6_acquisition_method() {
+    debug_log "Starting IPv6 acquisition method determination"
+    
+    # wan6インターフェース存在確認
+    if ! uci get network.wan6 >/dev/null 2>&1; then
+        debug_log "wan6 interface not found, creating it"
+        uci set network.wan6=interface
+        uci set network.wan6.proto=dhcpv6
+        uci set network.wan6.ifname=eth1
+        uci commit network
+        /etc/init.d/network restart
+        sleep 30
+    fi
+    
+    # 疎通確認
+    debug_log "Checking IPv6 connectivity"
+    if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
+       ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
+        debug_log "IPv6 connectivity check failed"
+        return 1
+    fi
+    
+    # GUA判定（優先）
+    local ipv6_addr=""
+    if command -v network_get_ipaddr6 >/dev/null 2>&1; then
+        network_get_ipaddr6 ipv6_addr "wan6"
+    fi
+    
+    if [ -n "$ipv6_addr" ]; then
+        debug_log "GUA address found: $ipv6_addr"
+        USER_IPV6_ADDR="$ipv6_addr"
+        MAPE_IPV6_ACQUISITION_METHOD="gua"
+        return 0
+    fi
+    
+    # PDフォールバック
+    local ipv6_prefix=""
+    if command -v network_get_prefix6 >/dev/null 2>&1; then
+        network_get_prefix6 ipv6_prefix "wan6"
+    fi
+    
+    if [ -n "$ipv6_prefix" ]; then
+        debug_log "PD prefix found: $ipv6_prefix"
+        USER_IPV6_ADDR="$ipv6_prefix"
+        MAPE_IPV6_ACQUISITION_METHOD="pd"
+        return 0
+    fi
+    
+    # 回線不適合
+    debug_log "No IPv6 address or prefix found - line incompatible"
+    printf "回線がMAP-Eに対応していません\n"
+    return 1
+}
+
 # IPv6アドレスが指定されたプレフィックス範囲内かチェック（ビット単位）
 check_ipv6_in_range() {
     local target_ipv6="$1"
@@ -987,6 +1042,13 @@ main() {
         return 1
     fi
 
+    # IPv6取得方法の判定とUSER_IPV6_ADDR設定
+    if ! determine_ipv6_acquisition_method; then
+        printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
+        return 1
+    fi
+    printf "INFO: IPv6 acquisition method determined: %s\n" "$MAPE_IPV6_ACQUISITION_METHOD"
+
     # OCN API Code の取得（引数優先、なければプロンプト入力）
     if [ -n "$1" ]; then
         OCN_API_CODE="$1"
@@ -1020,9 +1082,9 @@ main() {
         return 1
     fi
 
-    # 3. ユーザーのIPv6アドレスをパース
+    # 3. ユーザーのIPv6アドレスをパース（既にdetermine_ipv6_acquisition_methodで設定済み）
     if [ -z "$USER_IPV6_ADDR" ]; then
-        printf "FATAL: User IPv6 address was not set by get_matching_json_blocks. Exiting.\n" >&2
+        printf "FATAL: User IPv6 address was not set. Exiting.\n" >&2
         return 1
     fi
     if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
@@ -1046,6 +1108,9 @@ main() {
     printf "INFO: OpenWrt configuration skipped for testing.\n"
 
     printf "INFO: OCN MAP-E setup script finished successfully.\n"
+
+    # reboot
+    
     return 0
 }
 
