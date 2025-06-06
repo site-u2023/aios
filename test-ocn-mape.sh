@@ -245,9 +245,10 @@ get_ocn_rule_from_api() {
     local api_url
     local wget_result
     local password_seed
+    local ENCRYPTED_KEY
 
     for i in 1 2; do
-        api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
+        api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=$(if [ "$i" -eq 1 ]; then echo ""; else echo "${OCN_API_CODE}"; fi)"
         debug_log "API URL: $api_url"
 
         if [ "$i" -eq 1 ]; then
