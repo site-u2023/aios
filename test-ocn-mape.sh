@@ -605,7 +605,8 @@ display_mape() {
         fi
     done
     printf "\n"
-    
+    printf "------------------------------------------------------\n"
+    printf "\n"    
     printf "• PSID: %s (10進)\n" "$PSID"
     printf "\n"
     printf "------------------------------------------------------\n"
@@ -664,7 +665,8 @@ main() {
         OCN_API_CODE="$1"
         debug_log "OCN API Code received from argument."
     elif [ -z "$OCN_API_CODE" ]; then
-        printf "Please enter your OCN API Code: "
+        printf "\n"
+        printf "OCN API コードを入力してください: "
         if ! read OCN_API_CODE_INPUT; then
             printf "\nERROR: Failed to read OCN API Code.\n" >&2
             return 1
