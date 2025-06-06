@@ -171,8 +171,8 @@ check_ipv6_in_range() {
     return 0
 }
 
-# マッチするJSONブロックを抽出
-get_matching_json_blocks() {
+# OCN APIからマッチするルールを取得する関数
+get_ocn_rule_from_api() {
     local wan_iface="${1:-$WAN6_IF_NAME}"
     local current_user_ipv6_addr="$USER_IPV6_ADDR"
     local normalized_prefix=""
@@ -766,7 +766,7 @@ main() {
         return 1
     fi
 
-    if ! get_matching_json_blocks "$WAN6_IF_NAME"; then
+    if ! get_ocn_rule_from_api "$WAN6_IF_NAME"; then
         printf "FATAL: Could not retrieve MAP-E rule from API. Exiting.\n" >&2
         return 1
     fi
