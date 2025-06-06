@@ -203,7 +203,7 @@ get_ocn_rule_from_api() {
         case "$line" in
             *'{'*)
                 in_block=1
-                current_block="{"
+                current_block="$line"
                 block_ipv6_prefix=""
                 block_prefix_len_str=""
                 block_prefix_len_num=0
@@ -212,8 +212,8 @@ get_ocn_rule_from_api() {
         esac
 
         if [ "$in_block" -eq 1 ]; then
-            current_block="${current_block}${line}"
-
+            current_block="${current_block}
+$line"
             if echo "$line" | grep -q '"ipv6Prefix":'; then
                 block_ipv6_prefix=$(echo "$line" \
                     | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
@@ -348,7 +348,12 @@ parse_user_ipv6() {
         return 1
     fi
 
-    debug_log "Parsed user IPv6 hextets: $USER_IPV6_HEXTETS (from $ipv6_to_parse)"
+    local expanded_ipv6
+    expanded_ipv6=$(echo "$USER_IPV6_HEXTETS" \
+      | awk '{print $1":"$2":"$3":"$4":"$5":"$6":"$7":"$8}')
+    debug_log "Parsed user IPv6 hextets: $USER_IPV6_HEXTETS"
+    debug_log "Expanded IPv6 address: $expanded_ipv6"
+    
     return 0
 }
 
