@@ -737,57 +737,82 @@ display_mape() {
 }
 
 generate() {
-    local http_output="$1"
-    local encoded_key="$2"
-    local password
+    local input_hex_encrypted="$1"
+    local key_hex="$2"
+    local decrypted_hex_output=""
+    local i=0
+    local j=0
+    local input_len=${#input_hex_encrypted}
+    local key_len=${#key_hex}
 
-    openssl enc -aes-256-cbc -d -in /dev/null -k "$encoded_key" >/dev/null 2>&1
-
-    password=$(echo "$http_output" \
-      | while read line; do
-          if [ "$(echo "$line" | wc -w)" -eq 3 ]; then
-              echo "$line" | tr -d 'H' | awk '{print $2$1}' | sed 's/0//g'
-          fi
-        done \
-      | tr '4' 'A' \
-      | cut -c2-6 \
-      | awk '{for(i=length;i>=1;i--)printf "%s",substr($0,i,1);print""}' \
-      | base64)
-
-    local decrypted_result_for_ocn_api_code=""
-    local hex_char_pair
-    local byte_value_decimal
-    local password_char_ascii_decimal
-    local xor_result_decimal
-    local result_char
-    local idx_hex=0
-    local idx_pass_char=0
-    local password_length=${#encoded_key}
-
-    if [ -n "$http_output" ] && [ -n "$encoded_key" ] && [ "$password_length" -gt 0 ]; then
-        while [ "$idx_hex" -lt "${#http_output}" ]; do
-            hex_char_pair=$(expr substr "$http_output" $((idx_hex + 1)) 2)
-            byte_value_decimal=$((0x$hex_char_pair))
-
-            password_char_idx_in_key=$((idx_pass_char % password_length))
-            current_password_char=$(expr substr "$encoded_key" $((password_char_idx_in_key + 1)) 1)
-            
-            password_char_ascii_decimal=$(LC_CTYPE=C printf '%d' "'$current_password_char")
-
-            xor_result_decimal=$(($byte_value_decimal ^ $password_char_ascii_decimal))
-            
-            result_char=$(printf \\$(printf '%03o' "$xor_result_decimal"))
-
-            decrypted_result_for_ocn_api_code="${decrypted_result_for_ocn_api_code}${result_char}"
-
-            idx_hex=$((idx_hex + 2))
-            idx_pass_char=$((idx_pass_char + 1))
-        done
+    if [ -z "$key_hex" ]; then
+        debug_log "generate: Error - XOR key is empty."
+        OCN_API_CODE=""
+        return 1
+    fi
+    
+    if [ "$input_len" -eq 0 ]; then
+        debug_log "generate: Error - Encrypted input hex string is empty."
+        OCN_API_CODE=""
+        return 1
     fi
 
-    OCN_API_CODE="$decrypted_result_for_ocn_api_code"
+    if [ $((input_len % 2)) -ne 0 ]; then
+        debug_log "generate: Error - Encrypted input hex string has odd length ($input_len)."
+        OCN_API_CODE=""
+        return 1
+    fi
+    if [ $((key_len % 2)) -ne 0 ]; then
+        debug_log "generate: Error - XOR key hex string has odd length ($key_len)."
+        OCN_API_CODE=""
+        return 1
+    fi
 
-    export OCN_API_CODE
+    while [ "$i" -lt "$input_len" ]; do
+        local current_input_byte_hex
+        local current_key_byte_hex
+        local dec_input
+        local dec_key
+        local xor_result_dec
+        local result_byte_hex
+
+        current_input_byte_hex=$(echo "$input_hex_encrypted" | cut -c $((i + 1))-$((i + 2)))
+        current_key_byte_hex=$(echo "$key_hex" | cut -c $((j + 1))-$((j + 2)))
+
+        dec_input=$(printf "%d" "0x$current_input_byte_hex" 2>/dev/null)
+        if [ "$?" -ne 0 ] || ! expr "$dec_input" + 0 > /dev/null 2>&1; then
+            debug_log "generate: Error - Failed to convert input hex byte '$current_input_byte_hex' to decimal."
+            OCN_API_CODE=""
+            return 1
+        fi
+
+        dec_key=$(printf "%d" "0x$current_key_byte_hex" 2>/dev/null)
+        if [ "$?" -ne 0 ] || ! expr "$dec_key" + 0 > /dev/null 2>&1; then
+            debug_log "generate: Error - Failed to convert key hex byte '$current_key_byte_hex' to decimal."
+            OCN_API_CODE=""
+            return 1
+        fi
+        
+        xor_result_dec=$((dec_input ^ dec_key))
+        if [ "$?" -ne 0 ]; then
+            debug_log "generate: Error - Arithmetic syntax error during XOR ($dec_input ^ $dec_key)."
+            OCN_API_CODE=""
+            return 1
+        fi
+
+        result_byte_hex=$(printf "%02x" "$xor_result_dec")
+        
+        decrypted_hex_output="${decrypted_hex_output}${result_byte_hex}"
+        
+        i=$((i + 2))
+        j=$((j + 2))
+        if [ "$j" -ge "$key_len" ]; then
+            j=0
+        fi
+    done
+    
+    OCN_API_CODE="$decrypted_hex_output"
+    return 0
 }
 
 test_manual_ipv6_input() {
