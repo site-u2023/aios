@@ -370,7 +370,6 @@ parse_user_ipv6() {
     return 0
 }
 
-# APIから取得したJSONルールとユーザーIPv6からMAP-Eパラメータを計算する
 calculate_mape_params() {
     if [ -z "$API_RULE_JSON" ]; then
         printf "ERROR: API_RULE_JSON is empty in calculate_mape_params.\n" >&2
@@ -380,8 +379,6 @@ calculate_mape_params() {
         printf "ERROR: USER_IPV6_HEXTETS is empty in calculate_mape_params.\n" >&2
         return 1
     fi
-
-    debug_log "Calculating MAP-E parameters..."
 
     local api_br_ipv6_address api_ea_bit_length api_ipv4_prefix api_ipv4_prefix_length \
           api_ipv6_prefix_rule api_ipv6_prefix_length_rule api_psid_offset
@@ -417,59 +414,59 @@ calculate_mape_params() {
     OFFSET="$api_psid_offset"
 
     local h0 h1 h2 h3 h4 h5 h6 h7
-    local temp_hextets="$USER_IPV6_HEXTETS"
     read -r h0 h1 h2 h3 h4 h5 h6 h7 <<EOF
-$temp_hextets
+$USER_IPV6_HEXTETS
 EOF
 
     local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
-    if [ "$ipv4_suffix_len" -lt 0 ]; then
-        printf "ERROR: Calculated ipv4_suffix_len is negative (%s).\n" "$ipv4_suffix_len" >&2
-        return 1
-    fi
     PSIDLEN=$((EALEN - ipv4_suffix_len))
     if [ "$PSIDLEN" -lt 0 ]; then
-        printf "ERROR: Calculated PSIDLEN is negative (%s). EALEN=%s, IPv4SuffixLen=%s\n" "$PSIDLEN" "$EALEN" "$ipv4_suffix_len" >&2
+        printf "ERROR: Calculated PSIDLEN is negative (%s).\n" "$PSIDLEN" >&2
         return 1
     fi
 
-    if [ "$OFFSET" -eq 6 ] && [ "$EALEN" -eq 20 ] && \
-       [ "$IP4PREFIXLEN" -eq 18 ] && [ "$PSIDLEN" -eq 6 ]; then
-        
-        PSID=$(( ( (0x$h3) & 0x3F00) >> 8 ))
+    local h2_dec=$((0x$h2))
+    local h3_dec=$((0x$h3))
+    
+    local psid_mask=$(( (1 << PSIDLEN) - 1 ))
+    local psid_shift=$((16 - OFFSET - PSIDLEN))
+    PSID=$(( (h3_dec >> psid_shift) & psid_mask ))
 
-        local o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
-        local o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
-        local o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3)
-        local o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4)
-        o1=$((o1)) 2>/dev/null || o1=0
-        o2=$((o2)) 2>/dev/null || o2=0
-        o3_base=$((o3_base)) 2>/dev/null || o3_base=0
-        o4_base=$((o4_base)) 2>/dev/null || o4_base=0
+    local o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
+    local o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
+    local o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3)
+    local o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4)
+    o1=$((o1)) 2>/dev/null || o1=0
+    o2=$((o2)) 2>/dev/null || o2=0
+    o3_base=$((o3_base)) 2>/dev/null || o3_base=0
+    o4_base=$((o4_base)) 2>/dev/null || o4_base=0
 
-        local suffix_o3_part=$(( ( (0x$h2) & 0x03C0) >> 6 ))
-        local o3_val=$((o3_base | suffix_o3_part))
-
-        local suffix_o4_part1=$(( ( (0x$h2) & 0x003F) << 2 ))
-        local suffix_o4_part2=$(( ( (0x$h3) & 0xC000) >> 14 ))
-        local o4_val=$((o4_base | suffix_o4_part1 | suffix_o4_part2))
-        
-        IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
-    else
-        printf "WARN: Calculation logic for the provided API parameters (OFFSET=%s, EALEN=%s, IP4PREFIXLEN=%s, PSIDLEN=%s) is not explicitly defined. IPADDR and PSID might be incorrect.\n" "$OFFSET" "$EALEN" "$IP4PREFIXLEN" "$PSIDLEN" >&2
-        PSID=0
-        IPADDR="$IPV4_NET_PREFIX"
-    fi
+    local ea_bits_total=$((EALEN))
+    local ea_bits_from_ipv4=$((ipv4_suffix_len))
+    local ea_bits_from_ipv6=$((ea_bits_total - ea_bits_from_ipv4))
+    
+    local ipv6_ea_mask=$(( (1 << ea_bits_from_ipv6) - 1 ))
+    local ipv6_ea_value=$(( (h2_dec << 16 | h3_dec) & (ipv6_ea_mask << psid_shift) ))
+    local ipv6_ea_shifted=$(( ipv6_ea_value >> psid_shift ))
+    
+    local suffix_value=$((ipv6_ea_shifted))
+    local o3_suffix=$(( (suffix_value >> 8) & 255 ))
+    local o4_suffix=$(( suffix_value & 255 ))
+    
+    local o3_val=$((o3_base + o3_suffix))
+    local o4_val=$((o4_base + o4_suffix))
+    
+    IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
 
     local ce_h0="$h0"
     local ce_h1="$h1"
     local ce_h2="$h2"
     local ce_h3="$h3"
     
-    local ip_o1=$(echo "$IPADDR" | cut -d. -f1); ip_o1=$((ip_o1)) 2>/dev/null || ip_o1=0
-    local ip_o2=$(echo "$IPADDR" | cut -d. -f2); ip_o2=$((ip_o2)) 2>/dev/null || ip_o2=0
-    local ip_o3=$(echo "$IPADDR" | cut -d. -f3); ip_o3=$((ip_o3)) 2>/dev/null || ip_o3=0
-    local ip_o4=$(echo "$IPADDR" | cut -d. -f4); ip_o4=$((ip_o4)) 2>/dev/null || ip_o4=0
+    local ip_o1=$o1
+    local ip_o2=$o2
+    local ip_o3=$o3_val
+    local ip_o4=$o4_val
 
     local ce_h4=$(printf %04x "$ip_o1")
     local ce_h5=$(printf %04x "$(( (ip_o2 << 8) | ip_o3 ))")
