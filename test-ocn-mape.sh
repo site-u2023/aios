@@ -412,10 +412,18 @@ EOF
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
 
-    local ce_h0 ce_h1 ce_h2 ce_h3_calc ce_h4 ce_h5 ce_h6 ce_h7_calc
-    ce_h0=$h0; ce_h1=$h1; ce_h2=$h2; ce_h3_calc=$(( 0x$h3 & 0xFF00 ))
-    ce_h4=$o1; ce_h5=$(( (o2 << 8) | o3_val )); ce_h6=$(( o4_val << 8 )); ce_h7_calc=$(( PSID << 8 ))
-    CE=$(printf "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x" "$ce_h0" "$ce_h1" "$ce_h2" "$ce_h3_calc" "$ce_h4" "$ce_h5" "$ce_h6" "$ce_h7_calc")
+    local ce_h3_masked
+    ce_h3_masked=$(printf "%04x" "$(( 0x$h3 & 0xFF00 ))")
+    local ce_h4
+    ce_h4=$(printf "%04x" "$o1")
+    local ce_h5
+    ce_h5=$(printf "%04x" "$((o2 * 256 + o3_val))")
+    local ce_h6
+    ce_h6=$(printf "%04x" "$((o4_val * 256))")
+    local ce_h7
+    ce_h7=$(printf "%04x" "$((PSID * 256))")
+
+    CE="${h0}:${h1}:${h2}:${ce_h3_masked}:${ce_h4}:${ce_h5}:${ce_h6}:${ce_h7}"
 
     return 0
 }
@@ -570,39 +578,40 @@ display_mape() {
     printf "  CE: %s\n" "$CE"
     printf "  IPv4 address: %s\n" "$IPADDR"
     
+    # ポート範囲計算と表示
     printf "  Port ranges:\n"
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
     local range_size=$((1 << psid_shift))
+    local max_blocks=$((1 << OFFSET))
     local last=$((max_blocks - 1))
     
-    local display_lines=0
-    local max_display_lines=4
+    # 最初の4行分のポート範囲を表示
+    local display_count=0
+    local max_display=12
+    local line_items=0
+    printf "    "
+    
     for A in $(seq 1 "$last"); do
+        if [ "$display_count" -ge "$max_display" ]; then
+            break
+        fi
+        
         local base=$((A << shift_bits))
         local part=$((PSID << psid_shift))
         local start=$((base | part))
         local end=$((start + range_size - 1))
         
-        if [ "$display_lines" -lt "$max_display_lines" ]; then
-            if [ "$display_lines" -eq 0 ]; then
-                printf "    %d-%d" "$start" "$end"
-            else
-                printf " %d-%d" "$start" "$end"
-            fi
-            
-            if [ $(( (display_lines + 1) % 3 )) -eq 0 ]; then
-                printf "\n"
-                if [ "$display_lines" -lt $((max_display_lines - 1)) ]; then
-                    printf "    "
-                fi
-            fi
-        fi
-        display_lines=$((display_lines + 1))
+        printf "%d-%d" "$start" "$end"
+        display_count=$((display_count + 1))
+        line_items=$((line_items + 1))
         
-        if [ "$display_lines" -ge "$max_display_lines" ]; then
-            break
+        if [ "$line_items" -eq 3 ] && [ "$display_count" -lt "$max_display" ]; then
+            printf "\n    "
+            line_items=0
+        elif [ "$display_count" -lt "$max_display" ] && [ "$A" -lt "$last" ]; then
+            printf " "
         fi
     done
     printf "\n"
@@ -626,8 +635,8 @@ display_mape() {
     printf "\n"
     
     printf "(config-softwire)# map-version draft\n"
-    printf "(config-softwire)# rule <%s> ipv4-prefix %s/%s ipv6-prefix %s::/%s [ea-length %s][psid-length %s [psid %s]] [offset %s] [forwarding]\n" \
-           "$PSID" "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
+    printf "(config-softwire)# rule <%s> ipv4-prefix %s/%s ipv6-prefix %s::/%s [ea-length %s][psid-length %s [psid %s]] [offset 6] [forwarding]\n" \
+           "$PSID" "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID"
 
     printf "\n"
     printf "Powered by config-softwire\n"
