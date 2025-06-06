@@ -601,7 +601,7 @@ display_mape() {
         pd)  ipv6_label="IPv6 prefix:"  ;;
         *)   ipv6_label="IPv6 prefix/address:" ;;
     esac
-    printf "  %s %s\n" "$ipv6_label" "$NEW_IP6_PREFIX"
+    printf "  %s %s\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "  CE: %s\n"        "$CE"
     printf "  IPv4 address: %s\n" "$IPADDR"
     printf "  PSID (decimal): %s\n" "$PSID"
