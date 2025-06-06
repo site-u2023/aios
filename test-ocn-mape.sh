@@ -1026,8 +1026,8 @@ main() {
         OCN_API_CODE="$1"
         debug_log "OCN API Code received from argument."
     elif [ -z "$OCN_API_CODE" ]; then
-        printf "Please enter your OCN API Code (it will not be displayed): "
-        if ! read -r OCN_API_CODE_INPUT; then
+        printf "Please enter your OCN API Code: "
+        if ! read OCN_API_CODE_INPUT; then
             printf "\nERROR: Failed to read OCN API Code.\n" >&2
             return 1
         fi
