@@ -640,6 +640,24 @@ display_mape() {
     return 0
 }
 
+test_manual_ipv6_input() {
+    printf "テスト用IPv6アドレスを入力してください (例: 2400:4151:80e2:7500::1): "
+    if ! read USER_IPV6_ADDR_INPUT; then
+        printf "ERROR: Failed to read IPv6 address.\n" >&2
+        return 1
+    fi
+    
+    if [ -z "$USER_IPV6_ADDR_INPUT" ]; then
+        printf "ERROR: IPv6 address cannot be empty.\n" >&2
+        return 1
+    fi
+    
+    USER_IPV6_ADDR="$USER_IPV6_ADDR_INPUT"
+    MAPE_IPV6_ACQUISITION_METHOD="manual"
+    debug_log "Manual IPv6 address input: $USER_IPV6_ADDR"
+    return 0
+}
+
 main() {
     if [ "$SCRIPT_DEBUG" = "true" ]; then
         printf "Script running in DEBUG mode.\n"
@@ -658,10 +676,11 @@ main() {
         return 1
     fi
 
-    if ! determine_ipv6_acquisition_method; then
-        printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
-        return 1
-    fi
+    # 通常モード (コメントアウト)
+    # if ! determine_ipv6_acquisition_method; then
+    #     printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
+    #     return 1
+    # fi
 
     if [ -n "$1" ]; then
         OCN_API_CODE="$1"
@@ -689,6 +708,12 @@ main() {
 
     if ! install_map_package; then
         printf "FATAL: Failed to install MAP package. Exiting.\n" >&2
+        return 1
+    fi
+
+    # テストモード (手動IPv6アドレス入力)
+    if ! test_manual_ipv6_input; then
+        printf "FATAL: Failed to get manual IPv6 address. Exiting.\n" >&2
         return 1
     fi
 
