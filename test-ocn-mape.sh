@@ -576,8 +576,8 @@ display_mape() {
     printf "\n"
     printf "------------------------------------------------------\n"
     printf "\n"   
-    
-    printf "• %s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
+    printf "%s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
+    printf "\n"
     printf "• CE: %s\n" "$CE"
     printf "• IPv4アドレス: %s\n" "$IPADDR"
     
@@ -674,7 +674,6 @@ main() {
             return 1
         fi
         OCN_API_CODE="$OCN_API_CODE_INPUT"
-        printf "\n"
         debug_log "OCN API Code received from prompt input."
     fi
 
