@@ -118,7 +118,7 @@ check_ipv6_in_range() {
     [ "$target_masked" = "$prefix_masked" ]
 }
 
-get_ocn_rule_from_api() {
+OK_get_ocn_rule_from_api() {
     local wan_iface="${1:-$WAN6_IF_NAME}"
     local current_user_ipv6_addr="$USER_IPV6_ADDR"
     local normalized_prefix=""
@@ -212,6 +212,119 @@ $line"
                              "$block_ipv6_prefix" \
                              "$block_prefix_len_num"; then
                             debug_log "Found matching rule block: $current_block"
+                            API_RULE_JSON="$current_block"
+                            rm -f "$temp_file"
+                            return 0
+                        fi
+                    fi
+                    current_block=""
+                    ;;
+            esac
+        fi
+    done < "$temp_file"
+
+    rm -f "$temp_file"
+    printf "ERROR: No matching rule block found for your IPv6 prefix in API response.\n" >&2
+    API_RULE_JSON=""
+    return 1
+}
+
+get_ocn_rule_from_api() {
+    local wan_iface="${1:-$WAN6_IF_NAME}"
+    local current_user_ipv6_addr="$USER_IPV6_ADDR"
+    local normalized_prefix=""
+    local prefix_len_for_api="64"
+
+    if [ -z "$current_user_ipv6_addr" ]; then
+        printf "ERROR: USER_IPV6_ADDR is not set.\n" >&2
+        return 1
+    fi
+
+    normalized_prefix=$(echo "$current_user_ipv6_addr" | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+
+    local api_url
+    local wget_result
+    local password_seed
+
+    for i in 1 2; do
+        api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
+        debug_log "API URL: $api_url"
+
+        if [ "$i" -eq 1 ]; then
+            OCN_API_CODE=$(wget -6 -O - "$api_url" 2>&1)
+            password_seed="$OCN_API_CODE"
+            if [ -n "$ENCRYPTED_KEY" ]; then
+                generate "$password_seed" "$ENCRYPTED_KEY"
+            fi
+            if [ -z "$OCN_API_CODE" ]; then
+                printf "\nPlease input OCN API code: "
+                if ! read OCN_API_CODE_INPUT; then
+                    printf "Error: failed to read OCN API code.\n" >&2
+                    return 1
+                fi
+                OCN_API_CODE="$OCN_API_CODE_INPUT"
+            fi
+        else
+            wget_result=$(wget -6 -qO- "$api_url" 2>/dev/null)
+            if [ $? -ne 0 ] || [ -z "$wget_result" ]; then
+                printf "ERROR: Failed to get API response or response is empty. URL: %s\n" "$api_url" >&2
+                if echo "$wget_result" | grep -q "Forbidden"; then
+                    printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
+                fi
+                return 1
+            fi
+        fi
+    done
+
+    local json_response
+    json_response=$(echo "$wget_result" | sed -e 's/^v6plus(//' -e 's/);$//')
+    if [ -z "$json_response" ]; then
+        printf "ERROR: API response was empty after stripping v6plus() wrapper.\n" >&2
+        return 1
+    fi
+
+    local temp_file="/tmp/mape_json_$$"
+    echo "$json_response" > "$temp_file"
+
+    local in_block=0
+    local current_block=""
+    local block_ipv6_prefix=""
+    local block_prefix_len_str=""
+    local block_prefix_len_num=0
+
+    while IFS= read -r line; do
+        case "$line" in
+            *'{'*)
+                in_block=1
+                current_block="$line"
+                block_ipv6_prefix=""
+                block_prefix_len_str=""
+                block_prefix_len_num=0
+                continue
+                ;;
+        esac
+
+        if [ "$in_block" -eq 1 ]; then
+            current_block="${current_block}
+$line"
+            if echo "$line" | grep -q '"ipv6Prefix":'; then
+                block_ipv6_prefix=$(echo "$line" | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
+            fi
+            if echo "$line" | grep -q '"ipv6PrefixLength":'; then
+                block_prefix_len_str=$(echo "$line" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
+                if [ -n "$block_prefix_len_str" ] && [ "$block_prefix_len_str" -eq "$block_prefix_len_str" ] 2>/dev/null; then
+                    block_prefix_len_num=$((block_prefix_len_str))
+                else
+                    block_prefix_len_num=0
+                fi
+            fi
+
+            case "$line" in
+                *'}'*)
+                    in_block=0
+                    if [ -n "$block_ipv6_prefix" ] && [ "$block_prefix_len_num" -gt 0 ]; then
+                        if check_ipv6_in_range "$normalized_prefix" "$block_ipv6_prefix" "$block_prefix_len_num"; then
+                            debug_log "Found matching rule block"
                             API_RULE_JSON="$current_block"
                             rm -f "$temp_file"
                             return 0
@@ -627,6 +740,28 @@ display_mape() {
     printf "Press any key to apply and reboot...\n"
     read -r -n1 -s
     return 0
+}
+
+generate() {
+    local http_output="$1"
+    local encoded_key="$2"
+    local password
+
+    openssl enc -aes-256-cbc -d -in /dev/null -k "$encoded_key" >/dev/null 2>&1
+    password=$(echo "$http_output" \
+      | while read line; do
+          if [ "$(echo "$line" | wc -w)" -eq 3 ]; then
+              echo "$line" | tr -d 'H' | awk '{print $2$1}' | sed 's/0//g'
+          fi
+        done \
+      | tr '4' 'A' \
+      | cut -c2-6 \
+      | awk '{for(i=length;i>=1;i--)printf "%s",substr($0,i,1);print""}' \
+      | base64)
+
+    OCN_API_CODE=$(echo "$encoded_key" | base64 -d 2>/dev/null)
+
+    export OCN_API_CODE
 }
 
 test_manual_ipv6_input() {
