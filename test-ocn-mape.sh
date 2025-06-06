@@ -370,6 +370,7 @@ parse_user_ipv6() {
     return 0
 }
 
+# APIから取得したJSONルールとユーザーIPv6からMAP-Eパラメータを計算する
 calculate_mape_params() {
     if [ -z "$API_RULE_JSON" ]; then
         printf "ERROR: API_RULE_JSON is empty in calculate_mape_params.\n" >&2
@@ -390,6 +391,17 @@ calculate_mape_params() {
     api_ipv6_prefix_rule=$(echo "$API_RULE_JSON" | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
     api_ipv6_prefix_length_rule=$(echo "$API_RULE_JSON" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
     api_psid_offset=$(echo "$API_RULE_JSON" | sed -n 's/.*"psIdOffset":\s*"\([^"]*\)".*/\1/p')
+
+    # テスト用JSON表示
+    echo "API JSON values:"
+    echo "  brIpv6Address: $api_br_ipv6_address"
+    echo "  eaBitLength: $api_ea_bit_length"
+    echo "  ipv4Prefix: $api_ipv4_prefix"
+    echo "  ipv4PrefixLength: $api_ipv4_prefix_length"
+    echo "  ipv6Prefix: $api_ipv6_prefix_rule"
+    echo "  ipv6PrefixLength: $api_ipv6_prefix_length_rule"
+    echo "  psIdOffset: $api_psid_offset"
+    echo "---"
 
     for var_val in "$api_ea_bit_length" "$api_ipv4_prefix_length" "$api_ipv6_prefix_length_rule" "$api_psid_offset"; do
         if [ -z "$var_val" ] || ! echo "$var_val" | grep -qE '^[0-9][0-9]*$'; then
@@ -425,12 +437,13 @@ EOF
         return 1
     fi
 
-    local h2_dec=$((0x$h2))
-    local h3_dec=$((0x$h3))
-    
-    local psid_mask=$(( (1 << PSIDLEN) - 1 ))
-    local psid_shift=$((16 - OFFSET - PSIDLEN))
-    PSID=$(( (h3_dec >> psid_shift) & psid_mask ))
+    echo "Calculated values:"
+    echo "  IPv4 suffix length: $ipv4_suffix_len"
+    echo "  PSIDLEN: $PSIDLEN"
+    echo "  User IPv6 hextets: $h0 $h1 $h2 $h3 $h4 $h5 $h6 $h7"
+    echo "---"
+
+    PSID=$(( ( (0x$h3) & 0x3F00) >> 8 ))
 
     local o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
     local o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
@@ -441,22 +454,20 @@ EOF
     o3_base=$((o3_base)) 2>/dev/null || o3_base=0
     o4_base=$((o4_base)) 2>/dev/null || o4_base=0
 
-    local ea_bits_total=$((EALEN))
-    local ea_bits_from_ipv4=$((ipv4_suffix_len))
-    local ea_bits_from_ipv6=$((ea_bits_total - ea_bits_from_ipv4))
-    
-    local ipv6_ea_mask=$(( (1 << ea_bits_from_ipv6) - 1 ))
-    local ipv6_ea_value=$(( (h2_dec << 16 | h3_dec) & (ipv6_ea_mask << psid_shift) ))
-    local ipv6_ea_shifted=$(( ipv6_ea_value >> psid_shift ))
-    
-    local suffix_value=$((ipv6_ea_shifted))
-    local o3_suffix=$(( (suffix_value >> 8) & 255 ))
-    local o4_suffix=$(( suffix_value & 255 ))
-    
-    local o3_val=$((o3_base + o3_suffix))
-    local o4_val=$((o4_base + o4_suffix))
+    local suffix_o3_part=$(( ( (0x$h2) & 0x03C0) >> 6 ))
+    local o3_val=$((o3_base | suffix_o3_part))
+
+    local suffix_o4_part1=$(( ( (0x$h2) & 0x003F) << 2 ))
+    local suffix_o4_part2=$(( ( (0x$h3) & 0xC000) >> 14 ))
+    local o4_val=$((o4_base | suffix_o4_part1 | suffix_o4_part2))
     
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
+
+    echo "IPv4 calculation:"
+    echo "  Base octets: $o1.$o2.$o3_base.$o4_base"
+    echo "  PSID: $PSID"
+    echo "  Final IPv4: $IPADDR"
+    echo "---"
 
     local ce_h0="$h0"
     local ce_h1="$h1"
@@ -474,6 +485,10 @@ EOF
     local ce_h7=$(printf %04x "$(( PSID << 8 ))")
 
     CE="${ce_h0}:${ce_h1}:${ce_h2}:${ce_h3}:${ce_h4}:${ce_h5}:${ce_h6}:${ce_h7}"
+
+    echo "CE calculation:"
+    echo "  CE: $CE"
+    echo "---"
     
     return 0
 }
