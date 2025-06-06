@@ -97,6 +97,7 @@ determine_ipv6_acquisition_method() {
     return 1
 }
 
+# IPv6アドレスが指定されたプレフィックス範囲内かチェック（ビット単位）
 check_ipv6_in_range() {
     local target_ipv6="$1"
     local prefix_ipv6="$2"
@@ -136,7 +137,9 @@ check_ipv6_in_range() {
         print toupper(substr(result, 1, 32))
     }')
     
+    # プレフィックス長に基づいて比較する16進数の文字数を計算
     local hex_chars=$(( (prefix_len + 3) / 4 ))
+    
     local target_masked=$(echo "$target_hex" | cut -c1-"$hex_chars")
     local prefix_masked=$(echo "$prefix_hex" | cut -c1-"$hex_chars")
     
