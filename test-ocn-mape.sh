@@ -565,7 +565,7 @@ install_map_package() {
 }
 
 display_mape() {
-    printf "\n"
+
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
         gua) ipv6_label="IPv6アドレス:" ;;
@@ -670,6 +670,7 @@ main() {
         printf "\n"
         printf "OCN API コードを入力してください: "
         if ! read OCN_API_CODE_INPUT; then
+            printf "\n"
             printf "\nERROR: Failed to read OCN API Code.\n" >&2
             return 1
         fi
