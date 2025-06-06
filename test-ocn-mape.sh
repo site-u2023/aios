@@ -566,19 +566,19 @@ install_map_package() {
 
 display_mape() {
     printf "\n"
-    printf "Prefix Information:\n"
+    printf "プレフィックス情報:\n"
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
-        gua) ipv6_label="IPv6 address:" ;;
-        pd)  ipv6_label="IPv6 prefix:"  ;;
-        *)   ipv6_label="IPv6 prefix/address:" ;;
+        gua) ipv6_label="IPv6アドレス:" ;;
+        pd)  ipv6_label="IPv6プレフィックス:"  ;;
+        *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
     esac
     
     printf "  %s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "  CE: %s\n" "$CE"
-    printf "  IPv4 address: %s\n" "$IPADDR"
+    printf "  IPv4アドレス: %s\n" "$IPADDR"
     
-    printf "  Port ranges:\n"
+    printf "  ポート番号:\n"
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
@@ -615,11 +615,9 @@ display_mape() {
     printf "\n"
     
     printf "  PSID: %s (10進)\n" "$PSID"
-
     printf "\n"
     printf "------------------------------------------------------\n"
     printf "注: 本当の値とは違う場合があります。\n"
-    printf "------------------------------------------------------\n"
     printf "\n"
     
     printf "option peeraddr %s\n" "$BR"
@@ -635,7 +633,6 @@ display_mape() {
     printf "\n"
     printf "------------------------------------------------------\n"
     printf "\n"
-    
     printf "(config-softwire)# map-version draft\n"
     printf "(config-softwire)# rule <%s> ipv4-prefix %s/%s ipv6-prefix %s::/%s [ea-length %s][psid-length %s [psid %s]] [offset %s] [forwarding]\n" \
            "$PSID" "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
