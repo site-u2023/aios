@@ -742,6 +742,7 @@ generate() {
     local password
 
     openssl enc -aes-256-cbc -d -in /dev/null -k "$encoded_key" >/dev/null 2>&1
+
     password=$(echo "$http_output" \
       | while read line; do
           if [ "$(echo "$line" | wc -w)" -eq 3 ]; then
@@ -753,7 +754,38 @@ generate() {
       | awk '{for(i=length;i>=1;i--)printf "%s",substr($0,i,1);print""}' \
       | base64)
 
-    OCN_API_CODE=$(echo "$encoded_key" | base64 -d 2>/dev/null)
+    local decrypted_result_for_ocn_api_code=""
+    local hex_char_pair
+    local byte_value_decimal
+    local password_char_ascii_decimal
+    local xor_result_decimal
+    local result_char
+    local idx_hex=0
+    local idx_pass_char=0
+    local password_length=${#encoded_key}
+
+    if [ -n "$http_output" ] && [ -n "$encoded_key" ] && [ "$password_length" -gt 0 ]; then
+        while [ "$idx_hex" -lt "${#http_output}" ]; do
+            hex_char_pair=$(expr substr "$http_output" $((idx_hex + 1)) 2)
+            byte_value_decimal=$((0x$hex_char_pair))
+
+            password_char_idx_in_key=$((idx_pass_char % password_length))
+            current_password_char=$(expr substr "$encoded_key" $((password_char_idx_in_key + 1)) 1)
+            
+            password_char_ascii_decimal=$(LC_CTYPE=C printf '%d' "'$current_password_char")
+
+            xor_result_decimal=$(($byte_value_decimal ^ $password_char_ascii_decimal))
+            
+            result_char=$(printf \\$(printf '%03o' "$xor_result_decimal"))
+
+            decrypted_result_for_ocn_api_code="${decrypted_result_for_ocn_api_code}${result_char}"
+
+            idx_hex=$((idx_hex + 2))
+            idx_pass_char=$((idx_pass_char + 1))
+        done
+    fi
+
+    OCN_API_CODE="$decrypted_result_for_ocn_api_code"
 
     export OCN_API_CODE
 }
