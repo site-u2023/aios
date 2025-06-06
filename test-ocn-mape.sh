@@ -710,7 +710,7 @@ display_mape() {
     printf "• PSID: %s (10進)\n" "$PSID"
     printf "\n"
     printf "------------------------------------------------------\n"
-    printf "注: 本当の値とは違う場合があります。\n"
+    printf "注: PCN（プロビジョニング・コントロール・ネーム）APIの値です。\n"
     printf "\n"
     
     printf "option peeraddr %s\n" "$BR"
