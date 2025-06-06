@@ -725,6 +725,11 @@ main() {
     # fi
     printf "INFO: OpenWrt configuration skipped for testing.\n"
 
+    if ! display_mape; then
+        printf "FATAL: Failed to display MAP-E parameters. Exiting.\n" >&2
+        return 1
+    fi
+    
     printf "INFO: OCN MAP-E setup script finished successfully.\n"
     
     return 0
