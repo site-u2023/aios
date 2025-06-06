@@ -559,14 +559,14 @@ EOF
     return 0
 }
 
-# MAP-Eパッケージの確認・インストール関数
 install_map_package() {
     local pkg_manager=""
     local is_installed=0
     
-    if [ -x "/sbin/opkg" ]; then
+    # パッケージマネージャーの判定
+    if command -v opkg >/dev/null 2>&1; then
         pkg_manager="opkg"
-    elif [ -x "/sbin/apk" ]; then
+    elif command -v apk >/dev/null 2>&1; then
         pkg_manager="apk"
     else
         printf "ERROR: No supported package manager found (opkg/apk).\n" >&2
