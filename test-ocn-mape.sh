@@ -253,6 +253,7 @@ get_ocn_rule_from_api() {
         if [ "$i" -eq 1 ]; then
             OCN_API_CODE=$(wget -6 -O - "$api_url" 2>&1)
             password_seed="$OCN_API_CODE"
+            ENCRYPTED_KEY="$1"
             if [ -n "$ENCRYPTED_KEY" ]; then
                 generate "$password_seed" "$ENCRYPTED_KEY"
             fi
