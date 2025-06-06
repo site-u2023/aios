@@ -396,8 +396,6 @@ EOF
         return 1
     fi
 
-    PSID=$(( ( (0x$h3) & 0x3F00) >> 8 ))
-
     local o1 o2 o3_base o4_base suffix_o3_part suffix_o4_part1 suffix_o4_part2 o3_val o4_val
     o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1); o1=$((o1)) 2>/dev/null||o1=0
     o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2); o2=$((o2)) 2>/dev/null||o2=0
@@ -411,6 +409,8 @@ EOF
     o4_val=$((o4_base | suffix_o4_part1 | suffix_o4_part2))
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
+
+    PSID=$(( ( (0x$h3) & 0x3F00) >> 8 ))
 
     local ce_h3_masked
     ce_h3_masked=$(printf "%04x" "$(( 0x$h3 & 0xFF00 ))")
