@@ -68,7 +68,6 @@ determine_ipv6_acquisition_method() {
     fi
     
     debug_log "No IPv6 address or prefix found - line incompatible"
-    printf "回線がMAP-Eに対応していません\n"
     return 1
 }
 
@@ -747,84 +746,84 @@ test_manual_ipv6_input() {
 }
 
 ocn_main() {
-
     if [ "$SCRIPT_DEBUG" = "true" ]; then
-        printf "Script running in DEBUG mode.\n"
+        printf "スクリプトはデバッグモードで実行されています。\n"
     fi
 
     if [ -f /lib/functions.sh ]; then
         . /lib/functions.sh
     else
-        printf "ERROR: /lib/functions.sh not found. This script requires OpenWrt environment.\n" >&2
+        printf "エラー: /lib/functions.sh が見つかりません。このスクリプトはOpenWrt環境でのみ動作します。\n" >&2
         return 1
     fi
     if [ -f /lib/functions/network.sh ]; then
         . /lib/functions/network.sh
     else
-        printf "ERROR: /lib/functions/network.sh not found.\n" >&2
+        printf "エラー: /lib/functions/network.sh が見つかりません。\n" >&2
         return 1
     fi
 
     if ! determine_ipv6_acquisition_method; then
-        printf "FATAL: IPv6 acquisition method determination failed. Exiting.\n" >&2
+        printf "この回線はMAP-Eに対応していません。\n" >&2
         return 1
     fi
 
     if [ -n "$1" ]; then
         OCN_API_CODE="$1"
-        debug_log "OCN API Code received from argument."
+        debug_log "OCN APIコードを引数から受け取りました。"
     elif [ -z "$OCN_API_CODE" ]; then
-        printf "\nOCN API コードを入力してください: "
+        printf "\nOCN APIコードを入力してください: "
         if ! read OCN_API_CODE_INPUT; then
-            printf "\nERROR: Failed to read OCN API Code.\n" >&2
+            printf "\nエラー: OCN APIコードの入力に失敗しました。\n" >&2
             return 1
         fi
         OCN_API_CODE="$OCN_API_CODE_INPUT"
-        debug_log "OCN API Code received from prompt input."
+        debug_log "OCN APIコードをプロンプト入力から受け取りました。"
     fi
 
     if [ -z "$OCN_API_CODE" ]; then
-        printf "ERROR: OCN API Code was not provided. Exiting.\n" >&2
+        printf "エラー: OCN APIコードが指定されていません。終了します。\n" >&2
         return 1
     fi
 
     if ! get_ocn_rule_from_api "$WAN6_IF_NAME"; then
-        printf "FATAL: Could not retrieve MAP-E rule from API. Exiting.\n" >&2
+        printf "致命的エラー: MAP-EルールをAPIから取得できませんでした。終了します。\n" >&2
         return 1
     fi
 
     if ! install_map_package; then
-        printf "FATAL: Failed to install MAP package. Exiting.\n" >&2
+        printf "致命的エラー: MAPパッケージのインストールに失敗しました。終了します。\n" >&2
         return 1
     fi
 
     if [ -z "$USER_IPV6_ADDR" ]; then
-        printf "FATAL: User IPv6 address was not set. Exiting.\n" >&2
+        printf "致命的エラー: ユーザーのIPv6アドレスが設定されていません。終了します。\n" >&2
         return 1
     fi
     if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
-        printf "FATAL: Failed to parse user IPv6 address (%s). Exiting.\n" "$USER_IPV6_ADDR" >&2
+        printf "致命的エラー: ユーザーIPv6アドレス(%s)のパースに失敗しました。終了します。\n" "$USER_IPV6_ADDR" >&2
         return 1
     fi
 
     if ! calculate_mape_params; then
-        printf "FATAL: Failed to calculate MAP-E parameters. Exiting.\n" >&2
+        printf "致命的エラー: MAP-Eパラメータの計算に失敗しました。終了します。\n" >&2
         return 1
     fi
 
     if ! display_mape; then
-        printf "FATAL: Failed to display MAP-E parameters. Exiting.\n" >&2
+        printf "致命的エラー: MAP-Eパラメータ表示に失敗しました。終了します。\n" >&2
         return 1
     fi
 
     # if ! configure_openwrt_mape; then
-    #     printf "FATAL: Failed to apply MAP-E configuration. Exiting.\n" >&2
+    #     printf "致命的エラー: MAP-E設定の適用に失敗しました。終了します。\n" >&2
     #     return 1
     # fi
 
-    # printf "INFO: Rebooting system to apply changes...\n"
+    # printf "情報: 設定反映のためシステムを再起動します...\n"
     # reboot
 
     return 0
 }
+
 ocn_main "$@"
