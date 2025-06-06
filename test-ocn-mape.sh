@@ -175,8 +175,8 @@ check_ipv6_in_range() {
 
 # マッチするJSONブロックを抽出 (最初の1件のみ出力)
 get_matching_json_blocks() {
-    local wan_iface="${1:-$WAN6_IF_NAME}" # デフォルトはグローバル変数から
-    local current_user_ipv6_addr=""
+    local wan_iface="${1:-$WAN6_IF_NAME}"
+    local current_user_ipv6_addr="$USER_IPV6_ADDR"
     local normalized_prefix=""
     local prefix_len_for_api="64"
 
@@ -185,38 +185,14 @@ get_matching_json_blocks() {
         return 1
     fi
     
-    network_get_ipaddr6 current_user_ipv6_addr "$wan_iface"
-    if [ -n "$current_user_ipv6_addr" ]; then
-        case "$current_user_ipv6_addr" in
-            2[0-9a-fA-F]*|3[0-9a-fA-F]*)
-                debug_log "Got GUA: $current_user_ipv6_addr from $wan_iface"
-                USER_IPV6_ADDR="$current_user_ipv6_addr"
-                ;;
-            *)
-                current_user_ipv6_addr=""
-                ;;
-        esac
-    fi
-    
     if [ -z "$current_user_ipv6_addr" ]; then
-        local pd_with_len=""
-        network_get_prefix6 pd_with_len "$wan_iface"
-        if [ -n "$pd_with_len" ]; then
-            current_user_ipv6_addr=$(echo "$pd_with_len" | cut -d'/' -f1)
-            debug_log "Got PD: $current_user_ipv6_addr from $pd_with_len ($wan_iface)"
-            USER_IPV6_ADDR="$current_user_ipv6_addr"
-        fi
-    fi
-    
-    if [ -z "$current_user_ipv6_addr" ]; then
-        printf "ERROR: Failed to get a valid IPv6 address/prefix from %s.\n" "$wan_iface" >&2
+        printf "ERROR: USER_IPV6_ADDR is not set.\n" >&2
         return 1
     fi
     
     normalized_prefix=$(echo "$current_user_ipv6_addr" | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
     debug_log "Using IPv6 for API query: $normalized_prefix (derived from $current_user_ipv6_addr)"
     
-    # グローバル変数 OCN_API_CODE を使用
     local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
     debug_log "API URL: $api_url"
     local raw_json_response
@@ -224,8 +200,7 @@ get_matching_json_blocks() {
     
     if [ $? -ne 0 ] || [ -z "$raw_json_response" ]; then
         printf "ERROR: Failed to get API response or response is empty. URL: %s\n" "$api_url" >&2
-        # APIコードが間違っている可能性も示唆
-        if echo "$raw_json_response" | grep -q "Forbidden"; then # wgetの出力にForbiddenが含まれるか
+        if echo "$raw_json_response" | grep -q "Forbidden"; then
              printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
         fi
         return 1
@@ -247,10 +222,6 @@ get_matching_json_blocks() {
     local first_match_output=""
 
     echo "$json_response" | while IFS= read -r line; do
-        if [ -n "$first_match_output" ]; then
-            continue
-        fi
-
         case "$line" in
             *'{'*)
                 in_block=1
