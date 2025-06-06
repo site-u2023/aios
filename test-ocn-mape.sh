@@ -146,7 +146,6 @@ check_ipv6_in_range() {
     [ "$target_masked" = "$prefix_masked" ]
 }
 
-# OCN APIからマッチするルールを取得する関数
 get_ocn_rule_from_api() {
     local wan_iface="${1:-$WAN6_IF_NAME}"
     local current_user_ipv6_addr="$USER_IPV6_ADDR"
@@ -157,93 +156,101 @@ get_ocn_rule_from_api() {
         printf "ERROR: OCN API Code is not set. Please provide it when prompted.\n" >&2
         return 1
     fi
-    
+
     if [ -z "$current_user_ipv6_addr" ]; then
         printf "ERROR: USER_IPV6_ADDR is not set.\n" >&2
         return 1
     fi
-    
-    normalized_prefix=$(echo "$current_user_ipv6_addr" | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+
+    normalized_prefix=$(echo "$current_user_ipv6_addr" \
+        | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
     debug_log "Using IPv6 for API query: $normalized_prefix (derived from $current_user_ipv6_addr)"
-    
-    local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
+
+    local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}"\
+"&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
     debug_log "API URL: $api_url"
+
     local raw_json_response
-    raw_json_response=$(wget -qO- "$api_url" 2>/dev/null) 
-    
+    raw_json_response=$(wget -qO- "$api_url" 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$raw_json_response" ]; then
-        printf "ERROR: Failed to get API response or response is empty. URL: %s\n" "$api_url" >&2
+        printf "ERROR: Failed to get API response or response is empty. URL: %s\n" \
+               "$api_url" >&2
         if echo "$raw_json_response" | grep -q "Forbidden"; then
-             printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
+            printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" \
+                   >&2
         fi
         return 1
     fi
-    
+
     local json_response
-    json_response=$(echo "$raw_json_response" | sed -e 's/^v6plus(//' -e 's/);$//')
-    
+    json_response=$(echo "$raw_json_response" \
+        | sed -e 's/^v6plus(//' -e 's/);$//')
     if [ -z "$json_response" ]; then
         printf "ERROR: API response was empty after stripping v6plus() wrapper.\n" >&2
         return 1
     fi
-    
+
     local temp_file="/tmp/mape_json_$$"
     echo "$json_response" > "$temp_file"
-    
+
     local in_block=0
     local current_block=""
     local block_ipv6_prefix=""
-    local block_prefix_len_str="" 
-    local block_prefix_len_num=0  
+    local block_prefix_len_str=""
+    local block_prefix_len_num=0
 
     while IFS= read -r line; do
         case "$line" in
             *'{'*)
                 in_block=1
-                current_block="{" 
+                current_block="{"
                 block_ipv6_prefix=""
                 block_prefix_len_str=""
                 block_prefix_len_num=0
                 continue
                 ;;
         esac
-        
+
         if [ "$in_block" -eq 1 ]; then
-            current_block="${current_block}${line}" 
-            
+            current_block="${current_block}${line}"
+
             if echo "$line" | grep -q '"ipv6Prefix":'; then
-                 block_ipv6_prefix=$(echo "$line" | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
+                block_ipv6_prefix=$(echo "$line" \
+                    | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
             fi
             if echo "$line" | grep -q '"ipv6PrefixLength":'; then
-                block_prefix_len_str=$(echo "$line" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
-                if [ -n "$block_prefix_len_str" ] && [ "$block_prefix_len_str" -eq "$block_prefix_len_str" ] 2>/dev/null; then
+                block_prefix_len_str=$(echo "$line" \
+                    | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
+                if [ -n "$block_prefix_len_str" ] \
+                   && [ "$block_prefix_len_str" -eq "$block_prefix_len_str" ] \
+                   2>/dev/null; then
                     block_prefix_len_num=$((block_prefix_len_str))
                 else
                     block_prefix_len_num=0
                 fi
             fi
-            
+
             case "$line" in
                 *'}'*)
                     in_block=0
-                    if [ -n "$block_ipv6_prefix" ] && [ "$block_prefix_len_num" -gt 0 ]; then
-                        if check_ipv6_in_range "$normalized_prefix" "$block_ipv6_prefix" "$block_prefix_len_num"; then
+                    if [ -n "$block_ipv6_prefix" ] \
+                       && [ "$block_prefix_len_num" -gt 0 ]; then
+                        if check_ipv6_in_range \
+                             "$normalized_prefix" \
+                             "$block_ipv6_prefix" \
+                             "$block_prefix_len_num"; then
                             debug_log "Found matching rule block: $current_block"
                             API_RULE_JSON="$current_block"
                             rm -f "$temp_file"
                             return 0
-                        else
-                            debug_log "Rule block $block_ipv6_prefix/$block_prefix_len_num did not match user prefix $normalized_prefix"
                         fi
-                    else
-                        debug_log "Skipping block due to missing prefix or length: $current_block"
                     fi
                     current_block=""
                     ;;
             esac
         fi
     done < "$temp_file"
-    
+
     rm -f "$temp_file"
     printf "ERROR: No matching rule block found for your IPv6 prefix in API response.\n" >&2
     API_RULE_JSON=""
