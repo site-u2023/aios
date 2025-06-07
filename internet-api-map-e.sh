@@ -27,6 +27,8 @@ USER_IPV6_HEXTETS=""
 
 API_RULE_JSON=""
 
+OCN_APl_CODE="e991edda6e25dec6d2bdcc320d395495408b42670babc8423f2ebd1dc3fa652ae2a6483e8d6f71c1"
+
 determine_ipv6_acquisition_method() {
 
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
