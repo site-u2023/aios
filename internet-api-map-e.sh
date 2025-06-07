@@ -666,18 +666,18 @@ display_mape() {
 
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
-        gua) ipv6_label="IPv6アドレス:" ;;
-        pd)  ipv6_label="IPv6プレフィックス:"  ;;
-        *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
+        gua) ipv6_label="\033[1mIPv6アドレス:\033[0m" ;;
+        pd)  ipv6_label="\033[1mIPv6プレフィックス:\033[0m"  ;;
+        *)   ipv6_label="\033[1mIPv6プレフィックス/アドレス:\033[0m" ;;
     esac
 
     printf "\n"   
     printf "%s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "\n"
-    printf "• CE: %s\n" "$CE"
-    printf "• IPv4アドレス: %s\n" "$IPADDR"
+    printf "\033[1m• CE:\033[0m %s\n" "$CE"
+    printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
     
-    printf "• ポート番号: "
+    printf "\033[1m• ポート番号:\033[0m "
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
@@ -696,10 +696,10 @@ display_mape() {
     done
     
     printf "\n"    
-    printf "• PSID: %s (10進)\n" "$PSID"
+    printf "\033[1m• PSID:\033[0m %s (10進)\n" "$PSID"
     printf "\n"
     printf "------------------------------------------------------\n"
-    printf "注: PCN（プロビジョニング・コントロール・ネーム）APIの値です。\n"
+    printf "\033[1m注: PCN（プロビジョニング・コントロール・ネーム）APIの値です。\033[0m\n"
     printf "\n"
     
     printf "option peeraddr %s\n" "$BR"
