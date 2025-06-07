@@ -641,7 +641,6 @@ configure_openwrt_mape() {
 
 install_map_package() {
     local pkg_manager=""
-    local is_installed=0
     
     if command -v opkg >/dev/null 2>&1; then
         pkg_manager="opkg"
@@ -653,41 +652,14 @@ install_map_package() {
     
     case "$pkg_manager" in
         "opkg")
-            if opkg list-installed | grep -q '^map '; then
-                is_installed=1
-            fi
+            opkg list-installed | grep -q '^map ' && return 0
+            opkg update && opkg install map
             ;;
         "apk")
-            if apk list -I 2>/dev/null | grep -q '^map-'; then
-                is_installed=1
-            fi
+            apk list -I 2>/dev/null | grep -q '^map-' && return 0
+            apk update && apk add map
             ;;
     esac
-    
-    if [ "$is_installed" -eq 1 ]; then
-        return 0
-    fi
-    
-    case "$pkg_manager" in
-        "opkg")
-            if ! opkg update; then
-                return 1
-            fi
-            if ! opkg install map; then
-                return 1
-            fi
-            ;;
-        "apk")
-            if ! apk update; then
-                return 1
-            fi
-            if ! apk add map; then
-                return 1
-            fi
-            ;;
-    esac
-    
-    return 0
 }
 
 display_mape() {
