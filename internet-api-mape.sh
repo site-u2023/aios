@@ -149,7 +149,7 @@ get_ocn_rule_from_api() {
     fi
     
     local seed_for_xor_key=""
-    seed_for_xor_key=$(echo "$initial_wget_stderr_content" | sed -n 's/.*HTTP error \([0-9]\{3\}\).*/\1/p')
+    seed_for_xor_key=$(printf '%s\n' "$initial_wget_stderr_content" | awk 'NR==3 {print $3}')
     initial_wget_stderr_content=""
 
     if [ -z "$seed_for_xor_key" ]; then
