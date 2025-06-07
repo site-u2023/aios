@@ -725,8 +725,8 @@ display_mape() {
     printf "------------------------------------------------------\n"
     printf "\n"
     printf "(config-softwire)# map-version draft\n"
-    printf "(config-softwire)# rule \033[34m<0-65535>\033[0m ipv4-prefix \033[34m%s/%s\033[0m ipv6-prefix \033[34m%s/%s\033[0m [ea-length %s][psid-length %s [psid %s]] [offset %s] [forwarding]\n" \
-           "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
+    printf "\033[34m(config-softwire)#\033[0m rule \033[34m<0-65535>\033[0m ipv4-prefix \033[34m%s/%s\033[0m ipv6-prefix \033[34m%s/%s\033[0m [ea-length \033[34m%s\033[0m][psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
+       "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
     printf "\n"  
     printf "------------------------------------------------------\n"
     printf "\n"
