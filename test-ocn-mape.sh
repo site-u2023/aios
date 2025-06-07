@@ -1,8 +1,7 @@
 #!/bin/ash
 
-SCRIPT_VERSION="0.1.0-ocn" # 新しいスクリプト用のバージョン
-SCRIPT_DEBUG="${SCRIPT_DEBUG:-false}" # デバッグモード (trueで有効)
-OCN_API_CODE="" # OCN API Code (プロンプトで入力)
+SCRIPT_VERSION="2025.06.07-00-00"
+OCN_API_CODE=""
 
 BR=""
 IPV4_NET_PREFIX=""
@@ -15,31 +14,22 @@ PSIDLEN=""
 OFFSET=""
 PSID=""
 CE=""
-MTU="1460" # デフォルトMTU
-LEGACYMAP="1" # OpenWrt 21+ を想定
-WAN_IF_NAME="wan"       # デフォルトの物理WANインターフェース名
-WAN6_IF_NAME="wan6"     # デフォルトのIPv6 WANインターフェース名
-MAP_IF_NAME="wanmap"    # MAPインターフェース名
-LAN_IF_NAME="lan"       # デフォルトのLANインターフェース名
+MTU="1460"
+LEGACYMAP="1"
+WAN_IF_NAME="wan"
+WAN6_IF_NAME="wan6"
+MAP_IF_NAME="wanmap"
+LAN_IF_NAME="lan"
 
 USER_IPV6_ADDR=""
 USER_IPV6_HEXTETS=""
 
 API_RULE_JSON=""
 
-debug_log() {
-    if [ "$SCRIPT_DEBUG" = "true" ]; then
-        printf "DEBUG: %s\n" "$1" >&2
-    fi
-}
-
 determine_ipv6_acquisition_method() {
-    debug_log "Starting IPv6 acquisition method determination"
-      
-    debug_log "Checking IPv6 connectivity"
+
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
        ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
-        debug_log "IPv6 connectivity check failed"
         return 1
     fi
     
@@ -49,7 +39,6 @@ determine_ipv6_acquisition_method() {
     fi
     
     if [ -n "$ipv6_addr" ]; then
-        debug_log "GUA address found: $ipv6_addr"
         USER_IPV6_ADDR="$ipv6_addr"
         MAPE_IPV6_ACQUISITION_METHOD="gua"
         return 0
@@ -61,13 +50,11 @@ determine_ipv6_acquisition_method() {
     fi
     
     if [ -n "$ipv6_prefix" ]; then
-        debug_log "PD prefix found: $ipv6_prefix"
         USER_IPV6_ADDR="$ipv6_prefix"
         MAPE_IPV6_ACQUISITION_METHOD="pd"
         return 0
     fi
     
-    debug_log "No IPv6 address or prefix found - line incompatible"
     return 1
 }
 
@@ -118,240 +105,235 @@ check_ipv6_in_range() {
     [ "$target_masked" = "$prefix_masked" ]
 }
 
-OK_get_ocn_rule_from_api() {
-    local wan_iface="${1:-$WAN6_IF_NAME}"
-    local current_user_ipv6_addr="$USER_IPV6_ADDR"
-    local normalized_prefix=""
-    local prefix_len_for_api="64"
-
-    if [ -z "$OCN_API_CODE" ]; then
-        printf "ERROR: OCN API Code is not set. Please provide it when prompted.\n" >&2
-        return 1
-    fi
-
-    if [ -z "$current_user_ipv6_addr" ]; then
-        printf "ERROR: USER_IPV6_ADDR is not set.\n" >&2
-        return 1
-    fi
-
-    normalized_prefix=$(echo "$current_user_ipv6_addr" \
-        | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
-    debug_log "Using IPv6 for API query: $normalized_prefix (derived from $current_user_ipv6_addr)"
-
-    local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}"\
-"&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
-
-    local raw_json_response
-    raw_json_response=$(wget -qO- "$api_url" 2>/dev/null)
-    if [ $? -ne 0 ] || [ -z "$raw_json_response" ]; then
-        printf "ERROR: Failed to get API response or response is empty.\n" >&2
-        if echo "$raw_json_response" | grep -q "Forbidden"; then
-            printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
-        fi
-        return 1
-    fi
-
-    local json_response
-    json_response=$(echo "$raw_json_response" \
-        | sed -e 's/^v6plus(//' -e 's/);$//')
-    if [ -z "$json_response" ]; then
-        printf "ERROR: API response was empty after stripping v6plus() wrapper.\n" >&2
-        return 1
-    fi
-
-    local temp_file="/tmp/mape_json_$$"
-    echo "$json_response" > "$temp_file"
-
-    local in_block=0
-    local current_block=""
-    local block_ipv6_prefix=""
-    local block_prefix_len_str=""
-    local block_prefix_len_num=0
-
-    while IFS= read -r line; do
-        case "$line" in
-            *'{'*)
-                in_block=1
-                current_block="$line"
-                block_ipv6_prefix=""
-                block_prefix_len_str=""
-                block_prefix_len_num=0
-                continue
-                ;;
-        esac
-
-        if [ "$in_block" -eq 1 ]; then
-            current_block="${current_block}
-$line"
-            if echo "$line" | grep -q '"ipv6Prefix":'; then
-                block_ipv6_prefix=$(echo "$line" \
-                    | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
-            fi
-            if echo "$line" | grep -q '"ipv6PrefixLength":'; then
-                block_prefix_len_str=$(echo "$line" \
-                    | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
-                if [ -n "$block_prefix_len_str" ] \
-                   && [ "$block_prefix_len_str" -eq "$block_prefix_len_str" ] \
-                   2>/dev/null; then
-                    block_prefix_len_num=$((block_prefix_len_str))
-                else
-                    block_prefix_len_num=0
-                fi
-            fi
-
-            case "$line" in
-                *'}'*)
-                    in_block=0
-                    if [ -n "$block_ipv6_prefix" ] \
-                       && [ "$block_prefix_len_num" -gt 0 ]; then
-                        if check_ipv6_in_range \
-                             "$normalized_prefix" \
-                             "$block_ipv6_prefix" \
-                             "$block_prefix_len_num"; then
-                            debug_log "Found matching rule block: $current_block"
-                            API_RULE_JSON="$current_block"
-                            rm -f "$temp_file"
-                            return 0
-                        fi
-                    fi
-                    current_block=""
-                    ;;
-            esac
-        fi
-    done < "$temp_file"
-
-    rm -f "$temp_file"
-    printf "ERROR: No matching rule block found for your IPv6 prefix in API response.\n" >&2
-    API_RULE_JSON=""
-    return 1
-}
-
 get_ocn_rule_from_api() {
     local wan_iface="${1:-$WAN6_IF_NAME}"
+    local key_for_decryption="$2"
     local current_user_ipv6_addr="$USER_IPV6_ADDR"
     local normalized_prefix=""
     local prefix_len_for_api="64"
 
+    local decrypted_api_code="" 
+
     if [ -z "$current_user_ipv6_addr" ]; then
-        printf "ERROR: USER_IPV6_ADDR is not set.\n" >&2
         return 1
     fi
 
     normalized_prefix=$(echo "$current_user_ipv6_addr" | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
 
     local api_url
-    local wget_result
-    local password_seed
-    local ENCRYPTED_KEY
+    local hex_xor_key=""
+    local wget_rule_result
 
-    for i in 1 2; do
-        if [ "$i" -eq 1 ]; then
-            api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code="
-        else
-            api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
-        fi
-
-        if [ "$i" -eq 1 ]; then
-            password_seed=$(wget -6 -O - "$api_url" 2>&1)
-            if [ $? -ne 0 ] || [ -z "$password_seed" ] || echo "$password_seed" | grep -qiE "error|failed|forbidden"; then
-                printf "ERROR: Failed to get initial encrypted rule from API.\n" >&2
-                debug_log "Initial API response (or error): $password_seed"
-                return 1
-            fi
-            
-            ENCRYPTED_KEY="$1"
-            if [ -n "$ENCRYPTED_KEY" ]; then
-                generate "$password_seed" "$ENCRYPTED_KEY"
-                if [ $? -ne 0 ] || [ -z "$OCN_API_CODE" ]; then
-                     printf "ERROR: Failed to generate true API code.\n" >&2
-                     return 1
-                fi
-            else
-                printf "ERROR: XOR decryption key (initial OCN API Code) is missing.\n" >&2
-                return 1
-            fi
-        else
-            wget_result=$(wget -6 -qO- "$api_url" 2>/dev/null)
-            if [ $? -ne 0 ] || [ -z "$wget_result" ]; then
-                printf "ERROR: Failed to get API response or response is empty.\n" >&2
-                if [ -n "$wget_result" ] && echo "$wget_result" | grep -q "Forbidden"; then
-                    printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
-                fi
-                return 1
-            fi
-        fi
-    done
-
-    local json_response
-    json_response=$(echo "$wget_result" | sed -e 's/^v6plus(//' -e 's/);$//')
-    if [ -z "$json_response" ]; then
-        printf "ERROR: API response was empty after stripping v6plus() wrapper.\n" >&2
+    if [ -z "$key_for_decryption" ]; then
         return 1
     fi
 
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code="
+    
+    local temp_stderr_file="/tmp/wget_initial_stderr_$$"
+    local initial_wget_stdout_discarded 
+    initial_wget_stdout_discarded=$(wget -6 -O - "$api_url" 2>"$temp_stderr_file")
+    local initial_wget_exit_status=$?
+
+    local initial_wget_stderr_content=""
+    if [ -s "$temp_stderr_file" ]; then
+        initial_wget_stderr_content=$(cat "$temp_stderr_file")
+    fi
+    rm -f "$temp_stderr_file"
+    initial_wget_stdout_discarded=""
+
+    if [ "$initial_wget_exit_status" -eq 0 ]; then
+        initial_wget_stderr_content=""
+        return 1
+    fi
+    
+    local seed_for_xor_key=""
+    seed_for_xor_key=$(echo "$initial_wget_stderr_content" | sed -n 's/.*HTTP error \([0-9]\{3\}\).*/\1/p')
+    initial_wget_stderr_content=""
+
+    if [ -z "$seed_for_xor_key" ]; then
+        key_for_decryption="" 
+        return 1
+    fi
+
+    hex_xor_key=$(echo "$seed_for_xor_key" | \
+        { \
+            local extracted_str_from_sed_pipe
+            local temp_hex_output_pipe=""
+            local char_idx_pipe=1
+            local current_char_pipe
+            local char_ascii_val_pipe
+            
+            IFS= read -r extracted_str_from_sed_pipe || true 
+
+            if [ -n "$extracted_str_from_sed_pipe" ]; then
+                while [ "$char_idx_pipe" -le "${#extracted_str_from_sed_pipe}" ]; do
+                    current_char_pipe=$(echo "$extracted_str_from_sed_pipe" | cut -c"$char_idx_pipe")
+                    char_ascii_val_pipe=$(printf "%d" "'$current_char_pipe") 
+                    temp_hex_output_pipe="${temp_hex_output_pipe}$(printf "%02x" "$char_ascii_val_pipe")"
+                    char_idx_pipe=$((char_idx_pipe + 1))
+                done
+                echo "$temp_hex_output_pipe" 
+            else
+                echo "" 
+            fi
+        } \
+    )
+    seed_for_xor_key=""
+
+    if [ -z "$hex_xor_key" ]; then
+        key_for_decryption=""
+        return 1
+    fi
+    
+    decrypted_api_code=$(generate "$key_for_decryption" "$hex_xor_key" | tr -d '\n')
+    local generate_exit_status=$?
+    
+    key_for_decryption="" 
+    hex_xor_key=""
+
+    if [ "$generate_exit_status" -ne 0 ] || [ -z "$decrypted_api_code" ]; then 
+         decrypted_api_code="" 
+         return 1
+    fi
+    
+    if [ -z "$decrypted_api_code" ]; then
+        return 1
+    fi
+
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${decrypted_api_code}"
+    
+    local wget_stderr_file_rule="/tmp/wget_stderr_rule_$$"
+    wget_rule_result=$(wget -6 -q -O- "$api_url" 2>"$wget_stderr_file_rule") 
+    local rule_wget_status=$?
+    
+    decrypted_api_code=""
+
+    local rule_wget_stderr_content=""
+    if [ -s "$wget_stderr_file_rule" ]; then
+        rule_wget_stderr_content=$(cat "$wget_stderr_file_rule")
+    fi
+    rm -f "$wget_stderr_file_rule"
+    rule_wget_stderr_content=""
+            
+    if [ "$rule_wget_status" -ne 0 ] || [ -z "$wget_rule_result" ]; then
+        wget_rule_result="" 
+        return 1
+    fi
+
+    local json_response
+    json_response=$(echo "$wget_rule_result" | sed -e 's/^v6plus(//' -e 's/);$//')
+    wget_rule_result="" 
+
+    if [ -z "$json_response" ]; then
+        return 1
+    fi
+
+    API_RULE_JSON="" 
     local temp_file="/tmp/mape_json_$$"
     echo "$json_response" > "$temp_file"
+    json_response=""
 
-    local in_block=0
-    local current_block=""
-    local block_ipv6_prefix=""
-    local block_prefix_len_str=""
-    local block_prefix_len_num=0
-
+    local in_block=0; local current_block=""; local block_ipv6_prefix=""; local block_prefix_len_str=""; local block_prefix_len_num=0
     while IFS= read -r line; do
-        case "$line" in
-            *'{'*)
-                in_block=1
-                current_block="$line"
-                block_ipv6_prefix=""
-                block_prefix_len_str=""
-                block_prefix_len_num=0
-                continue
-                ;;
-        esac
-
+        case "$line" in *'{'*) in_block=1; current_block="$line"; block_ipv6_prefix=""; block_prefix_len_str=""; block_prefix_len_num=0; continue ;; esac
         if [ "$in_block" -eq 1 ]; then
-            current_block="${current_block}
-$line"
-            if echo "$line" | grep -q '"ipv6Prefix":'; then
-                block_ipv6_prefix=$(echo "$line" | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p')
-            fi
+            current_block="${current_block}\n$line"
+            if echo "$line" | grep -q '"ipv6Prefix":'; then block_ipv6_prefix=$(echo "$line" | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p'); fi
             if echo "$line" | grep -q '"ipv6PrefixLength":'; then
                 block_prefix_len_str=$(echo "$line" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
-                if [ -n "$block_prefix_len_str" ] && [ "$block_prefix_len_str" -eq "$block_prefix_len_str" ] 2>/dev/null; then
+                if [ -n "$block_prefix_len_str" ] && expr "$block_prefix_len_str" + 0 > /dev/null 2>&1; then
                     block_prefix_len_num=$((block_prefix_len_str))
-                else
-                    block_prefix_len_num=0
-                fi
+                else block_prefix_len_num=0; fi
             fi
-
             case "$line" in
                 *'}'*)
                     in_block=0
                     if [ -n "$block_ipv6_prefix" ] && [ "$block_prefix_len_num" -gt 0 ]; then
                         if check_ipv6_in_range "$normalized_prefix" "$block_ipv6_prefix" "$block_prefix_len_num"; then
-                            debug_log "Found matching rule block"
-                            API_RULE_JSON="$current_block"
-                            rm -f "$temp_file"
-                            return 0
+                            API_RULE_JSON="$current_block"; 
+                            rm -f "$temp_file"; 
+                            current_block=""; block_ipv6_prefix=""; block_prefix_len_str="";
+                            return 0 
                         fi
                     fi
-                    current_block=""
-                    ;;
+                    current_block="" ;;
             esac
         fi
     done < "$temp_file"
-
     rm -f "$temp_file"
-    printf "ERROR: No matching rule block found for your IPv6 prefix in API response.\n" >&2
-    API_RULE_JSON=""
+    current_block=""; block_ipv6_prefix=""; block_prefix_len_str="";
+
     return 1
+}
+
+generate() {
+    local input_hex_encrypted="$1"
+    local key_hex="$2"
+    local decrypted_raw_output=""
+    local i=0
+    local j=0
+    local input_len=${#input_hex_encrypted}
+    local key_len=${#key_hex}
+
+    if [ -z "$key_hex" ]; then
+        return 1
+    fi
+    
+    if [ "$input_len" -eq 0 ]; then
+        return 1
+    fi
+
+    if [ $((input_len % 2)) -ne 0 ]; then
+        return 1
+    fi
+    if [ $((key_len % 2)) -ne 0 ]; then
+        return 1
+    fi
+
+    while [ "$i" -lt "$input_len" ]; do
+        local current_input_byte_hex
+        local current_key_byte_hex
+        local dec_input
+        local dec_key
+        local xor_result_dec
+        local result_char
+        local printf_status_input
+        local printf_status_key
+
+        current_input_byte_hex=$(echo "$input_hex_encrypted" | cut -c $((i + 1))-$((i + 2)))
+        current_key_byte_hex=$(echo "$key_hex" | cut -c $((j + 1))-$((j + 2)))
+
+        dec_input=$(printf "%d" "0x$current_input_byte_hex" 2>/dev/null)
+        printf_status_input=$?
+        if [ "$printf_status_input" -ne 0 ]; then
+            return 1
+        fi
+
+        dec_key=$(printf "%d" "0x$current_key_byte_hex" 2>/dev/null)
+        printf_status_key=$?
+        if [ "$printf_status_key" -ne 0 ]; then
+            return 1
+        fi
+        
+        xor_result_dec=$((dec_input ^ dec_key))
+        result_char=$(printf "\\$(printf "%03o" "$xor_result_dec")")
+        decrypted_raw_output="${decrypted_raw_output}${result_char}"
+        
+        i=$((i + 2))
+        j=$((j + 2))
+        if [ "$j" -ge "$key_len" ]; then
+            j=0
+        fi
+    done
+    
+    echo -n "$decrypted_raw_output"
+    return 0
 }
 
 parse_user_ipv6() {
     local ipv6_to_parse="$1"
     if [ -z "$ipv6_to_parse" ]; then
-        debug_log "parse_user_ipv6: No IPv6 address provided to parse."
         USER_IPV6_HEXTETS=""
         return 1
     fi
@@ -433,7 +415,6 @@ parse_user_ipv6() {
 
     local hextet_count=$(echo "$USER_IPV6_HEXTETS" | awk '{print NF}')
     if [ "$hextet_count" -ne 8 ]; then
-        debug_log "parse_user_ipv6: Failed to parse IPv6 into 8 hextets. Got $hextet_count: '$USER_IPV6_HEXTETS' from '$ipv6_to_parse'"
         USER_IPV6_HEXTETS=""
         return 1
     fi
@@ -441,26 +422,17 @@ parse_user_ipv6() {
     local expanded_ipv6
     expanded_ipv6=$(echo "$USER_IPV6_HEXTETS" \
       | awk '{print $1":"$2":"$3":"$4":"$5":"$6":"$7":"$8}')
-    debug_log "Parsed user IPv6 hextets: $USER_IPV6_HEXTETS"
-    debug_log "Expanded IPv6 address: $expanded_ipv6"
     
     return 0
 }
 
 calculate_mape_params() {
     if [ -z "$API_RULE_JSON" ]; then
-        printf "ERROR: API_RULE_JSON is empty in calculate_mape_params.\n" >&2
         return 1
     fi
     if [ -z "$USER_IPV6_HEXTETS" ]; then
-        printf "ERROR: USER_IPV6_HEXTETS is empty in calculate_mape_params.\n" >&2
         return 1
     fi
-
-    # printf  "\n"
-    # echo "API_RULE_JSON content:"
-    # echo "$API_RULE_JSON"
-    # echo "End of API_RULE_JSON"
 
     local api_br_ipv6_address api_ea_bit_length api_ipv4_prefix api_ipv4_prefix_length
     local api_ipv6_prefix_rule api_ipv6_prefix_length_rule api_psid_offset
@@ -475,12 +447,12 @@ calculate_mape_params() {
     api_ipv6_prefix_length_rule=$(echo "$API_RULE_JSON" \
         | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
     api_psid_offset=$(echo "$API_RULE_JSON"    | sed -n 's/.*"psIdOffset":\s*"\([^"]*\)".*/\1/p')
+    API_RULE_JSON=""
 
-    # validate numeric values
     for v in "$api_ea_bit_length" "$api_ipv4_prefix_length" \
               "$api_ipv6_prefix_length_rule" "$api_psid_offset"; do
         if ! printf "%s" "$v" | grep -qE '^[0-9]+$'; then
-            printf "ERROR: API parameter '%s' is not a valid number.\n" "$v" >&2
+            USER_IPV6_HEXTETS=""
             return 1
         fi
     done
@@ -493,25 +465,24 @@ calculate_mape_params() {
     EALEN="$api_ea_bit_length"
     OFFSET="$api_psid_offset"
 
-    # split user IPv6 into 8 hextets
+    api_br_ipv6_address=""; api_ea_bit_length=""; api_ipv4_prefix=""; api_ipv4_prefix_length=""
+    api_ipv6_prefix_rule=""; api_ipv6_prefix_length_rule=""; api_psid_offset=""
+
     read -r h0 h1 h2 h3 h4 h5 h6 h7 <<EOF
 $USER_IPV6_HEXTETS
 EOF
+    USER_IPV6_HEXTETS=""
 
-    # calculate PSID length
     local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
     PSIDLEN=$((EALEN - ipv4_suffix_len))
     if [ "$PSIDLEN" -lt 0 ]; then
-        printf "ERROR: Calculated PSIDLEN is negative (%s).\n" "$PSIDLEN" >&2
         return 1
     fi
 
-    # dynamic mask/shift for PSID extraction
     local shift=$((16 - OFFSET - PSIDLEN))
     local mask=$(( ((1 << PSIDLEN) - 1) << shift ))
     PSID=$(( ((0x$h3) & mask) >> shift ))
 
-    # build IPv4 address
     local o1 o2 o3_base o4_base o3_val o4_val
     o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
     o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
@@ -523,7 +494,6 @@ EOF
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
 
-    # build CE IPv6 address
     local ce_h3_masked ce_h4 ce_h5 ce_h6 ce_h7
     ce_h3_masked=$(printf "%04x" $((0x$h3 & 0xFF00)))
     ce_h4=$(printf "%04x" "$o1")
@@ -532,84 +502,141 @@ EOF
     ce_h7=$(printf "%04x" $((PSID * 256)))
 
     CE="${h0}:${h1}:${h2}:${ce_h3_masked}:${ce_h4}:${ce_h5}:${ce_h6}:${ce_h7}"
+    
+    h0=""; h1=""; h2=""; h3=""; h4=""; h5=""; h6=""; h7=""
+    o1=""; o2=""; o3_base=""; o4_base=""; o3_val=""; o4_val=""
+    ce_h3_masked=""; ce_h4=""; ce_h5=""; ce_h6=""; ce_h7=""
+    ipv4_suffix_len=""; shift=""; mask=""
 
     return 0
 }
 
 configure_openwrt_mape() {
-    debug_log "Applying MAP-E configuration to OpenWrt..."
 
-    uci -q batch <<-EOF
-        set network.$MAP_IF_NAME=interface
-        set network.$MAP_IF_NAME.proto='map'
-        set network.$MAP_IF_NAME.maptype='map-e'
-        set network.$MAP_IF_NAME.peeraddr='$BR'
-        set network.$MAP_IF_NAME.ipaddr='$IPV4_NET_PREFIX'
-        set network.$MAP_IF_NAME.ip4prefixlen='$IP4PREFIXLEN'
-        set network.$MAP_IF_NAME.ip6prefix='$IPV6_RULE_PREFIX'
-        set network.$MAP_IF_NAME.ip6prefixlen='$IPV6_RULE_PREFIXLEN'
-        set network.$MAP_IF_NAME.ealen='$EALEN'
-        set network.$MAP_IF_NAME.psidlen='$PSIDLEN'
-        set network.$MAP_IF_NAME.offset='$OFFSET'
-        set network.$MAP_IF_NAME.mtu='${MTU:-1460}'
-        set network.$MAP_IF_NAME.encaplimit='ignore'
-        set network.$MAP_IF_NAME.legacymap='${LEGACYMAP:-1}'
-        set network.$MAP_IF_NAME.tunlink='$WAN6_IF_NAME'
-EOF
-    if [ $? -ne 0 ]; then
-        printf "ERROR: Failed to apply uci batch for network.$MAP_IF_NAME.\n" >&2
-        return 1
+    local WANMAP='wanmap'
+
+    local ZONE_NO
+    local wan_zone_name_to_find="wan"
+    ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='$wan_zone_name_to_find'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
+
+    if [ -z "$ZONE_NO" ]; then
+        ZONE_NO="1"
     fi
 
-    uci -q batch <<-EOF
-        set network.$WAN6_IF_NAME.proto='dhcpv6'
-        set network.$WAN6_IF_NAME.reqaddress='try'
-        set network.$WAN6_IF_NAME.reqprefix='auto' 
-EOF
+    local WAN_IF="${WAN_IF:-wan}"
+    local WAN6_IF="${WAN6_IF:-wan6}"
+    local LAN_IF="${LAN_IF:-lan}"
+
+    local osversion_file="${CACHE_DIR}/osversion.ch"
+    local osversion=""
+
+    cp /etc/config/network /etc/config/network.map-e.bak 2>/dev/null
+    cp /etc/config/dhcp /etc/config/dhcp.map-e.bak 2>/dev/null
+    cp /etc/config/firewall /etc/config/firewall.map-e.bak 2>/dev/null
+    
+    uci -q set network.${WAN_IF}.disabled='1'
+    uci -q set network.${WAN_IF}.auto='0'
+
+    uci -q set dhcp.${LAN_IF}.ra='relay'
+    uci -q set dhcp.${LAN_IF}.dhcpv6='relay'
+    uci -q set dhcp.${LAN_IF}.ndp='relay'
+    uci -q set dhcp.${LAN_IF}.force='1'
+
+    uci -q set dhcp.${WAN6_IF}=dhcp
+    uci -q set dhcp.${WAN6_IF}.interface="$WAN6_IF"
+    uci -q set dhcp.${WAN6_IF}.master='1'
+    uci -q set dhcp.${WAN6_IF}.ra='relay'
+    uci -q set dhcp.${WAN6_IF}.dhcpv6='relay'
+    uci -q set dhcp.${WAN6_IF}.ndp='relay'
+
+    uci -q set network.${WAN6_IF}.proto='dhcpv6'
+    uci -q set network.${WAN6_IF}.reqaddress='try'
+    uci -q set network.${WAN6_IF}.reqprefix='auto' 
+    
+    if [ "$MAPE_IPV6_ACQUISITION_METHOD" = "gua" ]; then
+        if [ -n "$IPV6PREFIX" ]; then
+            uci -q set network.${WAN6_IF}.ip6prefix="${IPV6PREFIX}/64"
+        else
+            uci -q delete network.${WAN6_IF}.ip6prefix
+        fi
+    elif [ "$MAPE_IPV6_ACQUISITION_METHOD" = "pd" ]; then
+        uci -q delete network.${WAN6_IF}.ip6prefix
+    else
+        uci -q delete network.${WAN6_IF}.ip6prefix
+    fi
+
+    uci -q set network.${WANMAP}=interface
+    uci -q set network.${WANMAP}.proto='map'
+    uci -q set network.${WANMAP}.maptype='map-e'
+    uci -q set network.${WANMAP}.peeraddr="${BR}"
+    uci -q set network.${WANMAP}.ipaddr="${IPV4}"
+    uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
+    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
+    uci -q set network.${WANMAP}.ealen="${EALEN}"
+    uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
+    uci -q set network.${WANMAP}.offset="${OFFSET}"
+    uci -q set network.${WANMAP}.mtu='1460'
+    uci -q set network.${WANMAP}.encaplimit='ignore'
+    
+    if [ -f "$osversion_file" ]; then
+        osversion=$(cat "$osversion_file")
+        debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
+    else
+        osversion="unknown"
+        debug_log "DEBUG" "config_mape: OS version file '$osversion_file' not found. Applying default/latest version settings."
+    fi
+
+    if echo "$osversion" | grep -q "^19"; then
+        uci -q delete network.${WANMAP}.tunlink
+        uci -q add_list network.${WANMAP}.tunlink="${WAN6_IF}"
+        uci -q delete network.${WANMAP}.legacymap
+    else
+        uci -q set dhcp.${WAN6_IF}.ignore='1'
+        uci -q set network.${WANMAP}.legacymap='1'
+        uci -q set network.${WANMAP}.tunlink="${WAN6_IF}"
+    fi
+    
+    local current_wan_networks
+    current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null)
+
+    if echo "$current_wan_networks" | grep -q "\b${WAN_IF}\b"; then
+        uci -q del_list firewall.@zone[${ZONE_NO}].network="${WAN_IF}"
+    fi
+
+    if ! echo "$current_wan_networks" | grep -q "\b${WANMAP}\b"; then
+        uci -q add_list firewall.@zone[${ZONE_NO}].network="${WANMAP}"
+    fi
+    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
+    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
+    
+    local commit_failed=0
+    local commit_errors=""
+
+    uci -q commit network
     if [ $? -ne 0 ]; then
-        printf "ERROR: Failed to apply uci batch for network.$WAN6_IF_NAME.\n" >&2
+        commit_failed=1
+        commit_errors="${commit_errors}network "
+    fi
+
+    uci -q commit dhcp
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}dhcp "
+    fi
+    
+    uci -q commit firewall
+    if [ $? -ne 0 ]; then
+        commit_failed=1
+        commit_errors="${commit_errors}firewall "
+    fi
+
+    if [ "$commit_failed" -eq 1 ]; then
         return 1
     fi
     
-    uci -q batch <<-EOF
-        set dhcp.$LAN_IF_NAME.ra='relay'
-        set dhcp.$LAN_IF_NAME.dhcpv6='relay'
-        set dhcp.$LAN_IF_NAME.ndp='relay'
-EOF
-    if [ $? -ne 0 ]; then
-        printf "ERROR: Failed to apply uci batch for dhcp.$LAN_IF_NAME.\n" >&2
-        return 1
-    fi
-
-    local wan_zone_idx
-    wan_zone_idx=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='wan'" | cut -d'[' -f2 | cut -d']' -f1 | head -n1)
-    if [ -n "$wan_zone_idx" ]; then
-        local current_networks
-        current_networks=$(uci -q get firewall.@zone["$wan_zone_idx"].network)
-        if ! echo "$current_networks" | grep -q "\b$MAP_IF_NAME\b"; then
-            uci -q add_list firewall.@zone["$wan_zone_idx"].network="$MAP_IF_NAME"
-        fi
-        uci -q set firewall.@zone["$wan_zone_idx"].masq='1'
-        uci -q set firewall.@zone["$wan_zone_idx"].mtu_fix='1'
-    else
-        printf "WARN: Firewall zone named 'wan' not found. Manual firewall configuration for '$MAP_IF_NAME' might be needed.\n" >&2
-    fi
-
-    if ! uci -q commit network; then
-        printf "ERROR: Failed to commit network configuration.\n" >&2
-        return 1
-    fi
-    if ! uci -q commit dhcp; then
-        printf "ERROR: Failed to commit DHCP configuration.\n" >&2
-        return 1
-    fi
-    if ! uci -q commit firewall; then
-        printf "ERROR: Failed to commit firewall configuration.\n" >&2
-        return 1
-    fi
-
-    printf "INFO: MAP-E UCI configuration applied successfully.\n"
-    printf "INFO: You may need to restart network services (/etc/init.d/network restart) or reboot the device.\n"
+    printf "MAP-E UCI設定が正常に適用されました。\n"
+    
     return 0
 }
 
@@ -622,7 +649,6 @@ install_map_package() {
     elif command -v apk >/dev/null 2>&1; then
         pkg_manager="apk"
     else
-        printf "ERROR: No supported package manager found (opkg/apk).\n" >&2
         return 1
     fi
     
@@ -643,32 +669,25 @@ install_map_package() {
         return 0
     fi
     
-    printf "INFO: MAP package not found. Installing...\n"
-    
     case "$pkg_manager" in
         "opkg")
             if ! opkg update; then
-                printf "ERROR: Failed to update package list with opkg.\n" >&2
                 return 1
             fi
             if ! opkg install map; then
-                printf "ERROR: Failed to install MAP package with opkg.\n" >&2
                 return 1
             fi
             ;;
         "apk")
             if ! apk update; then
-                printf "ERROR: Failed to update package list with apk.\n" >&2
                 return 1
             fi
             if ! apk add map; then
-                printf "ERROR: Failed to install MAP package with apk.\n" >&2
                 return 1
             fi
             ;;
     esac
     
-    printf "INFO: MAP package installed successfully.\n"
     return 0
 }
 
@@ -681,8 +700,6 @@ display_mape() {
         *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
     esac
 
-    printf "\n"
-    printf "------------------------------------------------------\n"
     printf "\n"   
     printf "%s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "\n"
@@ -743,123 +760,17 @@ display_mape() {
     printf "------------------------------------------------------\n"
     printf "\n"
     printf "Powered by config-softwire\n"
-    printf "Press any key to apply and reboot...\n"
-    read -r -n1 -s
-    return 0
-}
+    printf "\n"
 
-generate() {
-    local input_hex_encrypted="$1"
-    local key_hex="$2"
-    local decrypted_hex_output=""
-    local i=0
-    local j=0
-    local input_len=${#input_hex_encrypted}
-    local key_len=${#key_hex}
-
-    if [ -z "$key_hex" ]; then
-        debug_log "generate: Error - XOR key is empty."
-        OCN_API_CODE=""
-        return 1
-    fi
-    
-    if [ "$input_len" -eq 0 ]; then
-        debug_log "generate: Error - Encrypted input hex string is empty."
-        OCN_API_CODE=""
-        return 1
-    fi
-
-    if [ $((input_len % 2)) -ne 0 ]; then
-        debug_log "generate: Error - Encrypted input hex string has odd length ($input_len)."
-        OCN_API_CODE=""
-        return 1
-    fi
-    if [ $((key_len % 2)) -ne 0 ]; then
-        debug_log "generate: Error - XOR key hex string has odd length ($key_len)."
-        OCN_API_CODE=""
-        return 1
-    fi
-
-    while [ "$i" -lt "$input_len" ]; do
-        local current_input_byte_hex
-        local current_key_byte_hex
-        local dec_input
-        local dec_key
-        local xor_result_dec
-        local result_byte_hex
-
-        current_input_byte_hex=$(echo "$input_hex_encrypted" | cut -c $((i + 1))-$((i + 2)))
-        current_key_byte_hex=$(echo "$key_hex" | cut -c $((j + 1))-$((j + 2)))
-
-        dec_input=$(printf "%d" "0x$current_input_byte_hex" 2>/dev/null)
-        if [ "$?" -ne 0 ] || ! expr "$dec_input" + 0 > /dev/null 2>&1; then
-            debug_log "generate: Error - Failed to convert input hex byte '$current_input_byte_hex' to decimal."
-            OCN_API_CODE=""
-            return 1
-        fi
-
-        dec_key=$(printf "%d" "0x$current_key_byte_hex" 2>/dev/null)
-        if [ "$?" -ne 0 ] || ! expr "$dec_key" + 0 > /dev/null 2>&1; then
-            debug_log "generate: Error - Failed to convert key hex byte '$current_key_byte_hex' to decimal."
-            OCN_API_CODE=""
-            return 1
-        fi
-        
-        xor_result_dec=$((dec_input ^ dec_key))
-        if [ "$?" -ne 0 ]; then
-            debug_log "generate: Error - Arithmetic syntax error during XOR ($dec_input ^ $dec_key)."
-            OCN_API_CODE=""
-            return 1
-        fi
-
-        result_byte_hex=$(printf "%02x" "$xor_result_dec")
-        
-        decrypted_hex_output="${decrypted_hex_output}${result_byte_hex}"
-        
-        i=$((i + 2))
-        j=$((j + 2))
-        if [ "$j" -ge "$key_len" ]; then
-            j=0
-        fi
-    done
-    
-    OCN_API_CODE="$decrypted_hex_output"
-    return 0
-}
-
-test_manual_ipv6_input() {
-    printf "IPv6アドレスを入力してください: "
-    if ! read USER_IPV6_ADDR_INPUT; then
-        printf "ERROR: Failed to read IPv6 address.\n" >&2
-        return 1
-    fi
-    
-    if [ -z "$USER_IPV6_ADDR_INPUT" ]; then
-        printf "ERROR: IPv6 address cannot be empty.\n" >&2
-        return 1
-    fi
-    
-    USER_IPV6_ADDR="$USER_IPV6_ADDR_INPUT"
-    MAPE_IPV6_ACQUISITION_METHOD="manual"
-    debug_log "Manual IPv6 address input: $USER_IPV6_ADDR"
     return 0
 }
 
 ocn_main() {
-    if [ "$SCRIPT_DEBUG" = "true" ]; then
-        printf "スクリプトはデバッグモードで実行されています。\n"
-    fi
-
     if [ -f /lib/functions.sh ]; then
         . /lib/functions.sh
-    else
-        printf "エラー: /lib/functions.sh が見つかりません。このスクリプトはOpenWrt環境でのみ動作します。\n" >&2
-        return 1
-    fi
-    if [ -f /lib/functions/network.sh ]; then
         . /lib/functions/network.sh
     else
-        printf "エラー: /lib/functions/network.sh が見つかりません。\n" >&2
+        printf "このスクリプトはOpenWrt環境でのみ動作します。\n" >&2
         return 1
     fi
 
@@ -870,7 +781,6 @@ ocn_main() {
 
     if [ -n "$1" ]; then
         OCN_API_CODE="$1"
-        debug_log "OCN APIコードを引数から受け取りました。"
     elif [ -z "$OCN_API_CODE" ]; then
         printf "\nOCN APIコードを入力してください: "
         if ! read OCN_API_CODE_INPUT; then
@@ -878,49 +788,49 @@ ocn_main() {
             return 1
         fi
         OCN_API_CODE="$OCN_API_CODE_INPUT"
-        debug_log "OCN APIコードをプロンプト入力から受け取りました。"
     fi
 
     if [ -z "$OCN_API_CODE" ]; then
-        printf "エラー: OCN APIコードが指定されていません。終了します。\n" >&2
+        printf "OCN APIコードが指定されていません。終了します。\n" >&2
         return 1
     fi
 
-    if ! get_ocn_rule_from_api "$WAN6_IF_NAME"; then
-        printf "致命的エラー: MAP-EルールをAPIから取得できませんでした。終了します。\n" >&2
+    if ! get_ocn_rule_from_api "$WAN6_IF_NAME" "$OCN_API_CODE"; then
+        printf "MAP-EルールをAPIから取得できませんでした。終了します。\n" >&2
         return 1
     fi
 
     if ! install_map_package; then
-        printf "致命的エラー: MAPパッケージのインストールに失敗しました。終了します。\n" >&2
+        printf "MAPパッケージのインストールに失敗しました。終了します。\n" >&2
         return 1
     fi
 
     if [ -z "$USER_IPV6_ADDR" ]; then
-        printf "致命的エラー: ユーザーのIPv6アドレスが設定されていません。終了します。\n" >&2
+        printf "ユーザーのIPv6アドレスが設定されていません。終了します。\n" >&2
         return 1
     fi
     if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
-        printf "致命的エラー: ユーザーIPv6アドレス(%s)のパースに失敗しました。終了します。\n" "$USER_IPV6_ADDR" >&2
+        printf "ユーザーIPv6アドレス(%s)のパースに失敗しました。終了します。\n" "$USER_IPV6_ADDR" >&2
         return 1
     fi
 
     if ! calculate_mape_params; then
-        printf "致命的エラー: MAP-Eパラメータの計算に失敗しました。終了します。\n" >&2
+        printf "MAP-Eパラメータの計算に失敗しました。終了します。\n" >&2
         return 1
     fi
 
     if ! display_mape; then
-        printf "致命的エラー: MAP-Eパラメータ表示に失敗しました。終了します。\n" >&2
+        printf "MAP-Eパラメータ表示に失敗しました。終了します。\n" >&2
         return 1
     fi
 
     # if ! configure_openwrt_mape; then
-    #     printf "致命的エラー: MAP-E設定の適用に失敗しました。終了します。\n" >&2
+    #     printf "MAP-E設定の適用に失敗しました。終了します。\n" >&2
     #     return 1
     # fi
 
-    # printf "情報: 設定反映のためシステムを再起動します...\n"
+    # printf "何かキーを押すと再起動します。\n"
+    # read -r -n1 -s
     # reboot
 
     return 0
