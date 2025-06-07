@@ -723,11 +723,11 @@ display_mape() {
     printf "export LEGACY=1\n"
     printf "\n"
     printf "------------------------------------------------------\n"
+   printf "\n"
+    printf "\033[34m(config-softwire)#\033[0m \033[1mmap-version draft\033[0m\n"
     printf "\n"
-    printf "(config-softwire)# map-version draft\n"
-    printf "\033[34m(config-softwire)#\033[0m rule \033[34m<0-65535>\033[0m ipv4-prefix \033[34m%s/%s\033[0m ipv6-prefix \033[34m%s/%s\033[0m [ea-length \033[34m%s\033[0m][psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
+    printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
        "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
-    printf "\n"  
     printf "------------------------------------------------------\n"
     printf "\n"
     printf "Powered by config-softwire\n"
