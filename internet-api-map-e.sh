@@ -677,7 +677,7 @@ display_mape() {
     printf "• CE: %s\n" "$CE"
     printf "• IPv4アドレス: %s\n" "$IPADDR"
     
-    printf "• ポート番号:\n"
+    printf "• ポート番号: "
     local shift_bits=$((16 - OFFSET))
     local psid_shift=$((16 - OFFSET - PSIDLEN))
     [ "$psid_shift" -lt 0 ] && psid_shift=0
