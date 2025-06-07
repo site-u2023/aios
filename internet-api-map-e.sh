@@ -684,10 +684,18 @@ display_mape() {
     local range_size=$((1 << psid_shift))
     local max_blocks=$((1 << OFFSET))
     local last=$((max_blocks - 1))
-    
-    local line_items=0
+
+    local total_blocks=$last
+    local cols_per_row=$((total_blocks / 5))
+
+    if [ $((total_blocks % 5)) -ne 0 ]; then
+        cols_per_row=$((cols_per_row + 1))
+    fi
+
+    local current_col=0
+
     printf "    "
-    
+
     for A in $(seq 1 "$last"); do
         local base=$((A << shift_bits))
         local part=$((PSID << psid_shift))
@@ -695,16 +703,17 @@ display_mape() {
         local end=$((start + range_size - 1))
         
         printf "%d-%d" "$start" "$end"
-        line_items=$((line_items + 1))
+        current_col=$((current_col + 1))
         
-        if [ "$line_items" -eq 3 ] && [ "$A" -lt "$last" ]; then
+        if [ "$current_col" -eq "$cols_per_row" ]; then
             printf "\n    "
-            line_items=0
+            current_col=0
         elif [ "$A" -lt "$last" ]; then
             printf " "
         fi
     done
-    printf "\n" 
+    printf "\n"
+    
     printf "• PSID: %s (10進)\n" "$PSID"
     printf "\n"
     printf "------------------------------------------------------\n"
