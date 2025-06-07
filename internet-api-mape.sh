@@ -830,8 +830,8 @@ ocn_main() {
     #     return 1
     # fi
 
-    # printf "何かキーを押すと再起動します。\n"
-    # read -r -n1 -s
+    printf "何かキーを押すと再起動します。\n"
+    read -r -n1 -s
     # reboot
 
     return 0
