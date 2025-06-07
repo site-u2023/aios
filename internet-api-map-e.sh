@@ -528,9 +528,13 @@ configure_openwrt_mape() {
     local WAN6_IF="${WAN6_IF:-wan6}"
     local LAN_IF="${LAN_IF:-lan}"
 
-    local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
-
+    if [ -f "/etc/openwrt_release" ]; then
+        osversion=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
+    else
+        osversion="unknown"
+    fi
+    
     cp /etc/config/network /etc/config/network.map-e.bak 2>/dev/null
     cp /etc/config/dhcp /etc/config/dhcp.map-e.bak 2>/dev/null
     cp /etc/config/firewall /etc/config/firewall.map-e.bak 2>/dev/null
@@ -579,14 +583,6 @@ configure_openwrt_mape() {
     uci -q set network.${WANMAP}.offset="${OFFSET}"
     uci -q set network.${WANMAP}.mtu='1460'
     uci -q set network.${WANMAP}.encaplimit='ignore'
-    
-    if [ -f "$osversion_file" ]; then
-        osversion=$(cat "$osversion_file")
-        debug_log "DEBUG" "config_mape: OS Version from '$osversion_file': $osversion"
-    else
-        osversion="unknown"
-        debug_log "DEBUG" "config_mape: OS version file '$osversion_file' not found. Applying default/latest version settings."
-    fi
 
     if echo "$osversion" | grep -q "^19"; then
         uci -q delete network.${WANMAP}.tunlink
