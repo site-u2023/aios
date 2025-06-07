@@ -516,7 +516,7 @@ EOF
 
 configure_openwrt_mape() {
 
-    local WANMAP='wanmap'
+    local WANMAP="${MAP_IF_NAME:-wanmap}"
 
     local ZONE_NO
     local wan_zone_name_to_find="wan"
@@ -583,7 +583,7 @@ configure_openwrt_mape() {
     uci -q set network.${WANMAP}.ealen="${EALEN}"
     uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
     uci -q set network.${WANMAP}.offset="${OFFSET}"
-    uci -q set network.${WANMAP}.mtu='1460'
+    uci -q set network.${WANMAP}.mtu="${MTU}"
     uci -q set network.${WANMAP}.encaplimit='ignore'
 
     if echo "$osversion" | grep -q "^19"; then
