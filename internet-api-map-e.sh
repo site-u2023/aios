@@ -570,9 +570,9 @@ configure_openwrt_mape() {
     uci -q set network.${WANMAP}.proto='map'
     uci -q set network.${WANMAP}.maptype='map-e'
     uci -q set network.${WANMAP}.peeraddr="${BR}"
-    uci -q set network.${WANMAP}.ipaddr="${IPV4}"
+    uci -q set network.${WANMAP}.ipaddr="${IPV4_NET_PREFIX}"
     uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::"
+    uci -q set network.${WANMAP}.ip6prefix="${IPV6_RULE_PREFIX}"
     uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
     uci -q set network.${WANMAP}.ealen="${EALEN}"
     uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
@@ -744,7 +744,7 @@ display_mape() {
     printf "option peeraddr %s\n" "$BR"
     printf "option ipaddr %s\n" "$IPV4_NET_PREFIX"
     printf "option ip4prefixlen %s\n" "$IP4PREFIXLEN"
-    printf "option ip6prefix %s::\n" "$IPV6_RULE_PREFIX"
+    printf "option ip6prefix %s\n" "$IPV6_RULE_PREFIX"
     printf "option ip6prefixlen %s\n" "$IPV6_RULE_PREFIXLEN"
     printf "option ealen %s\n" "$EALEN"
     printf "option psidlen %s\n" "$PSIDLEN"
