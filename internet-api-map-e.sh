@@ -666,13 +666,13 @@ display_mape() {
 
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
-        gua) ipv6_label="\033[1mIPv6アドレス:\033[0m" ;;
-        pd)  ipv6_label="\033[1mIPv6プレフィックス:\033[0m"  ;;
-        *)   ipv6_label="\033[1mIPv6プレフィックス/アドレス:\033[0m" ;;
+        gua) ipv6_label="IPv6アドレス:" ;;
+        pd)  ipv6_label="IPv6プレフィックス:"  ;;
+        *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
     esac
 
     printf "\n"   
-    printf "%s %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
+    printf "\033[1m%s\033[0m %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "\n"
     printf "\033[1m• CE:\033[0m %s\n" "$CE"
     printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
@@ -714,7 +714,7 @@ display_mape() {
     printf "export LEGACY=1\n"
     printf "\n"
     printf "------------------------------------------------------\n"
-   printf "\n"
+    printf "\n"
     printf "\033[34m(config-softwire)#\033[0m \033[1mmap-version draft\033[0m\n"
     printf "\n"
     printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
