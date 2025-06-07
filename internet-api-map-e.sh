@@ -109,7 +109,7 @@ check_ipv6_in_range() {
     [ "$target_masked" = "$prefix_masked" ]
 }
 
-get_ocn_rule_from_api() {
+OK_get_ocn_rule_from_api() {
     local wan_iface="${1:-$WAN6_IF_NAME}"
     local key_for_decryption="$2"
     local current_user_ipv6_addr="$USER_IPV6_ADDR"
@@ -201,6 +201,167 @@ get_ocn_rule_from_api() {
          return 1
     fi
     
+    if [ -z "$decrypted_api_code" ]; then
+        return 1
+    fi
+
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${decrypted_api_code}"
+    
+    local wget_stderr_file_rule="/tmp/wget_stderr_rule_$$"
+    wget_rule_result=$(wget -6 -q -O- "$api_url" 2>"$wget_stderr_file_rule") 
+    local rule_wget_status=$?
+    
+    decrypted_api_code=""
+
+    local rule_wget_stderr_content=""
+    if [ -s "$wget_stderr_file_rule" ]; then
+        rule_wget_stderr_content=$(cat "$wget_stderr_file_rule")
+    fi
+    rm -f "$wget_stderr_file_rule"
+    rule_wget_stderr_content=""
+            
+    if [ "$rule_wget_status" -ne 0 ] || [ -z "$wget_rule_result" ]; then
+        wget_rule_result="" 
+        return 1
+    fi
+
+    local json_response
+    json_response=$(echo "$wget_rule_result" | sed -e 's/^v6plus(//' -e 's/);$//')
+    wget_rule_result="" 
+
+    if [ -z "$json_response" ]; then
+        return 1
+    fi
+
+    API_RULE_JSON="" 
+    local temp_file="/tmp/mape_json_$$"
+    echo "$json_response" > "$temp_file"
+    json_response=""
+
+    local in_block=0; local current_block=""; local block_ipv6_prefix=""; local block_prefix_len_str=""; local block_prefix_len_num=0
+    while IFS= read -r line; do
+        case "$line" in *'{'*) in_block=1; current_block="$line"; block_ipv6_prefix=""; block_prefix_len_str=""; block_prefix_len_num=0; continue ;; esac
+        if [ "$in_block" -eq 1 ]; then
+            current_block="${current_block}\n$line"
+            if echo "$line" | grep -q '"ipv6Prefix":'; then block_ipv6_prefix=$(echo "$line" | sed -n 's/.*"ipv6Prefix":\s*"\([^"]*\)".*/\1/p'); fi
+            if echo "$line" | grep -q '"ipv6PrefixLength":'; then
+                block_prefix_len_str=$(echo "$line" | sed -n 's/.*"ipv6PrefixLength":\s*"\([^"]*\)".*/\1/p')
+                if [ -n "$block_prefix_len_str" ] && expr "$block_prefix_len_str" + 0 > /dev/null 2>&1; then
+                    block_prefix_len_num=$((block_prefix_len_str))
+                else block_prefix_len_num=0; fi
+            fi
+            case "$line" in
+                *'}'*)
+                    in_block=0
+                    if [ -n "$block_ipv6_prefix" ] && [ "$block_prefix_len_num" -gt 0 ]; then
+                        if check_ipv6_in_range "$normalized_prefix" "$block_ipv6_prefix" "$block_prefix_len_num"; then
+                            API_RULE_JSON="$current_block"; 
+                            rm -f "$temp_file"; 
+                            current_block=""; block_ipv6_prefix=""; block_prefix_len_str="";
+                            return 0 
+                        fi
+                    fi
+                    current_block="" ;;
+            esac
+        fi
+    done < "$temp_file"
+    rm -f "$temp_file"
+    current_block=""; block_ipv6_prefix=""; block_prefix_len_str="";
+
+    return 1
+}
+
+get_ocn_rule_from_api() {
+    local wan_iface="${1:-$WAN6_IF_NAME}"
+    local key_for_decryption="$2"
+    local current_user_ipv6_addr="$USER_IPV6_ADDR"
+    local normalized_prefix=""
+    local prefix_len_for_api="64"
+
+    local decrypted_api_code="" 
+
+    if [ -z "$current_user_ipv6_addr" ]; then
+        return 1
+    fi
+
+    normalized_prefix=$(echo "$current_user_ipv6_addr" | awk -F: '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+
+    local api_url
+    local hex_xor_key=""
+    local wget_rule_result
+
+    if [ -z "$key_for_decryption" ]; then
+        return 1
+    fi
+
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code="
+    
+    local temp_stderr_file="/tmp/wget_initial_stderr_$$"
+    local initial_wget_stdout_discarded 
+    initial_wget_stdout_discarded=$(wget -6 -O - "$api_url" 2>"$temp_stderr_file")
+    local initial_wget_exit_status=$?
+
+    local initial_wget_stderr_content=""
+    if [ -s "$temp_stderr_file" ]; then
+        initial_wget_stderr_content=$(cat "$temp_stderr_file")
+    fi
+    rm -f "$temp_stderr_file"
+    initial_wget_stdout_discarded=""
+
+    if [ "$initial_wget_exit_status" -eq 0 ]; then
+        initial_wget_stderr_content=""
+        return 1
+    fi
+    
+    local seed_for_xor_key=""
+    seed_for_xor_key=$(printf '%s\n' "$initial_wget_stderr_content" | awk 'NR==3 {print $3}')
+    initial_wget_stderr_content=""
+
+    if [ -z "$seed_for_xor_key" ]; then
+        key_for_decryption="" 
+        return 1
+    fi
+
+    hex_xor_key=$(echo "$seed_for_xor_key" | \
+        { \
+            local extracted_str_from_sed_pipe
+            local temp_hex_output_pipe=""
+            local char_idx_pipe=1
+            local current_char_pipe
+            local char_ascii_val_pipe
+            
+            IFS= read -r extracted_str_from_sed_pipe || true 
+
+            if [ -n "$extracted_str_from_sed_pipe" ]; then
+                while [ "$char_idx_pipe" -le "${#extracted_str_from_sed_pipe}" ]; do
+                    current_char_pipe=$(echo "$extracted_str_from_sed_pipe" | cut -c"$char_idx_pipe")
+                    char_ascii_val_pipe=$(printf "%d" "'$current_char_pipe") 
+                    temp_hex_output_pipe="${temp_hex_output_pipe}$(printf "%02x" "$char_ascii_val_pipe")"
+                    char_idx_pipe=$((char_idx_pipe + 1))
+                done
+                echo "$temp_hex_output_pipe" 
+            else
+                echo "" 
+            fi
+        } \
+    )
+    seed_for_xor_key=""
+
+    if [ -z "$hex_xor_key" ]; then
+        key_for_decryption=""
+        return 1
+    fi
+    
+    decrypted_api_code=$(generate "$key_for_decryption" "$hex_xor_key" | tr -d '\n')
+    local generate_exit_status=$?
+    
+    if [ "$generate_exit_status" -ne 0 ] || [ -z "$decrypted_api_code" ]; then 
+        decrypted_api_code="$key_for_decryption"
+    fi
+    
+    key_for_decryption="" 
+    hex_xor_key=""
+
     if [ -z "$decrypted_api_code" ]; then
         return 1
     fi
