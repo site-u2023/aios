@@ -140,16 +140,13 @@ OK_get_ocn_rule_from_api() {
 
     local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}"\
 "&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
-    debug_log "API URL: $api_url"
 
     local raw_json_response
     raw_json_response=$(wget -qO- "$api_url" 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$raw_json_response" ]; then
-        printf "ERROR: Failed to get API response or response is empty. URL: %s\n" \
-               "$api_url" >&2
+        printf "ERROR: Failed to get API response or response is empty.\n" >&2
         if echo "$raw_json_response" | grep -q "Forbidden"; then
-            printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" \
-                   >&2
+            printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
         fi
         return 1
     fi
@@ -248,21 +245,36 @@ get_ocn_rule_from_api() {
     local ENCRYPTED_KEY
 
     for i in 1 2; do
-        api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=$(if [ "$i" -eq 1 ]; then echo ""; else echo "${OCN_API_CODE}"; fi)"
-        debug_log "API URL: $api_url"
+        if [ "$i" -eq 1 ]; then
+            api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code="
+        else
+            api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${normalized_prefix}&ipv6PrefixLength=${prefix_len_for_api}&code=${OCN_API_CODE}"
+        fi
 
         if [ "$i" -eq 1 ]; then
-            OCN_API_CODE=$(wget -6 -O - "$api_url" 2>&1)
-            password_seed="$OCN_API_CODE"
+            password_seed=$(wget -6 -O - "$api_url" 2>&1)
+            if [ $? -ne 0 ] || [ -z "$password_seed" ] || echo "$password_seed" | grep -qiE "error|failed|forbidden"; then
+                printf "ERROR: Failed to get initial encrypted rule from API.\n" >&2
+                debug_log "Initial API response (or error): $password_seed"
+                return 1
+            fi
+            
             ENCRYPTED_KEY="$1"
             if [ -n "$ENCRYPTED_KEY" ]; then
                 generate "$password_seed" "$ENCRYPTED_KEY"
+                if [ $? -ne 0 ] || [ -z "$OCN_API_CODE" ]; then
+                     printf "ERROR: Failed to generate true API code.\n" >&2
+                     return 1
+                fi
+            else
+                printf "ERROR: XOR decryption key (initial OCN API Code) is missing.\n" >&2
+                return 1
             fi
         else
             wget_result=$(wget -6 -qO- "$api_url" 2>/dev/null)
             if [ $? -ne 0 ] || [ -z "$wget_result" ]; then
-                printf "ERROR: Failed to get API response or response is empty. URL: %s\n" "$api_url" >&2
-                if echo "$wget_result" | grep -q "Forbidden"; then
+                printf "ERROR: Failed to get API response or response is empty.\n" >&2
+                if [ -n "$wget_result" ] && echo "$wget_result" | grep -q "Forbidden"; then
                     printf "HINT: The API request was forbidden. Check if the OCN API Code is correct.\n" >&2
                 fi
                 return 1
