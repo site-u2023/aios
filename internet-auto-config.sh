@@ -8,8 +8,6 @@ SCRIPT_VERSION="2025.06.05-00-00"
 PROVIDER_DATABASE_CONTENT=""
 PROVIDER_DATABASE_INITIALIZED="false"
 
-API_SETUP="7a6464057d6565057f5e69457a5a7c077d4804007f637a5b78677443694b79447f637a596d5d7f5c7f6575007c705b0177570c09"
-
 provider_data_definitions() {   
     add_provider_record "2518|240b::/16| |v6plus|v6 Plus|map-e|download internet-map-e.sh chmod load; internet_map_main"
     add_provider_record "7413|2404:7a80::/30|gw.transix.jp|biglobe_dslite|BIGLOBE|ds-lite|download internet-ds-lite-config.sh chmod load; internet_dslite_main"
