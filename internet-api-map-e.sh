@@ -27,7 +27,7 @@ USER_IPV6_HEXTETS=""
 
 API_RULE_JSON=""
 
-OCN_APl_CODE="e991edda6e25dec6d2bdcc320d395495408b42670babc8423f2ebd1dc3fa652ae2a6483e8d6f71c1"
+OCN_APl_CODE="YTdiMmM4ZDQtZTVmNi00NzI5LTkzODEtMmI0YzZkOGU5ZjFhCg=="
 
 determine_ipv6_acquisition_method() {
 
