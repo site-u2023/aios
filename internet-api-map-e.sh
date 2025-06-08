@@ -902,7 +902,7 @@ ocn_main() {
         OCN_API_CODE="$1"
     elif [ -z "$OCN_API_CODE" ]; then
         printf "\nOCN APIコードを入力してください: "
-        if ! read OCN_API_CODE_INPUT; then
+        if ! read -s OCN_API_CODE_INPUT; then
             printf "\nエラー: OCN APIコードの入力に失敗しました。\n" >&2
             return 1
         fi
