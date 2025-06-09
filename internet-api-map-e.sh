@@ -919,10 +919,10 @@ ocn_main() {
         return 1
     fi
 
-    if ! install_map_package; then
-        printf "MAPパッケージのインストールに失敗しました。終了します。\n" >&2
-        return 1
-    fi
+    # if ! install_map_package; then
+    #     printf "MAPパッケージのインストールに失敗しました。終了します。\n" >&2
+    #     return 1
+    # fi
 
     if [ -z "$USER_IPV6_ADDR" ]; then
         printf "ユーザーのIPv6アドレスが設定されていません。終了します。\n" >&2
