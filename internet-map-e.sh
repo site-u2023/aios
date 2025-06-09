@@ -925,7 +925,7 @@ EOF
     local IP6PFX0 IP6PFX1 IP6PFX2
     if [ "$IP6PREFIXLEN" -eq 38 ]; then
         local hextet2_2=$(( HEXTET2 & 64512 )); IP6PFX0=$(printf %x "${HEXTET0:-0}"); IP6PFX1=$(printf %x "${HEXTET1:-0}"); IP6PFX2=$(printf %x "${hextet2_2:-0}")
-        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
+        IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}::"
     elif [ "$IP6PREFIXLEN" -eq 31 ]; then
         local hextet2_1=$(( HEXTET1 & 65534 )); IP6PFX0=$(printf %x "${HEXTET0:-0}"); IP6PFX1=$(printf %x "${hextet2_1:-0}")
         IP6PFX="${IP6PFX0}:${IP6PFX1}::"
