@@ -1372,7 +1372,7 @@ display_mape() {
     printf "option peeraddr %s\n" "$BR"
     printf "option ipaddr %s\n" "$IPV4"
     printf "option ip4prefixlen %s\n" "$IP4PREFIXLEN"
-    printf "option ip6prefix %s\n" "$IP6PFX"
+    printf "option ip6prefix %s\n" "$IP6PFX::"
     printf "option ip6prefixlen %s\n" "$IP6PREFIXLEN"
     printf "option ealen %s\n" "$EALEN"
     printf "option psidlen %s\n" "$PSIDLEN"
@@ -1382,7 +1382,7 @@ display_mape() {
     printf "------------------------------------------------------\n"
     printf "\033[34m(config-softwire)#\033[0m \033[1mmap-version draft\033[0m\n"
     printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
-       "$IPV4" "$IP4PREFIXLEN" "$IP6PFX" "$IP6PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
+       "$IPV4" "$IP4PREFIXLEN" "$IP6PFX::" "$IP6PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
     printf "\n"
     if type color > /dev/null 2>&1 && type get_message > /dev/null 2>&1; then
         printf "%s\n" "$(color white "Powered by config-softwire")"
