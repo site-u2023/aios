@@ -1384,20 +1384,17 @@ display_mape() {
     printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
        "$IPV4" "$IP4PREFIXLEN" "$IP6PFX" "$IP6PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
     printf "\n"
-
-    printf "\n"
     if type color > /dev/null 2>&1 && type get_message > /dev/null 2>&1; then
         printf "%s\n" "$(color white "Powered by config-softwire")"
-        printf "\n"
+        printf "------------------------------------------------------\n"
         printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
         printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     else
-        printf "Powered by config-softwire\n"
-        printf "\n"
+        printf "%s\n" "$(color white "Powered by config-softwire")"
+        printf "------------------------------------------------------\n"
         printf "%s\n" "MAP-E parameters calculated successfully.\n"
         printf "%s\n" "MAP-E settings applied. Please wait for the reboot.\n"
-        printf "------------------------------------------------------\n"
-        printf "%s\n" "Powered by config-softwire"
+        
         
     fi
     read -r -n 1 -s
