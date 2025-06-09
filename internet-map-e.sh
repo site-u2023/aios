@@ -1212,7 +1212,7 @@ replace_map_sh() {
 }
 
 # MAP-E設定情報を表示する関数
-display_mape() {
+OK_display_mape() {
 
     printf "\n"
     printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
@@ -1325,6 +1325,80 @@ display_mape() {
     printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
     read -r -n 1 -s
     
+    return 0
+}
+
+display_mape() {
+    local ipv6_label
+    case "$MAPE_IPV6_ACQUISITION_METHOD" in
+        gua) ipv6_label="IPv6アドレス:" ;;
+        pd)  ipv6_label="IPv6プレフィックス:"  ;;
+        *)   ipv6_label="IPv6プレフィックス/アドレス:" ;;
+    esac
+
+    printf "\n"
+    printf "\033[1mconfig-softwire\033[0m %s\n" "$SCRIPT_VERSION"
+    printf "\n"
+    printf "\033[1m%s\033[0m %s/64\n" "$ipv6_label" "$NEW_IP6_PREFIX"
+    printf "\n"
+    printf "\033[1m• CE:\033[0m %s\n" "$CE"
+    printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
+
+    printf "\033[1m• ポート番号:\033[0m "
+    local shift_bits=$((16 - OFFSET))
+    local psid_shift=$((16 - OFFSET - PSIDLEN))
+    [ "$psid_shift" -lt 0 ] && psid_shift=0
+    local range_size=$((1 << psid_shift))
+    local max_blocks=$((1 << OFFSET))
+    local last_block_index=$((max_blocks - 1))
+
+    local port_idx
+    for port_idx in $(seq 1 "$last_block_index"); do
+        local base_port=$((port_idx << shift_bits))
+        local psid_component=$((PSID << psid_shift))
+        local start_port=$((base_port | psid_component))
+        local end_port=$((start_port + range_size - 1))
+
+        printf "%d-%d" "$start_port" "$end_port"
+        [ "$port_idx" -lt "$last_block_index" ] && printf " "
+    done
+
+    printf "\n"
+    printf "\033[1m• PSID:\033[0m %s (10進)\n" "$PSID"
+    printf "------------------------------------------------------\n"
+    printf "\033[1m注: 本当の値とは違う場合があります。\033[0m\n"
+
+    printf "\n"
+    printf "option peeraddr %s\n" "$BR"
+    printf "option ipaddr %s\n" "$IPV4"
+    printf "option ip4prefixlen %s\n" "$IP4PREFIXLEN"
+    printf "option ip6prefix %s\n" "$IP6PFX"
+    printf "option ip6prefixlen %s\n" "$IP6PREFIXLEN"
+    printf "option ealen %s\n" "$EALEN"
+    printf "option psidlen %s\n" "$PSIDLEN"
+    printf "option offset %s\n" "$OFFSET"
+    printf "\n"
+    printf "export LEGACY=1\n"
+    printf "------------------------------------------------------\n"
+    printf "\033[34m(config-softwire)#\033[0m \033[1mmap-version draft\033[0m\n"
+    printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length...]\n" \
+       "$IPV4" "$IP4PREFIXLEN" "$IP6PFX" "$IP6PREFIXLEN"
+    printf "\n"
+
+    printf "\n"
+    if type color > /dev/null 2>&1 && type get_message > /dev/null 2>&1; then
+        printf "%s\n" "$(color white "Powered by config-softwire")"
+        printf "\n"
+        printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
+        printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
+    else
+        printf "Powered by config-softwire\n"
+        printf "\n"
+        printf "MAP-E parameters calculated successfully.\n"
+        printf "MAP-E settings applied. Please wait for the reboot.\n"
+    fi
+    read -r -n 1 -s
+
     return 0
 }
 
