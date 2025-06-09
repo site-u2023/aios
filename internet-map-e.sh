@@ -928,7 +928,7 @@ EOF
         IP6PFX="${IP6PFX0}:${IP6PFX1}:${IP6PFX2}"
     elif [ "$IP6PREFIXLEN" -eq 31 ]; then
         local hextet2_1=$(( HEXTET1 & 65534 )); IP6PFX0=$(printf %x "${HEXTET0:-0}"); IP6PFX1=$(printf %x "${hextet2_1:-0}")
-        IP6PFX="${IP6PFX0}:${IP6PFX1}"
+        IP6PFX="${IP6PFX0}:${IP6PFX1}::"
     else
         IP6PFX=""
     fi
@@ -1051,7 +1051,7 @@ config_mape() {
     uci -q set network.${WANMAP}.peeraddr="${BR}"
     uci -q set network.${WANMAP}.ipaddr="${IPV4}"
     uci -q set network.${WANMAP}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}::" # IP6PFXはmold_mapeで計算
+    uci -q set network.${WANMAP}.ip6prefix="${IP6PFX}" # IP6PFXはmold_mapeで計算
     uci -q set network.${WANMAP}.ip6prefixlen="${IP6PREFIXLEN}"
     uci -q set network.${WANMAP}.ealen="${EALEN}"
     uci -q set network.${WANMAP}.psidlen="${PSIDLEN}"
@@ -1211,123 +1211,6 @@ replace_map_sh() {
     fi
 }
 
-# MAP-E設定情報を表示する関数
-OK_display_mape() {
-
-    printf "\n"
-    printf "%s\n" "$(color blue "Prefix Information:")" # "プレフィックス情報:"
-    local ipv6_label
-    case "$MAPE_IPV6_ACQUISITION_METHOD" in
-        gua)
-            ipv6_label="IPv6 address:"
-            ;;
-        pd)
-            ipv6_label="IPv6 prefix:"
-            ;;
-        *)
-            ipv6_label="IPv6 prefix or address:"
-            ;;
-    esac
-    printf "  %s %s\n" "$ipv6_label" "$NEW_IP6_PREFIX"
-    printf "  CE: %s\n" "$CE" # "  CE IPv6アドレス: $CE"
-    printf "  IPv4 address: %s\n" "$IPADDR" # "  IPv4アドレス: $IPADDR"
-    printf "  PSID (Decimal): %s\n" "$PSID" # "  PSID値(10進数): $PSID"
-
-    printf "\n"
-    printf "%s\n" "$(color yellow "Note: True values may differ")"
-    
-    printf "\n"
-    printf "%s\n" "$(color blue "OpenWrt Configuration Values:")" # "OpenWrt設定値:"
-    printf "  option peeraddr '%s'\n" "$BR" # BRが空の場合もあるためクォート
-    printf "  option ipaddr %s\n" "$IPV4"
-    printf "  option ip4prefixlen '%s'\n" "$IP4PREFIXLEN"
-    printf "  option ip6prefix '%s::'\n" "$IP6PFX" # IP6PFXが空の場合もあるためクォート
-    printf "  option ip6prefixlen '%s'\n" "$IP6PREFIXLEN"
-    printf "  option ealen '%s'\n" "$EALEN"
-    printf "  option psidlen '%s'\n" "$PSIDLEN"
-    printf "  option offset '%s'\n" "$OFFSET"
-    printf "\n"
-    printf "  export LEGACY=1\n"
-
-    # ポート情報の計算を最適化
-    local max_port_blocks=$(( (1 << OFFSET) ))
-    local ports_per_block=$(( 1 << (16 - OFFSET - PSIDLEN) ))
-    local total_ports=$(( ports_per_block * ((1 << OFFSET) - 1) )) 
-    
-    # local port_start_for_A1=$(( (1 << (16 - OFFSET)) | (PSID << (16 - OFFSET - PSIDLEN)) )) 
-    local shift_val1
-    local term1
-    local shift_val2
-    local term2
-    local port_start_for_A1
-
-    shift_val1=$((16 - OFFSET))
-    term1=$((1 << shift_val1))
-    shift_val2=$((16 - OFFSET - PSIDLEN)) 
-    term2=$((PSID << shift_val2))
-    port_start_for_A1=$((term1 | term2))
-
-    debug_log "DEBUG" "Port calculation for display: blocks=$max_port_blocks, ports_per_block=$ports_per_block, total_ports=$total_ports, first_port_start_A1=$port_start_for_A1" 
-
-    printf "\n"
-    printf "%s\n" "$(color blue "Port Information:")" # "ポート情報:"
-    printf "  Available Ports: %s\n" "$total_ports" # "  利用可能なポート数: $total_ports"
-
-    # ポート範囲を表示（PORTSをバッファリングして最適化）
-    printf "\n"
-    printf "%s\n" "$(color blue "Port Ranges:")" # "ポート範囲:"
-    
-    # PORTSが既にmold_mape()で計算済みかつ正常な場合は、それを表示
-    if [ -n "$PORTS" ]; then
-        # ポート範囲の各行の先頭にスペースを追加し、エスケープシーケンスを解釈
-        printf "  %b\n" "$(echo "$PORTS" | sed 's/\\n/\\n  /g')"
-    else
-        # PORTSが空の場合のフォールバック処理（再計算）
-        local shift_bits=$(( 16 - OFFSET ))
-        local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
-        if [ "$psid_shift" -lt 0 ]; then
-            psid_shift=0
-        fi
-        local port_range_size=$(( 1 << psid_shift ))
-        local port_max_index=$(( (1 << OFFSET) - 1 )) # A=1 から AMAX まで
-        local line_buffer=""
-        local items_in_line=0
-        local max_items_per_line=3 # 現在のロジックに合わせる
-        
-        for A in $(seq 1 "$port_max_index"); do
-            local port_base=$(( A << shift_bits ))
-            local psid_part=$(( PSID << psid_shift ))
-            local port_start_val=$(( port_base | psid_part )) # 変数名を変更
-            local port_end_val=$(( port_start_val + port_range_size - 1 )) # 変数名を変更
-            
-            # バッファに追加
-            if [ "$items_in_line" -eq 0 ]; then
-                line_buffer="${port_start_val}-${port_end_val}"
-            else
-                line_buffer="${line_buffer} ${port_start_val}-${port_end_val}"
-            fi
-            
-            items_in_line=$((items_in_line + 1))
-            
-            # 行ごとに出力（最大表示項目数に達したか、最後の項目の場合）
-            if [ "$items_in_line" -ge "$max_items_per_line" ] || [ "$A" -eq "$port_max_index" ]; then
-                printf "  %s\n" "$line_buffer" # echo を printf に変更
-                line_buffer=""
-                items_in_line=0
-            fi
-        done
-    fi
-
-    printf "\n"
-    printf "%s\n" "$(color white "Powered by config-softwire")"
-    printf "\n"
-    printf "%s\n" "$(color green "$(get_message "MSG_MAPE_PARAMS_CALC_SUCCESS")")"
-    printf "%s\n" "$(color yellow "$(get_message "MSG_MAPE_APPLY_SUCCESS")")"
-    read -r -n 1 -s
-    
-    return 0
-}
-
 display_mape() {
     local ipv6_label
     case "$MAPE_IPV6_ACQUISITION_METHOD" in
@@ -1372,7 +1255,7 @@ display_mape() {
     printf "option peeraddr %s\n" "$BR"
     printf "option ipaddr %s\n" "$IPV4"
     printf "option ip4prefixlen %s\n" "$IP4PREFIXLEN"
-    printf "option ip6prefix %s\n" "$IP6PFX::"
+    printf "option ip6prefix %s\n" "$IP6PFX"
     printf "option ip6prefixlen %s\n" "$IP6PREFIXLEN"
     printf "option ealen %s\n" "$EALEN"
     printf "option psidlen %s\n" "$PSIDLEN"
@@ -1382,7 +1265,7 @@ display_mape() {
     printf "------------------------------------------------------\n"
     printf "\033[34m(config-softwire)#\033[0m \033[1mmap-version draft\033[0m\n"
     printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
-       "$IPV4" "$IP4PREFIXLEN" "$IP6PFX::" "$IP6PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
+       "$IPV4" "$IP4PREFIXLEN" "$IP6PFX" "$IP6PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
     printf "\n"
     if type color > /dev/null 2>&1 && type get_message > /dev/null 2>&1; then
         printf "%s\n" "$(color white "Powered by config-softwire")"
