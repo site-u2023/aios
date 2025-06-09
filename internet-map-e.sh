@@ -1,6 +1,7 @@
 #!/bin/ash
 
 # Based on script from https://ipv4.web.fc2.com/map-e.html, with appreciation.
+# hotplug.dで自動実行まで作る？飽きてきた。。。
 
 SCRIPT_VERSION="2025.06.09-00-00"
 
