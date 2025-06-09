@@ -2,7 +2,7 @@
 
 # Based on script from https://ipv4.web.fc2.com/map-e.html, with appreciation.
 
-SCRIPT_VERSION="2025.06.03-00-00"
+SCRIPT_VERSION="2025.06.09-00-00"
 
 # OpenWrt関数をロード
 . /lib/functions.sh
@@ -1394,8 +1394,11 @@ display_mape() {
     else
         printf "Powered by config-softwire\n"
         printf "\n"
-        printf "MAP-E parameters calculated successfully.\n"
-        printf "MAP-E settings applied. Please wait for the reboot.\n"
+        printf "%s\n" "MAP-E parameters calculated successfully.\n"
+        printf "%s\n" "MAP-E settings applied. Please wait for the reboot.\n"
+        printf "------------------------------------------------------\n"
+        printf "%s\n" "Powered by config-softwire"
+        
     fi
     read -r -n 1 -s
 
