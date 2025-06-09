@@ -862,7 +862,7 @@ display_mape() {
     printf "\n"    
     printf "\033[1m• PSID:\033[0m %s (10進)\n" "$PSID"
     printf "------------------------------------------------------\n"
-    printf "\033[1m注: PCN（プロビジョニング・コントロール・ネーム）APIの値です。\033[0m\n"
+    printf "\033[1m注: PCN（プロビジョニングコントロールネーム）APIの値です。\033[0m\n"
     printf "\n"
     
     printf "option peeraddr %s\n" "$BR"
