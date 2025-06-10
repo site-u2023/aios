@@ -6,8 +6,7 @@ en|MSG_UNDER_TEST=👽 test
 # menu.db
 en|MENU_INTERNET=Internet settings{:} Exclusive to Japan
 en|MENU_INTERNET_AUTO=Automatic Configuration{:} MAP-E / DS-LITE / NURO Hikari
-en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus
-en|MENU_INTERNET_MAPE_NURO=MAP-E{:} NURO Hikari
+en|MENU_INTERNET_MAPE=MAP-E{:} OCN / v6 plus / NURO Hikari
 en|MENU_INTERNET_DSLITE=DS-Lite{:} transix / cross pass / v6 connect
 en|MENU_INTERNET_PPPOE=PPPoE
 en|MENU_INTERNET_RESTORE=Restore Settings
@@ -16,7 +15,6 @@ en|MENU_INTERNET_DSLITE_TRANS_EAST=Transix East Japan
 en|MENU_INTERNET_DSLITE_TRANS_WEST=Transix West Japan
 en|MENU_INTERNET_DSLITE_XPASS=Cross Pass
 en|MENU_INTERNET_DSLITE_V6OPTION=v6 Option
-en|MENU_INTERNET_MAPE_NUROHIKARI=NURO Hikari
 
 # internet-auto-config.sh
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {s} ({t})
@@ -51,12 +49,6 @@ en|MSG_DSLITE_RESTORE_SUCCESS=Previous DS-Lite settings restored successfully
 en|MSG_DSLITE_AUTO_DETECT_FAILED=Provider detection failed
 en|MSG_DSLITE_AUTO_DETECT_UNSUPPORTED=DS-Lite Not supported{:} {r}
 en|MSG_DSLITE_UNSUPPORTED=Not supported{:} DS-Lite
-
-
-# internet-map-e-nuro.sh
-en|MSG_NURO_APPLY_SUCCESS=NURO MAP-E configuration completed. Please reboot the system
-en|MSG_NURO_GET_IPV6_FAIL=Failed to get IPv6 prefix
-en|MSG_MAPE_NURO_UNSUPPORTED_PREFIX_RULE=Not supported{:} MAP-E nuro
 
 # common-information.sh
 en|MSG_FETCHING_ISP_INFO=Retrieving ISP information
