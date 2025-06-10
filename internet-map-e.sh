@@ -25,6 +25,22 @@ get_ruleprefix31_value() {
     esac
 }
 
+# プレフィックスに対応するIPv4ベースアドレスを取得（prefix36用）
+get_ruleprefix36_value() {
+    local prefix="$1"
+
+    case "$prefix" in
+        "0x240d000f00") echo "219,104,128" ;;
+        "0x240d000f10") echo "219,104,144" ;;
+        "0x240d000f20") echo "219,104,160" ;;
+        "0x240d000f30") echo "219,104,176" ;;
+        "0x240d000fa0") echo "219,104,138" ;;
+        "0x240d000fd0") echo "219,104,141" ;;
+        # WIP: need more info about nuro
+        *) echo "" ;;
+    esac
+}
+
 # プレフィックスに対応するIPv4ベースアドレスを取得（prefix38用）
 get_ruleprefix38_value() {
     local prefix="$1"
