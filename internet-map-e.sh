@@ -10,7 +10,6 @@ SCRIPT_VERSION="2025.06.09-00-00"
 . /lib/functions/network.sh
 . /lib/netifd/netifd-proto.sh
 
-# プレフィックスに対応するIPv4ベースアドレスを取得（prefix31用）
 get_ruleprefix31_value() {
     local prefix="$1"
 
@@ -25,7 +24,6 @@ get_ruleprefix31_value() {
     esac
 }
 
-# プレフィックスに対応するIPv4ベースアドレスを取得（prefix36用）
 get_ruleprefix36_value() {
     local prefix="$1"
 
@@ -36,12 +34,10 @@ get_ruleprefix36_value() {
         "0x240d000f30") echo "219,104,176" ;;
         "0x240d000fa0") echo "219,104,138" ;;
         "0x240d000fd0") echo "219,104,141" ;;
-        # WIP: need more info about nuro
         *) echo "" ;;
     esac
 }
 
-# プレフィックスに対応するIPv4ベースアドレスを取得（prefix38用）
 get_ruleprefix38_value() {
     local prefix="$1"
 
