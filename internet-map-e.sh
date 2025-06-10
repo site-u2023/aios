@@ -1095,12 +1095,12 @@ $octet
 EOF
         local temp1=$(( HEXTET2 & 4080 ))
         local temp2=$(( temp1 >> 4 ))
-        octet3=$(( temp2 ))
+        octet3=$((octet3))
         local temp3=$(( HEXTET2 & 15 ))
         local temp4=$(( temp3 << 4 ))
         local temp5=$(( HEXTET3 & 61440 ))
         local temp6=$(( temp5 >> 12 ))
-        octet4=$(( temp4 | temp6 ))
+        octet4=0
         IPADDR="${octet1}.${octet2}.${octet3}.${octet4}"
         IPV4="${octet1}.${octet2}.0.0"
         IP6PREFIXLEN=36; PSIDLEN=8; OFFSET=4
