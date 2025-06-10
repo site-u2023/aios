@@ -1099,7 +1099,7 @@ $octet
 EOF
         local temp1=$(( HEXTET2 & 4080 ))
         local temp2=$(( temp1 >> 4 ))
-        octet3=$(( octet3 | temp2 ))
+        octet3=$(( temp2 ))
         local temp3=$(( HEXTET2 & 15 ))
         local temp4=$(( temp3 << 4 ))
         local temp5=$(( HEXTET3 & 61440 ))
