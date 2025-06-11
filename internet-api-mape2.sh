@@ -25,7 +25,6 @@ MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
 
 initialize_network_info() {
-    # OpenWrtの基本ライブラリを読み込む
     if [ -f /lib/functions.sh ]; then
         . /lib/functions.sh
         if [ -f /lib/functions/network.sh ]; then # OpenWrt 21.02+
@@ -33,57 +32,50 @@ initialize_network_info() {
         elif [ -f /lib/network/network.sh ]; then # Older OpenWrt
             . /lib/network/network.sh
         else
-            return 1 # ライブラリ不足
+            return 1
         fi
     else
-        return 1 # OpenWrt環境でないか、基本ライブラリ不足
+        return 1
     fi
 
-    # WAN6インターフェース名の自動取得 (必須)
     local detected_wan6_if=""
     if command -v network_find_wan6 >/dev/null 2>&1; then
         network_find_wan6 detected_wan6_if
     fi
 
     if [ -n "$detected_wan6_if" ]; then
-        WAN6_IF_NAME="$detected_wan6_if" # グローバル変数に設定
+        WAN6_IF_NAME="$detected_wan6_if"
     else
-        return 1 # WAN6インターフェース名を自動取得できなかった (必須)
+        return 1
     fi
     
-    if [ -z "$WAN6_IF_NAME" ]; then # 念のためチェック
+    if [ -z "$WAN6_IF_NAME" ]; then
         return 1
     fi
 
-    # WAN (IPv4) インターフェース名の自動取得 (任意)
     local detected_wan_if=""
     if command -v network_find_wan >/dev/null 2>&1; then
         network_find_wan detected_wan_if
     fi
     if [ -n "$detected_wan_if" ]; then
-        WAN_IF_NAME="$detected_wan_if" # グローバル変数に設定
+        WAN_IF_NAME="$detected_wan_if"
     fi
 
-    # LAN インターフェース名の自動取得 (任意)
     local detected_lan_if=""
-    # network_get_device <variable> <logical_interface_name>
-    # デフォルトのLAN論理インターフェース名は "lan"
     if command -v network_get_device >/dev/null 2>&1; then
         network_get_device detected_lan_if lan
     fi
     if [ -n "$detected_lan_if" ]; then
-        LAN_IF_NAME="$detected_lan_if" # グローバル変数に設定
+        LAN_IF_NAME="$detected_lan_if"
     fi
 
-    # --- ここから下は、従来の get_wan_ipv6_info の後半部分 ---
-    # 外部へのIPv6疎通性を確認 (WAN6_IF_NAME を使用)
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
        ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
         return 1
     fi
     
     local ipv6_addr=""
-    network_get_ipaddr6 ipv6_addr "$WAN6_IF_NAME" # 自動検出した WAN6_IF_NAME を使用
+    network_get_ipaddr6 ipv6_addr "$WAN6_IF_NAME"
     
     if [ -n "$ipv6_addr" ]; then
         USER_IPV6_ADDR="$ipv6_addr"
@@ -92,7 +84,7 @@ initialize_network_info() {
     fi
     
     local ipv6_prefix=""
-    network_get_prefix6 ipv6_prefix "$WAN6_IF_NAME" # 自動検出した WAN6_IF_NAME を使用
+    network_get_prefix6 ipv6_prefix "$WAN6_IF_NAME"
     
     if [ -n "$ipv6_prefix" ]; then
         USER_IPV6_ADDR="$ipv6_prefix"
