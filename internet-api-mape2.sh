@@ -470,7 +470,7 @@ display_mape() {
     esac
 
     printf "\n"
-    printf "Powered by \033[1mhttps://ipv4.web.fc2.com/map-e.html\033[0m\n"
+    printf "\033[1mconfig-softwire\033[0m\n"
     printf "\n"   
     printf "\033[1m%s\033[0m %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "\n"
@@ -516,6 +516,8 @@ display_mape() {
     printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
        "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
     printf "\n"
+    printf "Powered by \033[1mhttps://ipv4.web.fc2.com/map-e.html\033[0m\n"
+    printf "\n"
     return 0
 }
 
@@ -544,11 +546,16 @@ api_mape_main() {
         return 1
     fi
 
+    if ! display_mape; then
+        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
+        return 1
+    fi
+    
     # if ! configure_openwrt_mape; then
-    #     printf "\033[31mERROR: MAP-E設定適用失敗。\033[0m\n" >&2
+        printf "\033[31mERROR: MAP-E設定適用失敗。\033[0m\n" >&2
     #     return 1
     # else
-    #     printf "\033[32mMAP-E UCI 設定 適用完了。\033[0m\n"
+        printf "\033[32mMAP-E UCI 設定 適用完了。\033[0m\n"
     # fi
     
     # if ! install_map_package; then
@@ -556,12 +563,7 @@ api_mape_main() {
     #     return 1
     # fi
     
-    if ! display_mape; then
-        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
-        return 1
-    fi
-
-    # printf "何かキーを押すと再起動します。\n"
+    printf "\033[33m何かキーを押すと再起動します。\033[0m\n"
     # read -r -n1 -s
     # reboot
     
