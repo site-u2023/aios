@@ -16,10 +16,8 @@ CE=""
 MTU="1460"
 LEGACYMAP="1"
 WAN_IF_NAME="wan"
-WAN6_IF_NAME="wan6"
 MAP_IF_NAME="wanmap"
 LAN_IF_NAME="lan"
-
 USER_IPV6_ADDR=""
 USER_IPV6_HEXTETS=""
 STATIC_API_RULE_LINE=""
@@ -29,14 +27,29 @@ WAN6_PREFIX=""
 get_wan_ipv6_info() {
     if [ -f /lib/functions.sh ]; then
         . /lib/functions.sh
-        if [ -f /lib/functions/network.sh ]; then # OpenWrt 21.02+
+        if [ -f /lib/functions/network.sh ]; then
             . /lib/functions/network.sh
-        elif [ -f /lib/network/network.sh ]; then # Older OpenWrt
+        elif [ -f /lib/network/network.sh ]; then
             . /lib/network/network.sh
         else
             return 1
         fi
     else
+        return 1
+    fi
+
+    local detected_wan6_if=""
+    if command -v network_find_wan6 >/dev/null 2>&1; then
+        network_find_wan6 detected_wan6_if
+    fi
+
+    if [ -n "$detected_wan6_if" ]; then
+        WAN6_IF_NAME="$detected_wan6_if"
+    else
+        return 1
+    fi
+    
+    if [ -z "$WAN6_IF_NAME" ]; then
         return 1
     fi
 
