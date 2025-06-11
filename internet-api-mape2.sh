@@ -462,6 +462,56 @@ install_map_package() {
     return 0
 }
 
+replace_map_sh() {
+    local proto_script_path="/lib/netifd/proto/map.sh"
+    local backup_script_path="${proto_script_path}.bak"
+    local osversion_file="${CACHE_DIR}/osversion.ch"
+    local osversion=""
+    local source_url=""
+    local wget_rc
+    local chmod_rc
+
+    if [ -f "$osversion_file" ]; then
+        osversion=$(cat "$osversion_file")
+    else
+        osversion="unknown"
+    fi
+
+    if echo "$osversion" | grep -q "^19"; then
+        source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.19"
+    else
+        source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.new"
+    fi
+
+    if [ -f "$proto_script_path" ]; then
+        if command cp "$proto_script_path" "$backup_script_path"; then
+            :
+        else
+            :
+        fi
+    fi
+
+    command wget -q ${WGET_IPV_OPT} --no-check-certificate -O "$proto_script_path" "$source_url"
+    wget_rc=$?
+
+    if [ "$wget_rc" -eq 0 ]; then
+        if [ -s "$proto_script_path" ]; then
+            if command chmod +x "$proto_script_path"; then
+                if type get_message > /dev/null 2>&1; then
+                    printf "%s\n" "$(color green "$(get_message "MSG_MAP_SH_UPDATE_SUCCESS")")"
+                fi
+                return 0
+            else
+                return 2
+            fi
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+}
+
 display_mape() {
     local ipv6_label
     case "$WAN6_PREFIX" in
@@ -552,21 +602,30 @@ api_mape_main() {
     fi
     
     # if ! configure_openwrt_mape; then
-        printf "\033[31mERROR: MAP-E設定適用失敗。\033[0m\n" >&2
+    #      printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
     #     return 1
     # else
-        printf "\033[32mMAP-E UCI 設定 適用完了。\033[0m\n"
+         printf "\033[32mUCI設定適用成功。\033[0m\n"
     # fi
     
     # if ! install_map_package; then
     #     printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
     #     return 1
+    # else
+         printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
+    # fi
+
+    # if ! replace_map_sh; then
+    #     printf "\033[31mERROR: MAPスクリプト更新失敗。(詳細コード: %s)\033[0m\n" "$ret_code" >&2
+    # else
+    #     local ret_code=$?
+        printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
+    #     return 1
     # fi
     
-    printf "\033[33m何かキーを押すと再起動します。\033[0m\n"
-    # read -r -n1 -s
-    # reboot
-    
+    printf "\033[33m何かキーを押すとネットワークサービスを再起動します。\033[0m\n"
+    read -r -n1 -s
+    ubus call network reload
     return 0
 }
 
