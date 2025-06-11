@@ -539,11 +539,6 @@ api_mape_main() {
         return 1
     fi
 
-    if ! install_map_package; then
-        printf "Error: Failed to install MAP package (in install_map_package).\n" >&2
-        return 1
-    fi
-
     if [ -z "$USER_IPV6_ADDR" ]; then
         printf "Error: User IPv6 address is not set after IPv6 info retrieval.\n" >&2
         return 1
@@ -553,15 +548,24 @@ api_mape_main() {
         return 1
     fi
 
-    if ! calculate_mape_params; then
-        printf "Error: Failed to calculate MAP-E parameters (in calculate_mape_params).\n" >&2
-        return 1
-    fi
-
+    # if ! calculate_mape_params; then
+    #     printf "Error: Failed to calculate MAP-E parameters (in calculate_mape_params).\n" >&2
+    #     return 1
+    # fi
+    
+    # if ! install_map_package; then
+    #     printf "Error: Failed to install MAP package (in install_map_package).\n" >&2
+    #     return 1
+    # fi
+    
     if ! display_mape; then
         printf "Error: Failed to display MAP-E parameters (in display_mape).\n" >&2
         return 1
     fi
+
+    # printf "Press any key to reboot.\n"
+    # read -r -n1 -s
+    # reboot
     
     return 0
 }
