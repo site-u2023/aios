@@ -2,6 +2,9 @@
 
 SCRIPT_VERSION="2025.06.11-00-00"
 
+WAN_IF_NAME=""
+LAN_IF_NAME=""
+MAP_IF_NAME="wanmap"
 BR=""
 IPV4_NET_PREFIX=""
 IP4PREFIXLEN=""
@@ -15,51 +18,72 @@ PSID=""
 CE=""
 MTU="1460"
 LEGACYMAP="1"
-WAN_IF_NAME="wan"
-MAP_IF_NAME="wanmap"
-LAN_IF_NAME="lan"
 USER_IPV6_ADDR=""
 USER_IPV6_HEXTETS=""
 STATIC_API_RULE_LINE=""
 MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
 
-get_wan_ipv6_info() {
+initialize_network_info() {
+    # OpenWrtの基本ライブラリを読み込む
     if [ -f /lib/functions.sh ]; then
         . /lib/functions.sh
-        if [ -f /lib/functions/network.sh ]; then
+        if [ -f /lib/functions/network.sh ]; then # OpenWrt 21.02+
             . /lib/functions/network.sh
-        elif [ -f /lib/network/network.sh ]; then
+        elif [ -f /lib/network/network.sh ]; then # Older OpenWrt
             . /lib/network/network.sh
         else
-            return 1
+            return 1 # ライブラリ不足
         fi
     else
-        return 1
+        return 1 # OpenWrt環境でないか、基本ライブラリ不足
     fi
 
+    # WAN6インターフェース名の自動取得 (必須)
     local detected_wan6_if=""
     if command -v network_find_wan6 >/dev/null 2>&1; then
         network_find_wan6 detected_wan6_if
     fi
 
     if [ -n "$detected_wan6_if" ]; then
-        WAN6_IF_NAME="$detected_wan6_if"
+        WAN6_IF_NAME="$detected_wan6_if" # グローバル変数に設定
     else
-        return 1
+        return 1 # WAN6インターフェース名を自動取得できなかった (必須)
     fi
     
-    if [ -z "$WAN6_IF_NAME" ]; then
+    if [ -z "$WAN6_IF_NAME" ]; then # 念のためチェック
         return 1
     fi
 
+    # WAN (IPv4) インターフェース名の自動取得 (任意)
+    local detected_wan_if=""
+    if command -v network_find_wan >/dev/null 2>&1; then
+        network_find_wan detected_wan_if
+    fi
+    if [ -n "$detected_wan_if" ]; then
+        WAN_IF_NAME="$detected_wan_if" # グローバル変数に設定
+    fi
+
+    # LAN インターフェース名の自動取得 (任意)
+    local detected_lan_if=""
+    # network_get_device <variable> <logical_interface_name>
+    # デフォルトのLAN論理インターフェース名は "lan"
+    if command -v network_get_device >/dev/null 2>&1; then
+        network_get_device detected_lan_if lan
+    fi
+    if [ -n "$detected_lan_if" ]; then
+        LAN_IF_NAME="$detected_lan_if" # グローバル変数に設定
+    fi
+
+    # --- ここから下は、従来の get_wan_ipv6_info の後半部分 ---
+    # 外部へのIPv6疎通性を確認 (WAN6_IF_NAME を使用)
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
        ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
         return 1
     fi
     
     local ipv6_addr=""
-    network_get_ipaddr6 ipv6_addr "$WAN6_IF_NAME"
+    network_get_ipaddr6 ipv6_addr "$WAN6_IF_NAME" # 自動検出した WAN6_IF_NAME を使用
     
     if [ -n "$ipv6_addr" ]; then
         USER_IPV6_ADDR="$ipv6_addr"
@@ -68,7 +92,7 @@ get_wan_ipv6_info() {
     fi
     
     local ipv6_prefix=""
-    network_get_prefix6 ipv6_prefix "$WAN6_IF_NAME"
+    network_get_prefix6 ipv6_prefix "$WAN6_IF_NAME" # 自動検出した WAN6_IF_NAME を使用
     
     if [ -n "$ipv6_prefix" ]; then
         USER_IPV6_ADDR="$ipv6_prefix"
@@ -508,8 +532,8 @@ display_mape() {
 }
 
 api_mape_main() {
-    if ! get_wan_ipv6_info; then
-        printf "Error: Failed to initialize IPv6 interface or environment not supported (in get_wan_ipv6_info).\n" >&2
+    if ! initialize_network_info; then
+        printf "Error: Failed to initialize IPv6 interface or environment not supported (in initialize_network_info).\n" >&2
         return 1
     fi
 
