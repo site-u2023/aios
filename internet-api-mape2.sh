@@ -575,7 +575,6 @@ restore_mape() {
     local backup_files_restored_count=0
     local backup_files_not_found_count=0
     local restore_failed_count=0
-    local total_files_to_check=0
     local overall_restore_status=1
 
     local files_to_restore="
@@ -589,7 +588,6 @@ restore_mape() {
     files_to_process=$(printf -- "%s" "$files_to_restore" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;/^[[:space:]]*$/d')
 
     printf -- "%s" "$files_to_process" | while IFS=: read -r original_file backup_file_remainder || [ -n "$original_file" ]; do
-        total_files_to_check=$((total_files_to_check + 1))
         local current_backup_file="$backup_file_remainder"
 
         if [ -f "$current_backup_file" ]; then
