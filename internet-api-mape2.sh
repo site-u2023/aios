@@ -219,143 +219,132 @@ calculate_mape_params() {
         return 1
     fi
 
-    # グローバル変数 BR, EALEN, IPV4_NET_PREFIX, IP4PREFIXLEN, 
-    # IPV6_RULE_PREFIX, IPV6_RULE_PREFIXLEN, OFFSET は
-    # get_rule_from_api 関数で既に設定されている想定
+    # APIから取得済みのグローバル変数:
+    # BR, EALEN, IPV4_NET_PREFIX, IP4PREFIXLEN, 
+    # IPV6_RULE_PREFIX, IPV6_RULE_PREFIXLEN, OFFSET
 
-    # 必須変数が空でないかチェック
+    # 必須APIパラメータが設定されているか確認
     if [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || \
        [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || \
        [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ]; then
-        # printf "DEBUG: One or more required MAP-E parameters (BR, EALEN, etc.) are not set.\n" >&2
+        # printf "DEBUG: One or more required MAP-E parameters (BR, EALEN, etc.) from API are not set.\n" >&2
         return 1
     fi
 
-    local var_to_check
-    local value_to_check
-    # EALEN, IP4PREFIXLEN, IPV6_RULE_PREFIXLEN, OFFSET が数値であるかチェック
+    # 必須数値パラメータが実際に数値であるかチェック
+    local var_to_check value_to_check
     for var_to_check in EALEN IP4PREFIXLEN IPV6_RULE_PREFIXLEN OFFSET; do
         eval "value_to_check=\$$var_to_check" 
         if ! printf "%s" "$value_to_check" | grep -qE '^[0-9]+$'; then
-            # printf "DEBUG: Parameter %s (%s) is not a valid number.\n" "$var_to_check" "$value_to_check" >&2
+            # printf "DEBUG: API Parameter %s ('%s') is not a valid number.\n" "$var_to_check" "$value_to_check" >&2
             return 1
         fi
     done
 
-    read -r h0 h1 h2 h3 h4 h5 h6 h7 <<EOF
+    # ユーザーIPv6アドレスのヘキステットを読み込み (parse_user_ipv6 で設定済み)
+    read -r h0 h1 h2 h3 _h4 _h5 _h6 _h7 <<EOF
 $USER_IPV6_HEXTETS
 EOF
+    # h0-h3 のみ使用。_h4-_h7 はプレースホルダー。
 
+    local h0_val_for_calc h1_val_for_calc h2_val_for_calc h3_val_for_calc # 10進数値
+    h0_val_for_calc=$((0x${h0:-0}))
+    h1_val_for_calc=$((0x${h1:-0}))
+    h2_val_for_calc=$((0x${h2:-0}))
+    h3_val_for_calc=$((0x${h3:-0}))
+
+
+    # PSIDLEN の計算: EA-bits長 - IPv4サフィックス長
+    # IPv4サフィックス長 = 32 - ルールIPv4プレフィックス長
     local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
+    if [ "$ipv4_suffix_len" -lt 0 ]; then # IP4PREFIXLEN が32より大きい場合
+        # printf "DEBUG: Invalid IP4PREFIXLEN (%s) > 32.\n" "$IP4PREFIXLEN" >&2
+        return 1
+    fi
     PSIDLEN=$((EALEN - ipv4_suffix_len))
+
     if [ "$PSIDLEN" -lt 0 ]; then
-        # printf "DEBUG: Calculated PSIDLEN (%s) is negative.\n" "$PSIDLEN" >&2
-        PSIDLEN=0 # エラーとせず0にするか、あるいはエラーで抜けるべきか要件による (元ソースはエラーなし)
-                  # ここでは元の挙動に合わせ、計算は続行される可能性がある
+        # printf "DEBUG: Calculated PSIDLEN (%s) is negative. (EALEN=%s, IP4PREFIXLEN=%s).\n" "$PSIDLEN" "$EALEN" "$IP4PREFIXLEN" >&2
+        PSIDLEN=0 # ルールが不正である可能性が高いが、元ソースの挙動に倣い0とする
     fi
-    if [ "$PSIDLEN" -gt 16 ]; then # PSIDLENが大きすぎる場合も考慮 (例: EALENが非常に大きい)
+    if [ "$PSIDLEN" -gt 16 ]; then # PSIDは最大16ビット
         # printf "DEBUG: Calculated PSIDLEN (%s) is too large (max 16).\n" "$PSIDLEN" >&2
-        return 1 # これは計算続行が困難なためエラーとする
+        return 1 
     fi
+    # printf "DEBUG: PSIDLEN calculated: %s\n" "$PSIDLEN"
 
 
-    # 元のスクリプトの計算ロジックをそのまま使用
-    local shift_calc=$((16 - OFFSET - PSIDLEN)) 
-    if [ "$shift_calc" -lt 0 ]; then # shift_calc が負になる場合 (OFFSET + PSIDLEN > 16)
-        # printf "DEBUG: Calculated shift_calc (%s) is negative. OFFSET=%s, PSIDLEN=%s\n" "$shift_calc" "$OFFSET" "$PSIDLEN" >&2
-        # この場合、マスク計算やシフト計算が期待通りに動作しない可能性がある
-        # OFFSET + PSIDLEN は最大16であるべき (RFC7597 Figure 6)
-        # ユーザールールが不正な場合はここでエラーとするのが適切
+    # PSID の計算に必要なシフト量とマスク
+    # shift_for_psid は、HEXTET3内でPSIDフィールドの最下位ビットが、HEXTET3全体の最下位ビットから見て何ビット左にあるかを示す。
+    # (PSIDフィールドを右端に寄せるための右シフト量でもある)
+    local shift_for_psid=$((16 - OFFSET - PSIDLEN)) 
+    if [ "$shift_for_psid" -lt 0 ]; then # OFFSET + PSIDLEN が16を超える場合 (PSIDフィールドがHEXTET3に収まらない)
+        # printf "DEBUG: Invalid rule parameters for PSID calculation: OFFSET (%s) + PSIDLEN (%s) > 16.\n" "$OFFSET" "$PSIDLEN" >&2
         return 1
     fi
     
-    local mask_val=0
-    if [ "$PSIDLEN" -gt 0 ]; then # PSIDLENが0の場合、 (1 << 0) - 1 = 0 となり、mask_valが0になる
-        mask_val=$(( (1 << PSIDLEN) - 1 ))
+    local psid_field_only_mask=0 # PSIDLEN ビットが全て1のマスク (例: PSIDLEN=6 なら 0b111111)
+    if [ "$PSIDLEN" -gt 0 ]; then
+        psid_field_only_mask=$(( (1 << PSIDLEN) - 1 ))
     fi
-    local mask=$(( mask_val << shift_calc ))
+    # HEXTET3 内でPSIDフィールドに相当する部分だけのマスク (例: OFFSET=4, PSIDLEN=6 なら 0b0000111111000000)
+    local psid_mask_in_hextet3=$(( psid_field_only_mask << shift_for_psid ))
     
-    local h3_val_for_calc=0
-    if printf "%s" "$h3" | grep -qE '^[0-9a-fA-F]{1,4}$'; then
-        h3_val_for_calc=$((0x$h3))
-    fi
-    
-    # PSIDLEN が 0 の場合、PSID は常に 0 となるべき
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
     else
-        PSID=$(( (h3_val_for_calc & mask) >> shift_calc ))
+        PSID=$(( (h3_val_for_calc & psid_mask_in_hextet3) >> shift_for_psid ))
     fi
+    # printf "DEBUG: PSID calculated: %s (from HEXTET3=0x%s, OFFSET=%s, PSIDLEN=%s)\n" "$PSID" "$h3" "$OFFSET" "$PSIDLEN"
 
 
+    # IPADDR (ユーザーの具体的なIPv4アドレス) の計算
+    # APIからの IPV4_NET_PREFIX と、ユーザーIPv6のHEXTET2, HEXTET3 から導出
+    # 注意: 以下のEA-bitsからIPv4サフィックスへのマッピング方法は固定ロジックであり、APIからは直接指示されません。
+    #       このマッピングは、EA-bitsの一部をユーザーIPv6アドレスのH2およびH3の特定位置から取得する仮定に基づいています。
     local o1 o2 o3_base o4_base o3_val o4_val
     o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
     o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
-    o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3)
+    o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3) 
     o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4)
-
-    local h2_val_for_calc=0
-    if printf "%s" "$h2" | grep -qE '^[0-9a-fA-F]{1,4}$'; then
-        h2_val_for_calc=$((0x$h2))
-    fi
-
-    # RFC7597 Section 5.3. Rule IPv4 Address Algorithm
-    # EA-bits から IPv4アドレスのホスト部を生成する。
-    # この部分は元のスクリプトのロジックがRFCの一般的な図と少し異なる可能性があるため、
-    # 元のロジックを尊重するが、コメントとしてRFCの参照点を残す。
-    # 元のスクリプトは h2 と h3 の特定ビットを使用しているように見える。
-    # EALEN, IP4PREFIXLEN, PSIDLEN, OFFSET の関係性が重要。
-
-    # IPv4アドレスのサフィックス部分のビット長: ipv4_suffix_len = 32 - IP4PREFIXLEN
-    # このうちPSIDに使われない部分が、IPv6アドレスのEAビットから取られる。
-    # EAビットのうち、PSIDに使われる部分を除いた残りがIPv4アドレスに使われる。
-    # そのビット長は、ipv4_suffix_len - PSIDLEN (これは間違い。正しくは EALEN - PSIDLEN が IPv4サフィックス長)
-    # 正しくは、EA-bits長は EALEN。
-    # IPv4アドレスのホスト部は EALEN - PSIDLEN ビット。
-    # これらのビットがユーザーIPv6アドレスのどこから取られるかはルール依存だが、
-    # このスクリプトでは h2 と h3 から取っている。
-
-    o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) )) # h2の上位6ビットのうち、下位4ビットを使用 (00xx xx00 0000 0000)
-    o4_val=$(( ( (h2_val_for_calc & 0x003F) << 2 ) | (((h3_val_for_calc) & 0xC000) >> 14) )) # h2の下位6ビットとh3の最上位2ビット
+    
+    # HEXTET2の上位6ビットの内の下位4ビット (H2のビット10,9,8,7) を o3 のサフィックスに、
+    # HEXTET2の下位6ビット (H2のビット5,4,3,2,1,0) を o4 の上位6ビットに、
+    # HEXTET3の最上位2ビット (H3のビット15,14) を o4 の下位2ビットにマッピングする。
+    o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) )) 
+    o4_val=$(( ( (h2_val_for_calc & 0x003F) << 2 ) | (( (h3_val_for_calc & 0xC000) >> 14) & 0x0003 ) ))
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
-
-    # CE (Customer Edge) IPv6 アドレスの計算
-    # RFC7597 Section 5.4. Rule IPv6 Address Algorithm (CE IPv6 Address)
-    # CE_IPv6_Addr = Rule_IPv6_Prefix | EA-bits | 0*
-    # EA-bitsは、User_IPv6_Addr の中の Rule_IPv6_Prefix_Len 以降の部分。
-    # このスクリプトのCE計算は、特定のヘキステットを直接埋め込んでいるように見える。
-    # 元のスクリプトのロジックを尊重する。
-    local ce_h3_masked ce_h4 ce_h5 ce_h6 ce_h7
-    # 元のスクリプト: ce_h3_masked=$(printf "%04x" $((h3_val_for_calc & 0xFF00)))
-    # PSID は h3 の下位ビットに影響する。CEのh3はPSID部分が0になる想定か？
-    # RFCでは EA-bits はそのままコピーされる。
-    # ここでは、h3の上位8ビットのみを使用し、PSID部分を含む下位ビットをマスクしているように見える。
-    # これは、PSID部分を0としてCEを表現する特定の実装かもしれない。
-    # psid_mask_for_h3 = ((1 << (OFFSET + PSIDLEN)) - 1) >> OFFSET  ? (これは複雑)
-    # 単純に、OFFSETとPSIDLENから影響を受けるビットを0にする。
-    # h3 のうち、(16 - OFFSET - PSIDLEN)ビット目からPSIDLENビットがPSID。
-    # これらを0にするマスクは ~(mask) (maskはPSID計算時のもの)
-    local psid_field_mask_in_h3=$mask # PSID計算で使ったマスクと同じ
-    ce_h3_masked=$(printf "%04x" $((h3_val_for_calc & (~psid_field_mask_in_h3 & 0xFFFF) )))
+    # printf "DEBUG: IPADDR calculated: %s (EA-bits from HEXTET2=0x%s, HEXTET3=0x%s)\n" "$IPADDR" "$h2" "$h3"
 
 
-    ce_h4=$(printf "%04x" "$o1")
-    ce_h5=$(printf "%04x" $((o2 * 256 + o3_val)))
-    ce_h6=$(printf "%04x" $((o4_val * 256))) # ポート番号のMSB部分 (PSIDを含まない)
-    ce_h7=$(printf "%04x" $((PSID << (16 - OFFSET - PSIDLEN) ))) # PSIDを所定の位置にセットしたフィールド (下位ビットは0)
-                                                               # いや、元のスクリプトは PSID * 256 だった。これはPSIDを8ビット左シフト。
-                                                               # PSIDが8ビットで、オフセットが8の場合に相当する。
-                                                               # 元のスクリプト ce_h7=$(printf "%04x" $((PSID * 256))) に合わせる。
-                                                               # これは PSID が H7 の上位8ビットを占めることを意味する。
-                                                               # ただし PSIDLEN が必ずしも8ではないので、この計算は特定のルールセットに依存している可能性がある。
-                                                               # 汎用性を考えると、PSID を (16 - OFFSET - PSIDLEN) ビットシフトしたものを
-                                                               # h7 の一部として使うのがRFC的。
-                                                               # しかし、元ソースを尊重し PSID * 256 とする。
-    ce_h7=$(printf "%04x" $((PSID * 256)))
+    # CE (Customer Edge IPv6 アドレス) の計算
+    # H0, H1, H2 はユーザーIPv6アドレスからそのまま使用
+    # H3 はPSIDフィールドをマスクして0にする
+    # H4, H5, H6 は計算されたIPADDRの各オクテットから生成
+    # H7 はPSIDを (16 - OFFSET - PSIDLEN) 左シフトして配置 (汎用化)
+    
+    local ce_h0_str=$(printf "%04x" "$h0_val_for_calc")
+    local ce_h1_str=$(printf "%04x" "$h1_val_for_calc")
+    local ce_h2_str=$(printf "%04x" "$h2_val_for_calc")
+    
+    local ce_h3_masked_val=$(( h3_val_for_calc & (~psid_mask_in_hextet3 & 0xFFFF) )) # HEXTET3からPSID部分を0にする
+    local ce_h3_str=$(printf "%04x" "$ce_h3_masked_val")
 
+    local ce_h4_str=$(printf "%04x" "$o1")                     # IPADDRの第1オクテット
+    local ce_h5_str=$(printf "%04x" $(( (o2 << 8) | o3_val )) ) # IPADDRの第2オクテットと第3オクテット
+    local ce_h6_str=$(printf "%04x" $(( o4_val << 8 )) )       # IPADDRの第4オクテットを上位8ビットに配置
 
-    CE="${h0}:${h1}:${h2}:${ce_h3_masked}:${ce_h4}:${ce_h5}:${ce_h6}:${ce_h7}"
+    # CE H7 の計算 (汎用化): PSID を (16 - OFFSET - PSIDLEN) 左シフト
+    # shift_for_psid は既に (16 - OFFSET - PSIDLEN) として計算済み (PSID計算で使用)
+    local ce_h7_val=0
+    if [ "$PSIDLEN" -gt 0 ]; then
+         ce_h7_val=$(( PSID << shift_for_psid ))
+    fi
+    local ce_h7_str=$(printf "%04x" "$ce_h7_val")
+
+    CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
+    # printf "DEBUG: CE calculated: %s\n" "$CE"
        
     return 0
 }
