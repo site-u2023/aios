@@ -660,14 +660,7 @@ api_mape_main() {
         printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
         return 1
     fi
-    
-    if ! configure_openwrt_mape; then
-        printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
-        return 1
-    else
-        printf "\033[32mUCI設定適用成功。\033[0m\n"
-    fi
-    
+        
     if ! install_map_package; then
         printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
         return 1
@@ -675,18 +668,25 @@ api_mape_main() {
         printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
     fi
 
+    local replace_map_sh_ret_code
     if ! replace_map_sh; then
-        printf "\033[31mERROR: MAPスクリプト更新失敗。(詳細コード: %s)\033[0m\n" "$ret_code" >&2
-    else
-        local ret_code=$?
-        printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
+        replace_map_sh_ret_code=$?
+        printf "\033[31mERROR: MAPスクリプト更新失敗。(詳細コード: %s)\033[0m\n" "$replace_map_sh_ret_code" >&2
         return 1
+    else
+        printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
+    fi
+
+    if ! configure_openwrt_mape; then
+        printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
+        return 1
+    else
+        printf "\033[32mUCI設定適用成功。\033[0m\n"
     fi
     
-    printf "\033[33m何かキーを押すとネットワークサービスを再起動します。\033[0m\n"
+    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
     read -r -n1 -s
-    ubus call network reload
+    reboot
     return 0
 }
-
 # api_mape_main
