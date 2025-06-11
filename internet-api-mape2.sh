@@ -244,12 +244,11 @@ calculate_mape_params() {
         return 1
     fi
 
-    local var_to_check value_to_check
-    for var_to_check in EALEN IP4PREFIXLEN IPV6_RULE_PREFIXLEN OFFSET; do
-        eval "value_to_check=\$$var_to_check" 
-        if ! printf "%s" "$value_to_check" | grep -qE '^[0-9]+$'; then
-            return 1
-        fi
+    for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIXLEN" "$OFFSET"; do
+        case "$value_to_check" in
+            ''|*[!0-9]*)
+                return 1 ;;
+        esac
     done
 
     read -r h0 h1 h2 h3 _h4 _h5 _h6 _h7 <<EOF
@@ -272,20 +271,20 @@ EOF
         PSIDLEN=0
     fi
     if [ "$PSIDLEN" -gt 16 ]; then
-        return 1 
+        return 1
     fi
 
-    local shift_for_psid=$((16 - OFFSET - PSIDLEN)) 
+    local shift_for_psid=$((16 - OFFSET - PSIDLEN))
     if [ "$shift_for_psid" -lt 0 ]; then
         return 1
     fi
-    
+
     local psid_field_only_mask=0
     if [ "$PSIDLEN" -gt 0 ]; then
         psid_field_only_mask=$(( (1 << PSIDLEN) - 1 ))
     fi
     local psid_mask_in_hextet3=$(( psid_field_only_mask << shift_for_psid ))
-    
+
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
     else
@@ -295,14 +294,14 @@ EOF
     local o1 o2 o3_base o4_base o3_val o4_val
     o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
     o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
-    o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3) 
+    o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3)
     o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4)
-    
-    o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) )) 
+
+    o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) ))
     o4_val=$(( ( (h2_val_for_calc & 0x003F) << 2 ) | (( (h3_val_for_calc & 0xC000) >> 14) & 0x0003 ) ))
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
-    
+
     local ce_h0_str=$(printf "%04x" "$h0_val_for_calc")
     local ce_h1_str=$(printf "%04x" "$h1_val_for_calc")
     local ce_h2_str=$(printf "%04x" "$h2_val_for_calc")
@@ -318,12 +317,10 @@ EOF
     local ce_h7_str=$(printf "%04x" "$ce_h7_val")
 
     CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
-       
     return 0
 }
 
 configure_openwrt_mape() {
-
     local ZONE_NO
     ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='wan'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
     if [ -z "$ZONE_NO" ]; then
@@ -463,7 +460,6 @@ install_map_package() {
 }
 
 display_mape() {
-
     local ipv6_label
     case "$WAN6_PREFIX" in
         "") ipv6_label="IPv6プレフィックス:" ;;
@@ -517,7 +513,6 @@ display_mape() {
     printf "\033[34m(config-softwire)#\033[0m \033[1mrule\033[0m \033[1;34m<0-65535>\033[0m \033[1mipv4-prefix\033[0m \033[1;34m%s/%s\033[0m \033[1mipv6-prefix\033[0m \033[1;34m%s/%s\033[0m [ea-length \033[34m%s\033[0m|psid-length \033[34m%s\033[0m [psid \033[36m%s\033[0m]] [offset \033[34m%s\033[0m] [forwarding]\n" \
        "$IPV4_NET_PREFIX" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIX" "$IPV6_RULE_PREFIXLEN" "$EALEN" "$PSIDLEN" "$PSID" "$OFFSET"
     printf "\n"
-
     return 0
 }
 
