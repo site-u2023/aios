@@ -425,11 +425,10 @@ configure_openwrt_mape() {
     fi
 
     if [ "$commit_failed" -eq 1 ]; then
-        printf "Error: Failed to commit UCI changes for: %s\n" "$commit_errors" >&2
         return 1
     fi
     
-    printf "MAP-E UCI settings applied successfully.\n"
+    printf "\033[32mMAP-E UCI 設定 適用完了。\033[0m\n"
     
     return 0
 }
@@ -530,45 +529,45 @@ display_mape() {
 
 api_mape_main() {
     if ! initialize_network_info; then
-        printf "Error: Failed to initialize IPv6 interface or environment not supported (in initialize_network_info).\n" >&2
+        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
     fi
 
     if ! get_rule_from_api "$WAN6_IF_NAME"; then
-        printf "Error: Failed to retrieve MAP-E rule from API (in get_rule_from_api).\n" >&2
+        printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
 
     if [ -z "$USER_IPV6_ADDR" ]; then
-        printf "Error: User IPv6 address is not set after IPv6 info retrieval.\n" >&2
+        printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
         return 1
     fi
     if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
-        printf "Error: Failed to parse user IPv6 address (in parse_user_ipv6).\n" >&2
+        printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
         return 1
     fi
 
     if ! calculate_mape_params; then
-        printf "Error: Failed to calculate MAP-E parameters (in calculate_mape_params).\n" >&2
+        printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
         return 1
     fi
 
     # if ! configure_openwrt_mape; then
-    #     printf "MAP-E設定の適用に失敗しました。終了します。\n" >&2
+    #     printf "\033[31mERROR: MAP-E設定適用失敗。\033[0m\n" >&2
     #     return 1
     # fi
     
     # if ! install_map_package; then
-    #     printf "Error: Failed to install MAP package (in install_map_package).\n" >&2
+    #     printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
     #     return 1
     # fi
     
     if ! display_mape; then
-        printf "Error: Failed to display MAP-E parameters (in display_mape).\n" >&2
+        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
         return 1
     fi
 
-    # printf "Press any key to reboot.\n"
+    # printf "何かキーを押すと再起動します。\n"
     # read -r -n1 -s
     # reboot
     
