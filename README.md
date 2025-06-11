@@ -41,9 +41,14 @@ Example: JP
 aios JP
 ```
 
-### Location Information
+### location-api-worker
 ```
 https://location-api-worker.site-u.workers.dev/
+```
+
+### map-api-worker
+```
+https://map-api-worker.site-u.workers.dev/map-rule?user_prefix=<user_prefix=<IPV6_PREFIX>
 ```
 
 ### Qiita
