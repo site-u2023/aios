@@ -436,7 +436,12 @@ configure_openwrt_mape() {
 
 install_map_package() {
     local pkg_manager=""
-    
+
+    if command -v /etc/init.d/sysntpd >/dev/null 2>&1; then
+        /etc/init.d/sysntpd restart >/dev/null 2>&1
+        sleep 5
+    fi
+
     if command -v opkg >/dev/null 2>&1; then
         pkg_manager="opkg"
     elif command -v apk >/dev/null 2>&1; then
