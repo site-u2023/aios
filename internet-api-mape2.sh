@@ -571,5 +571,3 @@ api_mape_main() {
 }
 
 api_mape_main
-
-exit $?
