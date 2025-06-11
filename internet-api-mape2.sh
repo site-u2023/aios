@@ -235,12 +235,16 @@ parse_user_ipv6() {
 
 calculate_mape_params() {
     if [ -z "$USER_IPV6_HEXTETS" ]; then
+        echo "Debug: USER_IPV6_HEXTETS is empty in calculate_mape_params" >&2
         return 1
     fi
+    echo "Debug: USER_IPV6_HEXTETS = $USER_IPV6_HEXTETS" >&2
 
     if [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || \
        [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || \
        [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ]; then
+        echo "Debug: One or more rule parameters are empty" >&2
+        echo "Debug: BR=$BR, EALEN=$EALEN, IPV4_NET_PREFIX=$IPV4_NET_PREFIX, IP4PREFIXLEN=$IP4PREFIXLEN, IPV6_RULE_PREFIX=$IPV6_RULE_PREFIX, IPV6_RULE_PREFIXLEN=$IPV6_RULE_PREFIXLEN, OFFSET=$OFFSET" >&2
         return 1
     fi
 
@@ -248,6 +252,7 @@ calculate_mape_params() {
     for var_to_check in EALEN IP4PREFIXLEN IPV6_RULE_PREFIXLEN OFFSET; do
         eval "value_to_check=\$$var_to_check" 
         if ! printf "%s" "$value_to_check" | grep -qE '^[0-9]+$'; then
+            echo "Debug: Invalid numeric value for $var_to_check: $value_to_check" >&2
             return 1
         fi
     done
@@ -255,28 +260,36 @@ calculate_mape_params() {
     read -r h0 h1 h2 h3 _h4 _h5 _h6 _h7 <<EOF
 $USER_IPV6_HEXTETS
 EOF
+    echo "Debug: h0=$h0, h1=$h1, h2=$h2, h3=$h3" >&2
 
     local h0_val_for_calc h1_val_for_calc h2_val_for_calc h3_val_for_calc
     h0_val_for_calc=$((0x${h0:-0}))
     h1_val_for_calc=$((0x${h1:-0}))
     h2_val_for_calc=$((0x${h2:-0}))
     h3_val_for_calc=$((0x${h3:-0}))
+    echo "Debug: h0_val_for_calc=$h0_val_for_calc, h1_val_for_calc=$h1_val_for_calc, h2_val_for_calc=$h2_val_for_calc, h3_val_for_calc=$h3_val_for_calc" >&2
 
     local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
+    echo "Debug: ipv4_suffix_len=$ipv4_suffix_len" >&2
     if [ "$ipv4_suffix_len" -lt 0 ]; then
+        echo "Debug: ipv4_suffix_len is negative" >&2
         return 1
     fi
     PSIDLEN=$((EALEN - ipv4_suffix_len))
+    echo "Debug: PSIDLEN (calculated) = $PSIDLEN" >&2 # ★PSIDLENの計算結果を確認
 
     if [ "$PSIDLEN" -lt 0 ]; then
         PSIDLEN=0
     fi
     if [ "$PSIDLEN" -gt 16 ]; then
+        echo "Debug: PSIDLEN ($PSIDLEN) is out of range (0-16)" >&2
         return 1 
     fi
 
     local shift_for_psid=$((16 - OFFSET - PSIDLEN)) 
+    echo "Debug: shift_for_psid=$shift_for_psid" >&2
     if [ "$shift_for_psid" -lt 0 ]; then
+        echo "Debug: shift_for_psid is negative" >&2
         return 1
     fi
     
@@ -285,24 +298,46 @@ EOF
         psid_field_only_mask=$(( (1 << PSIDLEN) - 1 ))
     fi
     local psid_mask_in_hextet3=$(( psid_field_only_mask << shift_for_psid ))
+    echo "Debug: psid_field_only_mask=$psid_field_only_mask, psid_mask_in_hextet3=$psid_mask_in_hextet3" >&2
     
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
     else
         PSID=$(( (h3_val_for_calc & psid_mask_in_hextet3) >> shift_for_psid ))
     fi
+    echo "Debug: PSID (calculated) = $PSID" >&2 # ★PSIDの計算結果を確認
 
     local o1 o2 o3_base o4_base o3_val o4_val
     o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
     o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
     o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3) 
     o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4)
+    echo "Debug: o1=$o1, o2=$o2, o3_base=$o3_base, o4_base=$o4_base" >&2
     
+    # Check if h2_val_for_calc and h3_val_for_calc are non-empty before arithmetic operations
+    if [ -z "$h2_val_for_calc" ] || [ -z "$h3_val_for_calc" ]; then
+        echo "Debug: h2_val_for_calc or h3_val_for_calc is empty before IPADDR calculation" >&2
+        return 1
+    fi
+
     o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) )) 
     o4_val=$(( ( (h2_val_for_calc & 0x003F) << 2 ) | (( (h3_val_for_calc & 0xC000) >> 14) & 0x0003 ) ))
+    echo "Debug: o3_val=$o3_val, o4_val=$o4_val" >&2
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
+    echo "Debug: IPADDR (calculated) = $IPADDR" >&2 # ★IPADDRの計算結果を確認
     
+    # Ensure all hextets for CE calculation are valid numbers before printf
+    if [ -z "$h0_val_for_calc" ] || [ -z "$h1_val_for_calc" ] || \
+       [ -z "$h2_val_for_calc" ] || [ -z "$h3_val_for_calc" ] || \
+       [ -z "$o1" ] || [ -z "$o2" ] || [ -z "$o3_val" ] || [ -z "$o4_val" ] || [ -z "$PSIDLEN" ] || \
+       ! (echo "$h0_val_for_calc $h1_val_for_calc $h2_val_for_calc $h3_val_for_calc $o1 $o2 $o3_val $o4_val $PSIDLEN" | grep -qE '^[0-9]+( [0-9]+)*$') ; then
+        echo "Debug: One or more values for CE calculation are not numeric or empty" >&2
+        echo "Debug Values: h0=$h0_val_for_calc, h1=$h1_val_for_calc, h2=$h2_val_for_calc, h3=$h3_val_for_calc, o1=$o1, o2=$o2, o3_val=$o3_val, o4_val=$o4_val, PSIDLEN=$PSIDLEN" >&2
+        CE="" # Explicitly set CE to empty if inputs are bad
+        return 1 # Optionally return error, or let CE be empty
+    fi
+
     local ce_h0_str=$(printf "%04x" "$h0_val_for_calc")
     local ce_h1_str=$(printf "%04x" "$h1_val_for_calc")
     local ce_h2_str=$(printf "%04x" "$h2_val_for_calc")
@@ -313,11 +348,13 @@ EOF
     local ce_h6_str=$(printf "%04x" $(( o4_val << 8 )) )
     local ce_h7_val=0
     if [ "$PSIDLEN" -gt 0 ]; then
-         ce_h7_val=$(( PSID << shift_for_psid ))
+         ce_h7_val=$(( PSID << shift_for_psid )) # Ensure PSID is numeric here as well
     fi
     local ce_h7_str=$(printf "%04x" "$ce_h7_val")
+    echo "Debug: ce_h0_str=$ce_h0_str, ce_h1_str=$ce_h1_str, ce_h2_str=$ce_h2_str, ce_h3_str=$ce_h3_str, ce_h4_str=$ce_h4_str, ce_h5_str=$ce_h5_str, ce_h6_str=$ce_h6_str, ce_h7_str=$ce_h7_str" >&2
 
     CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
+    echo "Debug: CE (calculated) = $CE" >&2 # ★CEの計算結果を確認
        
     return 0
 }
