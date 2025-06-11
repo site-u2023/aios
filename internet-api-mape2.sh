@@ -571,6 +571,68 @@ display_mape() {
     return 0
 }
 
+restore_mape() {
+    local backup_files_restored_count=0
+    local backup_files_not_found_count=0
+    local restore_failed_count=0
+    local total_files_to_check=0
+    local overall_restore_status=1
+
+    local files_to_restore="
+        /etc/config/network:/etc/config/network.map-e.bak
+        /etc/config/dhcp:/etc/config/dhcp.map-e.bak
+        /etc/config/firewall:/etc/config/firewall.map-e.bak
+        /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
+    "
+
+    local files_to_process
+    files_to_process=$(printf -- "%s" "$files_to_restore" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;/^[[:space:]]*$/d')
+
+    printf -- "%s" "$files_to_process" | while IFS=: read -r original_file backup_file_remainder || [ -n "$original_file" ]; do
+        total_files_to_check=$((total_files_to_check + 1))
+        local current_backup_file="$backup_file_remainder"
+
+        if [ -f "$current_backup_file" ]; then
+            if cp "$current_backup_file" "$original_file"; then
+                backup_files_restored_count=$((backup_files_restored_count + 1))
+            else
+                restore_failed_count=$((restore_failed_count + 1))
+            fi
+        else
+            backup_files_not_found_count=$((backup_files_not_found_count + 1))
+        fi
+    done
+
+    if [ "$restore_failed_count" -gt 0 ]; then
+        overall_restore_status=2
+    elif [ "$backup_files_restored_count" -gt 0 ]; then
+        overall_restore_status=0
+    else
+        overall_restore_status=1
+    fi
+
+    if [ "$overall_restore_status" -eq 0 ] || [ "$overall_restore_status" -eq 2 ]; then
+        opkg remove map >/dev/null 2>&1
+        
+        printf "\033[32mUCI設定復元成功。\033[0m\n"
+        if [ "$overall_restore_status" -eq 2 ]; then
+            printf "\033[31mERROR: 一部ファイル復元失敗。\033[0m\n" >&2
+        fi
+        
+        printf "\033[33m何かキーを押すとネットワークサービスを再起動します。\033[0m\n"
+        read -r -n 1 -s
+        ubus call network reload
+        
+        return "$overall_restore_status" 
+    elif [ "$overall_restore_status" -eq 1 ]; then
+        printf "\033[31mERROR: ファイル復元失敗。\033[0m\n" >&2
+        return 1
+    fi
+    
+    printf "\033[31mERROR: 復元状態不明。\033[0m\n" >&2
+    return 1
+}
+
 api_mape_main() {
     if ! initialize_network_info; then
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
@@ -629,4 +691,4 @@ api_mape_main() {
     return 0
 }
 
-api_mape_main
+# api_mape_main
