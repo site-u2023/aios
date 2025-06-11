@@ -404,31 +404,25 @@ configure_openwrt_mape() {
     uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
     
     local commit_failed=0
-    local commit_errors=""
 
     uci -q commit network
     if [ $? -ne 0 ]; then
         commit_failed=1
-        commit_errors="${commit_errors}network "
     fi
 
     uci -q commit dhcp
     if [ $? -ne 0 ]; then
         commit_failed=1
-        commit_errors="${commit_errors}dhcp "
     fi
     
     uci -q commit firewall
     if [ $? -ne 0 ]; then
         commit_failed=1
-        commit_errors="${commit_errors}firewall "
     fi
 
     if [ "$commit_failed" -eq 1 ]; then
         return 1
     fi
-    
-    printf "\033[32mMAP-E UCI 設定 適用完了。\033[0m\n"
     
     return 0
 }
@@ -555,6 +549,8 @@ api_mape_main() {
     # if ! configure_openwrt_mape; then
     #     printf "\033[31mERROR: MAP-E設定適用失敗。\033[0m\n" >&2
     #     return 1
+    # else
+    #     printf "\033[32mMAP-E UCI 設定 適用完了。\033[0m\n"
     # fi
     
     # if ! install_map_package; then
