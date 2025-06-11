@@ -1,5 +1,8 @@
 #!/bin/ash
 
+# OpenWrt 19.07+ configuration
+# Powered by https://ipv4.web.fc2.com/map-e.html
+
 SCRIPT_VERSION="2025.06.11-00-00"
 
 WAN_IF_NAME=""
@@ -467,7 +470,7 @@ display_mape() {
     esac
 
     printf "\n"
-    printf "\033[1mconfig-softwire\033[0m %s\n"
+    printf "Powered by \033[1mhttps://ipv4.web.fc2.com/map-e.html\033[0m\n"
     printf "\n"   
     printf "\033[1m%s\033[0m %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "\n"
