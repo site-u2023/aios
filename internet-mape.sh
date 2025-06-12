@@ -550,7 +550,7 @@ restore_mape() {
     return 0
 }
 
-api_mape_main() {
+internet_map_main() {
     if ! initialize_info; then
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
@@ -607,4 +607,4 @@ api_mape_main() {
     return 0
 }
 
-# api_mape_main
+# internet_map_main
