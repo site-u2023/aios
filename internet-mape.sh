@@ -521,6 +521,8 @@ restore_mape() {
     fi
 
     printf "\033[32mUCI設定復元成功。\033[0m\n"
+    printf "\033[32mMAPスクリプト復元成功。\033[0m\n"
+    printf "\033[32mMAPパッケージ削除成功。\033[0m\n"
     printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
     read -r -n 1 -s
     reboot
