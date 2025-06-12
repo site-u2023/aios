@@ -153,76 +153,33 @@ parse_user_ipv6() {
     fi
 
     local awk_script='
-    BEGIN { FS=":"; OFS=" "; }
+    BEGIN {
+        FS=":";
+        OFS=" ";
+    }
     {
-        num_colons = 0; for (k=1; k<=length($0); k++) { if (substr($0, k, 1) == ":") num_colons++; }
-        
-        expanded_addr = $0;
-        if (index(expanded_addr, "::")) {
-            sub("::", ":DOUBLE_COLON:", expanded_addr);
-            
-            n_fields = split(expanded_addr, arr, ":");
-            
-            output_str = "";
-            zeros_inserted = 0;
-            field_count_out = 0;
-
-            for (j=1; j<=n_fields; j++) {
-                if (arr[j] == "DOUBLE_COLON") {
-                    valid_fields = 0;
-                    for (m=1; m<=n_fields; m++) {
-                        if (arr[m] != "DOUBLE_COLON" && arr[m] != "") {
-                             valid_fields++;
-                        }
-                    }
-                    if ($0 == "::") {
-                        zeros_to_add = 8;
-                    } else if (substr($0,1,2) == "::" && substr($0,length($0)-1,2) == "::" && length($0) == 2) {
-                        zeros_to_add = 8;
-                    } else if (substr($0,1,2) == "::") {
-                        zeros_to_add = 8 - valid_fields;
-                    } else if (substr($0,length($0)-1,2) == "::") {
-                        zeros_to_add = 8 - valid_fields;
-                    } else {
-                        zeros_to_add = 8 - valid_fields;
-                    }
-                    
-                    for (l=1; l<=zeros_to_add; l++) {
-                        output_str = output_str (field_count_out > 0 ? OFS : "") "0000";
-                        field_count_out++;
-                    }
-                    zeros_inserted = 1;
-                } else if (arr[j] != "") {
-                    seg = arr[j];
-                    while(length(seg) < 4) seg = "0" seg;
-                    output_str = output_str (field_count_out > 0 ? OFS : "") seg;
-                    field_count_out++;
-                } else if (arr[j] == "" && j > 1 && j < n_fields && zeros_inserted == 0 && field_count_out < 8) {
-                     output_str = output_str (field_count_out > 0 ? OFS : "") "0000";
-                     field_count_out++;
-                }
-            }
-            if (zeros_inserted == 0) {
-                while (field_count_out < 8) {
-                    output_str = output_str (field_count_out > 0 ? OFS : "") "0000";
-                    field_count_out++;
-                }
-            }
-            print output_str;
-            
-        } else {
-            n_fields = split($0, arr, ":");
-            output_str = "";
-            for (j=1; j<=n_fields; j++) {
-                 seg = arr[j];
-                 while(length(seg) < 4) seg = "0" seg;
-                 output_str = output_str (j > 1 ? OFS : "") seg;
-            }
-            for (j=n_fields+1; j<=8; j++) {
-                 output_str = output_str OFS "0000";
-            }
-            print output_str;
+        if (index($0, "::")) {
+            sub("::", "0:0:0:0:0:0:0:0");
         }
+
+        num_fields = split($0, hextets_arr, ":");
+        
+        output_str = "";
+        for (i=1; i<=8; i++) {
+            current_segment = "";
+            if (i <= num_fields && hextets_arr[i] != "") {
+                current_segment = hextets_arr[i];
+            } else {
+                current_segment = "0";
+            }
+            
+            while (length(current_segment) < 4) {
+                current_segment = "0" current_segment;
+            }
+            
+            output_str = output_str (i > 1 ? OFS : "") current_segment;
+        }
+        print output_str;
     }'
     
     USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk "$awk_script")
