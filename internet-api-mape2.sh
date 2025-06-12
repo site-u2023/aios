@@ -348,7 +348,7 @@ configure_openwrt_mape() {
     uci -q set network.${WANMAP_NAME}.mtu="${MTU}" 
     uci -q set network.${WANMAP_NAME}.encaplimit='ignore'
     
-    if echo "$ OS_VERSION" | grep -q "^19"; then
+    if echo "$OS_VERSION" | grep -q "^19"; then
         uci -q delete network.${WANMAP_NAME}.legacymap
         uci -q delete network.${WANMAP_NAME}.tunlink 
         uci -q add_list network.${WANMAP_NAME}.tunlink="${WANMAP6_NAME}"
@@ -475,17 +475,18 @@ display_mape() {
     local range_size=$((1 << psid_shift))
     local max_blocks=$((1 << OFFSET))
     local last=$((max_blocks - 1))
-    
-    for A in $(seq 0 "$last"); do
+
+    local A=0
+    while [ "$A" -le "$last" ]; do
         local base=$((A << shift_bits))
         local part=$((PSID << psid_shift))
         local start=$((base | part))
         local end=$((start + range_size - 1))
-        
         printf "%d-%d" "$start" "$end"
         [ "$A" -lt "$last" ] && printf " "
+        A=$((A + 1))
     done
-    
+
     printf "\n"    
     printf "\033[1m• PSID:\033[0m %s (10進)\n" "$PSID"
     printf "------------------------------------------------------\n"
@@ -533,7 +534,11 @@ restore_mape() {
         [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
     done
 
-    opkg remove map >/dev/null 2>&1 || error_occurred=1
+    if opkg list-installed | grep -q '^map '; then
+        if ! opkg remove map >/dev/null 2>&1; then
+            error_occurred=1
+        fi
+    fi
     
     if [ "$error_occurred" -ne 0 ]; then
         printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
