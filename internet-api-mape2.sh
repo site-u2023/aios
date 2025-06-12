@@ -5,9 +5,14 @@
 
 SCRIPT_VERSION="2025.06.11-00-00"
 
-WAN_IF_NAME=""
-LAN_IF_NAME=""
-MAP_IF_NAME="wanmap"
+LAN_IPADDR="192.168.1.1"
+DEF_LAN_IF="br-lan" 
+LAN_NAME=""
+WAN_NAME=""
+WAN6_NAME=""
+WANMAP_NAME="wanmap"
+WANMAP6_NAME="wanmap6"
+
 BR=""
 IPV4_NET_PREFIX=""
 IP4PREFIXLEN=""
@@ -26,42 +31,32 @@ USER_IPV6_HEXTETS=""
 STATIC_API_RULE_LINE=""
 MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
+OS_VERSION="" 
 
-initialize_network_info() {
-    if [ -f /lib/functions.sh ]; then
-        . /lib/functions.sh
-        if [ -f /lib/functions/network.sh ]; then # OpenWrt 21.02+
-            . /lib/functions/network.sh
-        elif [ -f /lib/network/network.sh ]; then # Older OpenWrt
-            . /lib/network/network.sh
-        else
-            return 1
-        fi
+initialize_info() {
+    if . /lib/functions.sh && . /lib/functions/network.sh; then
+        : 
     else
         return 1
     fi
 
-    local detected_wan6_if=""
-    if command -v network_find_wan6 >/dev/null 2>&1; then
-        network_find_wan6 detected_wan6_if
-    fi
-
-    if [ -n "$detected_wan6_if" ]; then
-        WAN6_IF_NAME="$detected_wan6_if"
-    else
-        return 1
+    if [ -f "/etc/openwrt_release" ]; then
+        OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
     
-    if [ -z "$WAN6_IF_NAME" ]; then
+    local detected_wan6_if=""
+    network_find_wan6 detected_wan6_if
+    if [ -z "$detected_wan6_if" ]; then
         return 1
     fi
+    WAN6_NAME="$detected_wan6_if"
 
     local detected_wan_if=""
     if command -v network_find_wan >/dev/null 2>&1; then
         network_find_wan detected_wan_if
     fi
     if [ -n "$detected_wan_if" ]; then
-        WAN_IF_NAME="$detected_wan_if"
+        WAN_NAME="$detected_wan_if"
     fi
 
     local detected_lan_if=""
@@ -69,7 +64,7 @@ initialize_network_info() {
         network_get_device detected_lan_if lan
     fi
     if [ -n "$detected_lan_if" ]; then
-        LAN_IF_NAME="$detected_lan_if"
+        LAN_NAME="$detected_lan_if"
     fi
 
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
@@ -78,19 +73,20 @@ initialize_network_info() {
     fi
     
     local ipv6_addr=""
-    network_get_ipaddr6 ipv6_addr "$WAN6_IF_NAME"
-    
+    network_get_ipaddr6 ipv6_addr "$WAN6_NAME"
     if [ -n "$ipv6_addr" ]; then
         USER_IPV6_ADDR="$ipv6_addr"
-        WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
+        WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F/ '{print $1}' | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
         return 0
     fi
     
-    local ipv6_prefix=""
-    network_get_prefix6 ipv6_prefix "$WAN6_IF_NAME"
-    
-    if [ -n "$ipv6_prefix" ]; then
-        USER_IPV6_ADDR="$ipv6_prefix"
+    local ipv6_prefix_only=""
+    network_get_prefix6 ipv6_prefix_only "$WAN6_NAME"
+    if [ -n "$ipv6_prefix_only" ]; then
+        USER_IPV6_ADDR="$ipv6_prefix_only"
+        if echo "$USER_IPV6_ADDR" | grep -q "::/[0-9]\+"; then
+             WAN6_PREFIX="$USER_IPV6_ADDR"
+        fi
         return 0
     fi
     
@@ -324,102 +320,96 @@ EOF
 }
 
 configure_openwrt_mape() {
-    local ZONE_NO
-    ZONE_NO=$(uci show firewall | grep -E "firewall\.@zone\[([0-9]+)\].name='wan'" | sed -n 's/firewall\.@zone\[\([0-9]*\)\].name=.*/\1/p' | head -n1)
-    if [ -z "$ZONE_NO" ]; then
-        ZONE_NO="1"
-    fi
-
-    local osversion=""
-    if [ -f "/etc/openwrt_release" ]; then
-        osversion=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
-    else
-        osversion="unknown"
-    fi
     
     cp /etc/config/network /etc/config/network.map-e.bak 2>/dev/null
     cp /etc/config/dhcp /etc/config/dhcp.map-e.bak 2>/dev/null
     cp /etc/config/firewall /etc/config/firewall.map-e.bak 2>/dev/null
     
-    uci -q set network.${WAN_IF_NAME}.disabled='1'
-    uci -q set network.${WAN_IF_NAME}.auto='0'
-
-    uci -q set dhcp.${LAN_IF_NAME}.ra='relay'
-    uci -q set dhcp.${LAN_IF_NAME}.dhcpv6='relay'
-    uci -q set dhcp.${LAN_IF_NAME}.ndp='relay'
-    uci -q set dhcp.${LAN_IF_NAME}.force='1'
-
-    uci -q set dhcp.${WAN6_IF_NAME}=dhcp
-    uci -q set dhcp.${WAN6_IF_NAME}.interface="$WAN6_IF_NAME"
-    uci -q set dhcp.${WAN6_IF_NAME}.master='1'
-    uci -q set dhcp.${WAN6_IF_NAME}.ra='relay'
-    uci -q set dhcp.${WAN6_IF_NAME}.dhcpv6='relay'
-    uci -q set dhcp.${WAN6_IF_NAME}.ndp='relay'
+    if ! uci -q get network.lan >/dev/null; then
+        uci -q set network.lan=interface
+        uci -q set network.lan.proto='static'
+        uci -q set network.lan.device="${DEF_LAN_IF}"
+        uci -q set network.lan.ipaddr="${LAN_IPADDR}"
+        uci -q set network.lan.netmask='255.255.255.0'
+    fi
     
-    uci -q set network.${WAN6_IF_NAME}.proto='dhcpv6'
-    uci -q set network.${WAN6_IF_NAME}.reqaddress='try'
-    uci -q set network.${WAN6_IF_NAME}.reqprefix='auto' 
+    if ! uci -q get dhcp.lan >/dev/null; then
+        uci -q set dhcp.lan=dhcp
+        uci -q set dhcp.lan.interface='lan'
+        uci -q set dhcp.lan.start='100'
+        uci -q set dhcp.lan.limit='150'
+        uci -q set dhcp.lan.leasetime='12h'
+    fi
     
-    if [ -n "$WAN6_PREFIX" ]; then
-        uci -q set network.${WAN6_IF_NAME}.ip6prefix="$WAN6_PREFIX"
+    uci -q set dhcp.lan.ra='relay'
+    uci -q set dhcp.lan.dhcpv6='relay'
+    uci -q set dhcp.lan.ndp='relay'
+    uci -q set dhcp.lan.force='1'
+
+    uci -q delete network.${WANMAP6_NAME}
+    uci -q delete dhcp.${WANMAP6_NAME}
+    uci -q delete network.${WANMAP_NAME}
+
+    uci -q set network.${WANMAP6_NAME}=interface
+    uci -q set network.${WANMAP6_NAME}.proto='dhcpv6'
+    if [ -n "$WAN6_NAME" ]; then
+        uci -q set network.${WANMAP6_NAME}.device="$WAN6_NAME"
+    fi
+    uci -q set network.${WANMAP6_NAME}.reqaddress='try'
+    uci -q set network.${WANMAP6_NAME}.reqprefix='auto'
+    if [ -n "$WAN6_PREFIX" ]; then 
+        uci -q set network.${WANMAP6_NAME}.ip6prefix="$WAN6_PREFIX"
+    fi
+
+    uci -q set dhcp.${WANMAP6_NAME}=dhcp
+    uci -q set dhcp.${WANMAP6_NAME}.interface="${WANMAP6_NAME}"
+    uci -q set dhcp.${WANMAP6_NAME}.master='1' 
+    uci -q set dhcp.${WANMAP6_NAME}.ra='relay'
+    uci -q set dhcp.${WANMAP6_NAME}.dhcpv6='relay'
+    uci -q set dhcp.${WANMAP6_NAME}.ndp='relay'
+
+    uci -q set network.${WANMAP_NAME}=interface
+    uci -q set network.${WANMAP_NAME}.proto='map'
+    uci -q set network.${WANMAP_NAME}.maptype='map-e'
+    uci -q set network.${WANMAP_NAME}.peeraddr="${BR}" 
+    uci -q set network.${WANMAP_NAME}.ipaddr="${IPV4_NET_PREFIX}" 
+    uci -q set network.${WANMAP_NAME}.ip4prefixlen="${IP4PREFIXLEN}" 
+    uci -q set network.${WANMAP_NAME}.ip6prefix="${IPV6_RULE_PREFIX}" 
+    uci -q set network.${WANMAP_NAME}.ip6prefixlen="${IPV6_RULE_PREFIXLEN}" 
+    uci -q set network.${WANMAP_NAME}.ealen="${EALEN}" 
+    uci -q set network.${WANMAP_NAME}.psidlen="${PSIDLEN}" 
+    uci -q set network.${WANMAP_NAME}.offset="${OFFSET}" 
+    uci -q set network.${WANMAP_NAME}.mtu="${MTU}" 
+    uci -q set network.${WANMAP_NAME}.encaplimit='ignore'
+    
+    if echo "$ OS_VERSION" | grep -q "^19"; then
+        uci -q delete network.${WANMAP_NAME}.legacymap
+        uci -q delete network.${WANMAP_NAME}.tunlink 
+        uci -q add_list network.${WANMAP_NAME}.tunlink="${WANMAP6_NAME}"
     else
-        uci -q delete network.${WAN6_IF_NAME}.ip6prefix
-    fi
-
-    uci -q set network.${MAP_IF_NAME}=interface
-    uci -q set network.${MAP_IF_NAME}.proto='map'
-    uci -q set network.${MAP_IF_NAME}.maptype='map-e'
-    uci -q set network.${MAP_IF_NAME}.peeraddr="${BR}"
-    uci -q set network.${MAP_IF_NAME}.ipaddr="${IPV4_NET_PREFIX}"
-    uci -q set network.${MAP_IF_NAME}.ip4prefixlen="${IP4PREFIXLEN}"
-    uci -q set network.${MAP_IF_NAME}.ip6prefix="${IPV6_RULE_PREFIX}"
-    uci -q set network.${MAP_IF_NAME}.ip6prefixlen="${IPV6_RULE_PREFIXLEN}"
-    uci -q set network.${MAP_IF_NAME}.ealen="${EALEN}"
-    uci -q set network.${MAP_IF_NAME}.psidlen="${PSIDLEN}"
-    uci -q set network.${MAP_IF_NAME}.offset="${OFFSET}"
-    uci -q set network.${MAP_IF_NAME}.mtu="${MTU}"
-    uci -q set network.${MAP_IF_NAME}.encaplimit='ignore'
-
-    if echo "$osversion" | grep -q "^19"; then
-        uci -q delete network.${MAP_IF_NAME}.tunlink
-        uci -q add_list network.${MAP_IF_NAME}.tunlink="${WAN6_IF_NAME}"
-        uci -q delete network.${MAP_IF_NAME}.legacymap
-    else
-        uci -q set dhcp.${WAN6_IF_NAME}.ignore='1'
-        uci -q set network.${MAP_IF_NAME}.legacymap="${LEGACYMAP}"
-        uci -q set network.${MAP_IF_NAME}.tunlink="${WAN6_IF_NAME}"
+        uci -q set network.${WANMAP_NAME}.legacymap="${LEGACYMAP}" 
+        uci -q set network.${WANMAP_NAME}.tunlink="${WANMAP6_NAME}"
+        uci -q set dhcp.${WANMAP6_NAME}.ignore='1'
     fi
     
-    local current_wan_networks
-    current_wan_networks=$(uci -q get firewall.@zone[${ZONE_NO}].network 2>/dev/null)
-
-    if echo "$current_wan_networks" | grep -q "\b${WAN_IF_NAME}\b"; then
-        uci -q del_list firewall.@zone[${ZONE_NO}].network="${WAN_IF_NAME}"
+    local current_firewall_wan_networks
+    current_firewall_wan_networks=$(uci -q get firewall.@zone[1].network 2>/dev/null)
+    if ! echo "$current_firewall_wan_networks" | grep -q "\b${WANMAP_NAME}\b"; then
+        uci -q add_list firewall.@zone[1].network="${WANMAP_NAME}"
     fi
-
-    if ! echo "$current_wan_networks" | grep -q "\b${MAP_IF_NAME}\b"; then
-        uci -q add_list firewall.@zone[${ZONE_NO}].network="${MAP_IF_NAME}"
+    if ! echo "$current_firewall_wan_networks" | grep -q "\b${WANMAP6_NAME}\b"; then
+        uci -q add_list firewall.@zone[1].network="${WANMAP6_NAME}"
     fi
-    uci -q set firewall.@zone[${ZONE_NO}].masq='1'
-    uci -q set firewall.@zone[${ZONE_NO}].mtu_fix='1'
-    
+    uci -q set firewall.@zone[1].masq='1'
+    uci -q set firewall.@zone[1].mtu_fix='1'  
     local commit_failed=0
 
     uci -q commit network
-    if [ $? -ne 0 ]; then
-        commit_failed=1
-    fi
-
+    if [ $? -ne 0 ]; then commit_failed=1; fi
     uci -q commit dhcp
-    if [ $? -ne 0 ]; then
-        commit_failed=1
-    fi
-    
+    if [ $? -ne 0 ]; then commit_failed=1; fi
     uci -q commit firewall
-    if [ $? -ne 0 ]; then
-        commit_failed=1
-    fi
-
+    if [ $? -ne 0 ]; then commit_failed=1; fi
     if [ "$commit_failed" -eq 1 ]; then
         return 1
     fi
@@ -465,24 +455,17 @@ install_map_package() {
 replace_map_sh() {
     local proto_script_path="/lib/netifd/proto/map.sh"
     local backup_script_path="${proto_script_path}.bak"
-    local osversion_file="${CACHE_DIR}/osversion.ch"
     local osversion=""
     local source_url=""
     local wget_rc
     local chmod_rc
 
-    if [ -f "$osversion_file" ]; then
-        osversion=$(cat "$osversion_file")
-    else
-        osversion="unknown"
-    fi
-
-    if echo "$osversion" | grep -q "^19"; then
+    if echo "$OS_VERSION" | grep -q "^19"; then
         source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.19"
     else
         source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.new"
     fi
-
+    
     if [ -f "$proto_script_path" ]; then
         if command cp "$proto_script_path" "$backup_script_path"; then
             :
@@ -493,23 +476,15 @@ replace_map_sh() {
 
     command wget -q ${WGET_IPV_OPT} --no-check-certificate -O "$proto_script_path" "$source_url"
     wget_rc=$?
-
     if [ "$wget_rc" -eq 0 ]; then
         if [ -s "$proto_script_path" ]; then
             if command chmod +x "$proto_script_path"; then
-                if type get_message > /dev/null 2>&1; then
-                    printf "%s\n" "$(color green "$(get_message "MSG_MAP_SH_UPDATE_SUCCESS")")"
-                fi
                 return 0
-            else
-                return 2
             fi
-        else
-            return 1
         fi
-    else
-        return 1
     fi
+    
+    return 1
 }
 
 display_mape() {
@@ -572,72 +547,48 @@ display_mape() {
 }
 
 restore_mape() {
-    local backup_files_restored_count=0
-    local backup_files_not_found_count=0
-    local restore_failed_count=0
-    local overall_restore_status=1
+    local error_occurred=0
+    local file_pairs
+    local item
+    local original_file
+    local backup_file
 
-    local files_to_restore="
+    file_pairs="
         /etc/config/network:/etc/config/network.map-e.bak
         /etc/config/dhcp:/etc/config/dhcp.map-e.bak
         /etc/config/firewall:/etc/config/firewall.map-e.bak
         /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
     "
 
-    local files_to_process
-    files_to_process=$(printf -- "%s" "$files_to_restore" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;/^[[:space:]]*$/d')
+    for item in $file_pairs; do
+        original_file="${item%%:*}"
+        backup_file="${item#*:}"
 
-    printf -- "%s" "$files_to_process" | while IFS=: read -r original_file backup_file_remainder || [ -n "$original_file" ]; do
-        local current_backup_file="$backup_file_remainder"
-
-        if [ -f "$current_backup_file" ]; then
-            if cp "$current_backup_file" "$original_file"; then
-                backup_files_restored_count=$((backup_files_restored_count + 1))
-            else
-                restore_failed_count=$((restore_failed_count + 1))
-            fi
-        else
-            backup_files_not_found_count=$((backup_files_not_found_count + 1))
-        fi
+        [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
     done
 
-    if [ "$restore_failed_count" -gt 0 ]; then
-        overall_restore_status=2
-    elif [ "$backup_files_restored_count" -gt 0 ]; then
-        overall_restore_status=0
-    else
-        overall_restore_status=1
-    fi
-
-    if [ "$overall_restore_status" -eq 0 ] || [ "$overall_restore_status" -eq 2 ]; then
-        opkg remove map >/dev/null 2>&1
-        
-        printf "\033[32mUCI設定復元成功。\033[0m\n"
-        if [ "$overall_restore_status" -eq 2 ]; then
-            printf "\033[31mERROR: 一部ファイル復元失敗。\033[0m\n" >&2
-        fi
-        
-        printf "\033[33m何かキーを押すとネットワークサービスを再起動します。\033[0m\n"
-        read -r -n 1 -s
-        ubus call network reload
-        
-        return "$overall_restore_status" 
-    elif [ "$overall_restore_status" -eq 1 ]; then
-        printf "\033[31mERROR: ファイル復元失敗。\033[0m\n" >&2
+    opkg remove map >/dev/null 2>&1 || error_occurred=1
+    
+    if [ "$error_occurred" -ne 0 ]; then
+        printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
         return 1
     fi
+
+    printf "\033[32mUCI設定復元成功。\033[0m\n"
+    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
+    read -r -n 1 -s
+    reboot
     
-    printf "\033[31mERROR: 復元状態不明。\033[0m\n" >&2
-    return 1
+    return 0
 }
 
 api_mape_main() {
-    if ! initialize_network_info; then
+    if ! initialize_info; then
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
     fi
 
-    if ! get_rule_from_api "$WAN6_IF_NAME"; then
+    if ! get_rule_from_api "$WAN6_NAME"; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
@@ -660,7 +611,7 @@ api_mape_main() {
         printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
         return 1
     fi
-        
+
     if ! install_map_package; then
         printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
         return 1
@@ -668,10 +619,8 @@ api_mape_main() {
         printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
     fi
 
-    local replace_map_sh_ret_code
     if ! replace_map_sh; then
-        replace_map_sh_ret_code=$?
-        printf "\033[31mERROR: MAPスクリプト更新失敗。(詳細コード: %s)\033[0m\n" "$replace_map_sh_ret_code" >&2
+        printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
         return 1
     else
         printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
@@ -689,4 +638,5 @@ api_mape_main() {
     reboot
     return 0
 }
+
 # api_mape_main
