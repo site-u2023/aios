@@ -46,8 +46,7 @@ initialize_info() {
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
 
-    if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
-       ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1; then
+    if ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1 && ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1; then
         return 1
     fi
     
