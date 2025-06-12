@@ -86,9 +86,6 @@ initialize_info() {
     network_get_prefix6 ipv6_prefix_only "$WAN6_NAME"
     if [ -n "$ipv6_prefix_only" ]; then
         USER_IPV6_ADDR="$ipv6_prefix_only"
-        if echo "$USER_IPV6_ADDR" | grep -q "::/[0-9]\+"; then
-             WAN6_PREFIX="$USER_IPV6_ADDR"
-        fi
         return 0
     fi
     
