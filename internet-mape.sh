@@ -7,9 +7,10 @@ SCRIPT_VERSION="2025.06.12-00-00"
 
 LAN_IPADDR="192.168.1.1"
 DEF_LAN_IF="br-lan" 
-LAN_NAME=""
-WAN_NAME=""
-WAN6_NAME=""
+DEF_WAN_IF="wan"
+LAN_NAME="lan"
+WAN_NAME="wan"
+WAN6_NAME="wan6"
 WANMAP_NAME="wanmap"
 WANMAP6_NAME="wanmap6"
 
@@ -43,29 +44,6 @@ initialize_info() {
 
     if [ -f "/etc/openwrt_release" ]; then
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
-    fi
-    
-    local detected_wan6_if=""
-    network_find_wan6 detected_wan6_if
-    if [ -z "$detected_wan6_if" ]; then
-        return 1
-    fi
-    WAN6_NAME="$detected_wan6_if"
-
-    local detected_wan_if=""
-    if command -v network_find_wan >/dev/null 2>&1; then
-        network_find_wan detected_wan_if
-    fi
-    if [ -n "$detected_wan_if" ]; then
-        WAN_NAME="$detected_wan_if"
-    fi
-
-    local detected_lan_if=""
-    if command -v network_get_device >/dev/null 2>&1; then
-        network_get_device detected_lan_if lan
-    fi
-    if [ -n "$detected_lan_if" ]; then
-        LAN_NAME="$detected_lan_if"
     fi
 
     if ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1 && \
@@ -293,7 +271,7 @@ configure_openwrt_mape() {
     if ! uci -q get network.lan >/dev/null; then
         uci -q set network.lan=interface
         uci -q set network.lan.proto='static'
-        uci -q set network.lan.device="${LAN_NAME:-$DEF_LAN_IF}"
+        uci -q set network.lan.device="${DEF_LAN_IF}"
         uci -q set network.lan.ipaddr="${LAN_IPADDR}"
         uci -q set network.lan.netmask='255.255.255.0'
     fi
@@ -317,7 +295,7 @@ configure_openwrt_mape() {
 
     uci -q set network.${WANMAP6_NAME}=interface
     uci -q set network.${WANMAP6_NAME}.proto='dhcpv6'
-    uci -q set network.${WANMAP6_NAME}.device="$WAN6_NAME"
+    uci -q set network.${WANMAP6_NAME}.device="${DEF_WAN_IF}"
     uci -q set network.${WANMAP6_NAME}.reqaddress='try'
     uci -q set network.${WANMAP6_NAME}.reqprefix='auto'
     uci -q set dhcp.${WANMAP6_NAME}=dhcp
