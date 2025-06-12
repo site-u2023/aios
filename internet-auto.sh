@@ -8,14 +8,11 @@ SCRIPT_VERSION="2025.06.05-00-00"
 PROVIDER_DATABASE_CONTENT=""
 PROVIDER_DATABASE_INITIALIZED="false"
 
-provider_data_definitions() {   
+provider_data_definitions() {
     add_provider_record "2518|240b::/16| |v6plus|v6 Plus|map-e|download internet-mape.sh chmod load; internet_map_main"
     add_provider_record "7413|2404:7a80::/30|gw.transix.jp|biglobe_dslite|BIGLOBE|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
     add_provider_record "7413|2404:7a84::/30| |biglobe_mape|BIGLOBE|map-e|download internet-mape.sh chmod load; internet_map_main"
     add_provider_record "4713|2400:4150::/30| |ocn|OCN Virtual Connect|map-e|download internet-mape.sh chmod load; internet_map_main"
-    add_provider_record "2519|2409:10::/28| |transix_dslite|transix|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
-    add_provider_record "2527|2001:f70::/29| |cross_dslite|Cross Pass|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
-    add_provider_record "4737|2405:6580::/29| |v6connect_dslite|v6 Connect|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
     add_provider_record "2519|2409:250::/28|gw.transix.jp|transix_generic_dslite|transix|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
     add_provider_record "2527|2001:0f70::/29|xpass.jp|cross_generic_dslite|Cross Pass|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
     add_provider_record "4737|2405:6580::/29|gw.v6connect.jp|v6connect_generic_dslite|v6 Connect|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
