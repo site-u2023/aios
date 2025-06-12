@@ -32,6 +32,7 @@ STATIC_API_RULE_LINE=""
 MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
 OS_VERSION="" 
+GUA=""
 
 initialize_info() {
     if . /lib/functions.sh && . /lib/functions/network.sh; then
@@ -77,6 +78,7 @@ initialize_info() {
     if [ -n "$ipv6_addr" ]; then
         USER_IPV6_ADDR="$ipv6_addr"
         WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F/ '{print $1}' | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
+        GUA="gua"
         return 0
     fi
     
@@ -294,7 +296,7 @@ configure_openwrt_mape() {
     if ! uci -q get network.lan >/dev/null; then
         uci -q set network.lan=interface
         uci -q set network.lan.proto='static'
-        uci -q set network.lan.device="${DEF_LAN_IF}"
+        uci -q set network.lan.device="${LAN_NAME:-$DEF_LAN_IF}"
         uci -q set network.lan.ipaddr="${LAN_IPADDR}"
         uci -q set network.lan.netmask='255.255.255.0'
     fi
@@ -318,15 +320,9 @@ configure_openwrt_mape() {
 
     uci -q set network.${WANMAP6_NAME}=interface
     uci -q set network.${WANMAP6_NAME}.proto='dhcpv6'
-    if [ -n "$WAN6_NAME" ]; then
-        uci -q set network.${WANMAP6_NAME}.device="$WAN6_NAME"
-    fi
+    uci -q set network.${WANMAP6_NAME}.device="$WAN6_NAME"
     uci -q set network.${WANMAP6_NAME}.reqaddress='try'
     uci -q set network.${WANMAP6_NAME}.reqprefix='auto'
-    if [ -n "$WAN6_PREFIX" ]; then 
-        uci -q set network.${WANMAP6_NAME}.ip6prefix="$WAN6_PREFIX"
-    fi
-
     uci -q set dhcp.${WANMAP6_NAME}=dhcp
     uci -q set dhcp.${WANMAP6_NAME}.interface="${WANMAP6_NAME}"
     uci -q set dhcp.${WANMAP6_NAME}.master='1' 
@@ -347,6 +343,10 @@ configure_openwrt_mape() {
     uci -q set network.${WANMAP_NAME}.offset="${OFFSET}" 
     uci -q set network.${WANMAP_NAME}.mtu="${MTU}" 
     uci -q set network.${WANMAP_NAME}.encaplimit='ignore'
+
+    if [ -n "$GUA" ]; then 
+        uci -q set network.${WANMAP6_NAME}.ip6prefix="$WAN6_PREFIX"
+    fi
     
     if echo "$OS_VERSION" | grep -q "^19"; then
         uci -q delete network.${WANMAP_NAME}.legacymap
@@ -455,7 +455,7 @@ replace_map_sh() {
 
 display_mape() {
     local ipv6_label
-    case "$WAN6_PREFIX" in
+    case "$GUA" in
         "") ipv6_label="IPv6プレフィックス:" ;;
         *)  ipv6_label="IPv6アドレス:" ;;
     esac
