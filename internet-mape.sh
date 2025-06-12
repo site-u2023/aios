@@ -6,8 +6,8 @@
 SCRIPT_VERSION="2025.06.12-00-00"
 
 LAN_IPADDR="192.168.1.1"
-DEF_LAN_IF="br-lan" 
-DEF_WAN_IF="wan"
+LAN_DEF="br-lan" 
+WAN_DEF="wan"
 LAN_NAME="lan"
 WAN_NAME="wan"
 WAN6_NAME="wan6"
@@ -271,7 +271,7 @@ configure_openwrt_mape() {
     if ! uci -q get network.lan >/dev/null; then
         uci -q set network.lan=interface
         uci -q set network.lan.proto='static'
-        uci -q set network.lan.device="${DEF_LAN_IF}"
+        uci -q set network.lan.device="${LAN_DEF}"
         uci -q set network.lan.ipaddr="${LAN_IPADDR}"
         uci -q set network.lan.netmask='255.255.255.0'
     fi
@@ -295,7 +295,7 @@ configure_openwrt_mape() {
 
     uci -q set network.${WANMAP6_NAME}=interface
     uci -q set network.${WANMAP6_NAME}.proto='dhcpv6'
-    uci -q set network.${WANMAP6_NAME}.device="${DEF_WAN_IF}"
+    uci -q set network.${WANMAP6_NAME}.device="${WAN_DEF}"
     uci -q set network.${WANMAP6_NAME}.reqaddress='try'
     uci -q set network.${WANMAP6_NAME}.reqprefix='auto'
     uci -q set dhcp.${WANMAP6_NAME}=dhcp
