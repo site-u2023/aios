@@ -93,58 +93,6 @@ initialize_info() {
     return 1
 }
 
-OK_get_rule_from_api() {
-    local _wan6_if_name_arg="$1" 
-    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
-    local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
-    local api_response=""
-    local user_prefix_for_api=""
-    local ret_code=1
-
-    if [ -z "$current_user_ipv6_addr_for_api" ]; then
-        return 1
-    fi
-
-    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F/ '{print $1}' | awk -F: '{if(NF>=4) printf "%s:%s:%s:%s::", $1, $2, $3, $4; else print $0}')
-
-    if [ -z "$user_prefix_for_api" ]; then
-        return 1
-    fi
-    
-    api_response=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
-    ret_code=$?
-
-    if [ $ret_code -ne 0 ] || [ -z "$api_response" ]; then
-        BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
-        return 1
-    fi
-
-    _br=$(echo "$api_response" | grep '"brIpv6Address":' | awk -F'"' '{print $4}')
-    _ealen=$(echo "$api_response" | grep '"eaBitLength":' | awk -F'"' '{print $4}')
-    _ipv4_net_prefix=$(echo "$api_response" | grep '"ipv4Prefix":' | awk -F'"' '{print $4}')
-    _ip4prefixlen=$(echo "$api_response" | grep '"ipv4PrefixLength":' | awk -F'"' '{print $4}')
-    _ipv6_rule_prefix=$(echo "$api_response" | grep '"ipv6Prefix":' | awk -F'"' '{print $4}')
-    _ipv6_rule_prefixlen=$(echo "$api_response" | grep '"ipv6PrefixLength":' | awk -F'"' '{print $4}')
-    _offset=$(echo "$api_response" | grep '"psIdOffset":' | awk -F'"' '{print $4}')
-
-    if [ -z "$_br" ] || [ -z "$_ealen" ] || [ -z "$_ipv4_net_prefix" ] || \
-       [ -z "$_ip4prefixlen" ] || [ -z "$_ipv6_rule_prefix" ] || \
-       [ -z "$_ipv6_rule_prefixlen" ] || [ -z "$_offset" ]; then
-        BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
-        return 1
-    fi
-
-    BR="$_br"
-    EALEN="$_ealen"
-    IPV4_NET_PREFIX="$_ipv4_net_prefix"
-    IP4PREFIXLEN="$_ip4prefixlen"
-    IPV6_RULE_PREFIX="$_ipv6_rule_prefix"
-    IPV6_RULE_PREFIXLEN="$_ipv6_rule_prefixlen"
-    OFFSET="$_offset"
-    
-    return 0
-}
-
 get_rule_from_api() {
     local _wan6_if_name_arg="$1" 
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
@@ -246,93 +194,6 @@ parse_user_ipv6() {
     return 0
 }
 
-OK_calculate_mape_params() {
-    if [ -z "$USER_IPV6_HEXTETS" ]; then
-        return 1
-    fi
-
-    if [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || \
-       [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || \
-       [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ]; then
-        return 1
-    fi
-
-    for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIXLEN" "$OFFSET"; do
-        case "$value_to_check" in
-            ''|*[!0-9]*)
-                return 1 ;;
-        esac
-    done
-
-    read -r h0 h1 h2 h3 _h4 _h5 _h6 _h7 <<EOF
-$USER_IPV6_HEXTETS
-EOF
-
-    local h0_val_for_calc h1_val_for_calc h2_val_for_calc h3_val_for_calc
-    h0_val_for_calc=$((0x${h0:-0}))
-    h1_val_for_calc=$((0x${h1:-0}))
-    h2_val_for_calc=$((0x${h2:-0}))
-    h3_val_for_calc=$((0x${h3:-0}))
-
-    local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
-    if [ "$ipv4_suffix_len" -lt 0 ]; then
-        return 1
-    fi
-    PSIDLEN=$((EALEN - ipv4_suffix_len))
-
-    if [ "$PSIDLEN" -lt 0 ]; then
-        PSIDLEN=0
-    fi
-    if [ "$PSIDLEN" -gt 16 ]; then
-        return 1
-    fi
-
-    local shift_for_psid=$((16 - OFFSET - PSIDLEN))
-    if [ "$shift_for_psid" -lt 0 ]; then
-        return 1
-    fi
-
-    local psid_field_only_mask=0
-    if [ "$PSIDLEN" -gt 0 ]; then
-        psid_field_only_mask=$(( (1 << PSIDLEN) - 1 ))
-    fi
-    local psid_mask_in_hextet3=$(( psid_field_only_mask << shift_for_psid ))
-
-    if [ "$PSIDLEN" -eq 0 ]; then
-        PSID=0
-    else
-        PSID=$(( (h3_val_for_calc & psid_mask_in_hextet3) >> shift_for_psid ))
-    fi
-
-    local o1 o2 o3_base o4_base o3_val o4_val
-    o1=$(echo "$IPV4_NET_PREFIX" | cut -d. -f1)
-    o2=$(echo "$IPV4_NET_PREFIX" | cut -d. -f2)
-    o3_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f3)
-    o4_base=$(echo "$IPV4_NET_PREFIX" | cut -d. -f4)
-
-    o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) ))
-    o4_val=$(( ( (h2_val_for_calc & 0x003F) << 2 ) | (( (h3_val_for_calc & 0xC000) >> 14) & 0x0003 ) ))
-
-    IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
-
-    local ce_h0_str=$(printf "%04x" "$h0_val_for_calc")
-    local ce_h1_str=$(printf "%04x" "$h1_val_for_calc")
-    local ce_h2_str=$(printf "%04x" "$h2_val_for_calc")
-    local ce_h3_masked_val=$(( h3_val_for_calc & (~psid_mask_in_hextet3 & 0xFFFF) ))
-    local ce_h3_str=$(printf "%04x" "$ce_h3_masked_val")
-    local ce_h4_str=$(printf "%04x" "$o1")
-    local ce_h5_str=$(printf "%04x" $(( (o2 << 8) | o3_val )) )
-    local ce_h6_str=$(printf "%04x" $(( o4_val << 8 )) )
-    local ce_h7_val=0
-    if [ "$PSIDLEN" -gt 0 ]; then
-         ce_h7_val=$(( PSID << shift_for_psid ))
-    fi
-    local ce_h7_str=$(printf "%04x" "$ce_h7_val")
-
-    CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
-    return 0
-}
-
 calculate_mape_params() {
     if [ -z "$USER_IPV6_HEXTETS" ]; then
         return 1
@@ -393,7 +254,6 @@ EOF
 
     local o1 o2 o3_base o4_base o3_val o4_val temp_ip
     
-    # IPV4_NET_PREFIX をシェルパラメータ展開で分割
     temp_ip="$IPV4_NET_PREFIX"
     o1="${temp_ip%%.*}"
     temp_ip="${temp_ip#*.}"
