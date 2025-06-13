@@ -425,22 +425,21 @@ display_mape() {
     printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
     
     printf "\033[1m• ポート番号:\033[0m "
-    local shift_bits=$((16 - OFFSET))
-    local psid_shift=$((16 - OFFSET - PSIDLEN))
-    [ "$psid_shift" -lt 0 ] && psid_shift=0
-    local range_size=$((1 << psid_shift))
-    local max_blocks=$((1 << OFFSET))
-    local last_block_index=$((max_blocks - 1))
-
+    local AMAX=$(( (1 << OFFSET) - 1 ))
     local port_idx
-    for port_idx in $(seq 1 "$last_block_index"); do
-        local base_port=$((port_idx << shift_bits))
-        local psid_component=$((PSID << psid_shift))
-        local start_port=$((base_port | psid_component))
-        local end_port=$((start_port + range_size - 1))
-
-        printf "%d-%d" "$start_port" "$end_port"
-        [ "$port_idx" -lt "$last_block_index" ] && printf " "
+    for port_idx in $(seq 0 "$AMAX"); do
+        local shift_bits=$(( 16 - OFFSET ))
+        local port_base=$(( port_idx << shift_bits ))
+        local psid_shift=$(( 16 - OFFSET - PSIDLEN ))
+        [ "$psid_shift" -lt 0 ] && psid_shift=0
+        local psid_part=$(( PSID << psid_shift ))
+        local port=$(( port_base | psid_part ))
+        local port_range_size=$(( 1 << psid_shift ))
+        [ "$port_range_size" -le 0 ] && port_range_size=1
+        local port_end=$(( port + port_range_size - 1 ))
+        
+        printf "%d-%d" "$port" "$port_end"
+        [ "$port_idx" -lt "$AMAX" ] && printf " "
     done
 
     printf "\n"    
