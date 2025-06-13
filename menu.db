@@ -1,12 +1,12 @@
 # AIOSメニュー設定データベース
 
 [MAIN_MENU_NAME]
-MENU_INTERNET download "internet-auto.sh" "chmod" "load"
-# MENU_INTERNET selector MENU_INTERNET
+MENU_INTERNET selector MENU_INTERNET
 # MENU_SYSTEM selector MENU_SYSTEM
 MENU_PACKAGES selector MENU_PACKAGES
 
 [MENU_INTERNET]
+MENU_INTERNET download "internet-auto.sh" "chmod" "load"
 # MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
 MENU_INTERNET_MAPE selector MENU_INTERNET_MAPE
 MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
@@ -18,8 +18,7 @@ MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
 [MENU_INTERNET_MAPE]
 MENU_INTERNET_MAPE_MAPOCNV6PLUS menu_yn && download "internet-mape.sh" "chmod" "load" && internet_map_main
 MENU_INTERNET_RESTORE download "internet-mape.sh" "chmod" "load"; restore_mape
-# MENU_INTERNET_MAPE_TEST menu_yn && download "internet-api-mape.sh" "chmod" && sh /tmp/aios/internet-api-mape.sh "$API_SETUP"
-# MENU_INTERNET_MAPE_TEST menu_yn && download "internet-api-mape2.sh" "chmod" "load"
+MENU_INTERNET_MAPE_TEST menu_yn && download "internet-mape.sh" "chmod" "load" && test_internet_map_main
 
 [MENU_INTERNET_DSLITE]
 MENU_INTERNET_DSLITE_TRANS_EAST menu_yn && download "internet-dslite.sh" "chmod" "load" && internet_dslite_main "2403:7f00:4000:2000::126"
