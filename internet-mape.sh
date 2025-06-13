@@ -166,7 +166,7 @@ parse_user_ipv6() {
     return 0
 }
 
-calculate_mape_params() {
+OK_calculate_mape_params() {
     if [ -z "$USER_IPV6_HEXTETS" ]; then
         return 1
     fi
@@ -233,6 +233,58 @@ EOF
     local ce_h7_str=$(printf "%04x" $(( PSID << 8 )) )
 
     CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
+    return 0
+}
+
+calculate_mape_params() {
+    if [ -z "$USER_IPV6_HEXTETS" ]; then
+        return 1
+    fi
+
+    if [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$OFFSET" ]; then
+        return 1
+    fi
+
+    for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$OFFSET"; do
+        case "$value_to_check" in
+            ''|*[!0-9]*) return 1 ;;
+        esac
+    done
+
+    read -r h0 h1 h2 h3 _h4 _h5 _h6 _h7 <<EOF
+$USER_IPV6_HEXTETS
+EOF
+
+    local h0_val=$((0x${h0:-0}))
+    local h1_val=$((0x${h1:-0}))
+    local h2_val=$((0x${h2:-0}))
+    local h3_val=$((0x${h3:-0}))
+
+    local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
+    [ "$ipv4_suffix_len" -lt 0 ] && return 1
+    
+    PSIDLEN=$((EALEN - ipv4_suffix_len))
+    [ "$PSIDLEN" -lt 0 ] && PSIDLEN=0
+    [ "$PSIDLEN" -gt 16 ] && return 1
+
+    if [ "$PSIDLEN" -eq 0 ]; then
+        PSID=0
+    else
+        PSID=$(( (h3_val >> 8) & ((1 << PSIDLEN) - 1) ))
+    fi
+
+    eval $(echo "$IPV4_NET_PREFIX" | awk -F. '{printf "o1=%s o2=%s o3_base=%s o4_base=%s", $1, $2, $3, $4}')
+
+    local o3_val=$(( o3_base | ( (h2_val & 0x03C0) >> 6 ) ))
+    local o4_val=$(( ( (h2_val & 0x003F) << 2 ) | ( (h3_val & 0xC000) >> 14 ) ))
+    IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
+
+    CE=$(printf "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x" \
+        "$h0_val" "$h1_val" "$h2_val" \
+        $(( h3_val & ~(((1 << PSIDLEN) - 1) << 8) )) \
+        "$o1" $(( (o2 << 8) | o3_val )) \
+        $(( o4_val << 8 )) $(( PSID << 8 )))
+
     return 0
 }
 
