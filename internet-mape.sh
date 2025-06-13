@@ -214,7 +214,6 @@ parse_user_ipv6() {
     USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk "$awk_script")
     
     if [ -z "$USER_IPV6_HEXTETS" ] || [ $(echo "$USER_IPV6_HEXTETS" | wc -w) -ne 8 ]; then
-        debug_log "parse_user_ipv6: Failed to parse IPv6 into 8 hextets. Input: $ipv6_to_parse, Parsed: $USER_IPV6_HEXTETS"
         USER_IPV6_HEXTETS="" 
         return 1
     fi
