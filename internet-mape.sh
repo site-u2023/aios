@@ -46,19 +46,12 @@ initialize_info() {
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
 
-    if ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1 && ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1; then
+    local ipv6_info
+    if ipv6_info=$(ip -6 addr show scope global | grep "inet6" | grep -v "fd" | sort -k2 -t/ -n | head -1); then
+        USER_IPV6_ADDR=$(echo "$ipv6_info" | awk '{print $2}')
+        GUA="gua"
+    else
         return 1
-    fi
-
-    if [ -z "$USER_IPV6_ADDR" ]; then
-        local ipv6_info=$(ip -6 addr show scope global | grep "inet6" | grep -v "fd" | sort -k2 -t/ -n | head -1)
-        
-        if [ -n "$ipv6_info" ]; then
-            USER_IPV6_ADDR=$(echo "$ipv6_info" | awk '{print $2}')
-            GUA="gua"
-        else
-            return 1
-        fi
     fi
 
     return 0
