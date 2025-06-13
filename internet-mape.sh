@@ -425,19 +425,22 @@ display_mape() {
     printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
     
     printf "\033[1m• ポート番号:\033[0m "
+    local shift_bits=$((16 - OFFSET))
+    local psid_shift=$((16 - OFFSET - PSIDLEN))
+    [ "$psid_shift" -lt 0 ] && psid_shift=0
+    local range_size=$((1 << psid_shift))
+    local max_blocks=$((1 << OFFSET))
+    local last_block_index=$((max_blocks - 1))
 
-    # --- FC2/ok式ポート範囲表示 ---
-    local psid_shift=$((OFFSET))               # PSIDを左シフト
-    local block_shift=$((OFFSET + PSIDLEN))    # blockを左シフト
-    local n_blocks=$((1 << (16 - block_shift))) # block数
-    local range_size=$((1 << OFFSET))          # 各範囲の幅
+    local port_idx
+    for port_idx in $(seq 1 "$last_block_index"); do
+        local base_port=$((port_idx << shift_bits))
+        local psid_component=$((PSID << psid_shift))
+        local start_port=$((base_port | psid_component))
+        local end_port=$((start_port + range_size - 1))
 
-    local block
-    for block in $(seq 0 $((n_blocks - 1))); do
-        local start_port=$(( (block << block_shift) + (PSID << psid_shift) ))
-        local end_port=$(( start_port + range_size - 1 ))
         printf "%d-%d" "$start_port" "$end_port"
-        [ "$block" -lt $((n_blocks-1)) ] && printf " "
+        [ "$port_idx" -lt "$last_block_index" ] && printf " "
     done
 
     printf "\n"    
