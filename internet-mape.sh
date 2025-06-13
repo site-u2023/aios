@@ -49,63 +49,21 @@ initialize_info() {
     if ! ping -6 -c 1 -W 3 2606:4700:4700::1111 >/dev/null 2>&1 && ! ping -6 -c 1 -W 3 2001:4860:4860::8888 >/dev/null 2>&1; then
         return 1
     fi
-    
-    local wanmap6_device=""
-    wanmap6_device=$(uci -q get network.wanmap6.device 2>/dev/null)
-    if [ -z "$wanmap6_device" ]; then
-        wanmap6_device=$(uci -q get network.wanmap6.ifname 2>/dev/null)
-    fi
-    
-    if [ -n "$wanmap6_device" ]; then
-        local ipv6_addr=""
-        if network_get_ipaddr6 ipv6_addr "wanmap6" && [ -n "$ipv6_addr" ]; then
-            WAN6_NAME="wanmap6"
-            USER_IPV6_ADDR="$ipv6_addr"
-            WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F/ '{print $1}' | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
-            GUA="gua"
-        else
-            local ipv6_prefix_only=""
-            if network_get_prefix6 ipv6_prefix_only "wanmap6" && [ -n "$ipv6_prefix_only" ]; then
-                WAN6_NAME="wanmap6"
-                USER_IPV6_ADDR="$ipv6_prefix_only"
-            fi
+
+    local wan_device_interfaces=""
+    for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
+        local auto_setting=$(uci -q get network.$iface.auto)
+        local norelease_setting=$(uci -q get network.$iface.norelease)
+        local device_name=$(uci -q get network.$iface.device)
+        
+        if [ "$auto_setting" = "0" ] || [ "$norelease_setting" = "1" ]; then
+            continue
         fi
-    fi
-    
-    if [ -z "$USER_IPV6_ADDR" ]; then
-        local search_order="wan wan6"
         
-        for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
-            case "$iface" in
-                wan|wan6|lan|wanmap6) ;;
-                *) search_order="$search_order $iface" ;;
-            esac
-        done
-        
-        search_order="$search_order lan br-lan"
-        
-        for iface in $search_order; do
-            if ! uci -q get network.$iface >/dev/null 2>&1 && [ "$iface" != "br-lan" ]; then
-                continue
-            fi
-            
-            local ipv6_addr=""
-            if network_get_ipaddr6 ipv6_addr "$iface" && [ -n "$ipv6_addr" ]; then
-                WAN6_NAME="$iface"
-                USER_IPV6_ADDR="$ipv6_addr"
-                WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F/ '{print $1}' | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
-                GUA="gua"
-                break
-            fi
-            
-            local ipv6_prefix_only=""
-            if network_get_prefix6 ipv6_prefix_only "$iface" && [ -n "$ipv6_prefix_only" ]; then
-                WAN6_NAME="$iface"
-                USER_IPV6_ADDR="$ipv6_prefix_only"
-                break
-            fi
-        done
-    fi
+        if [ "$device_name" = "wan" ]; then
+            wan_device_interfaces="$wan_device_interfaces $iface"
+        fi
+    done
 
     for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
         local wan_ipv4="" wan_gw=""
@@ -116,13 +74,36 @@ initialize_info() {
         fi
     done
 
-    if ! network_get_ipaddr wan_ipv4 "$WAN_NAME"; then
+    if [ -z "$WAN_IPADDR" ]; then
         return 1
     fi
-    WAN_IPADDR="$wan_ipv4"
 
-    if ! network_get_gateway wan_gateway "$WAN_NAME"; then
-        return 1
+    if [ -z "$USER_IPV6_ADDR" ]; then
+        local found_ipv6=""
+        
+        for iface in $wan_device_interfaces; do
+            local ipv6_addr=""
+            if network_get_ipaddr6 ipv6_addr "$iface" && [ -n "$ipv6_addr" ]; then
+                WAN6_NAME="$iface"
+                USER_IPV6_ADDR="$ipv6_addr"
+                WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F/ '{print $1}' | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
+                GUA="gua"
+                found_ipv6="1"
+                break
+            fi
+            
+            local ipv6_prefix_only=""
+            if network_get_prefix6 ipv6_prefix_only "$iface" && [ -n "$ipv6_prefix_only" ]; then
+                WAN6_NAME="$iface"
+                USER_IPV6_ADDR="$ipv6_prefix_only"
+                found_ipv6="1"
+                break
+            fi
+        done
+        
+        if [ -z "$found_ipv6" ]; then
+            return 1
+        fi
     fi
 
     for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
