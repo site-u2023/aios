@@ -225,7 +225,7 @@ EOF
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
     else
-        PSID=$(( (h3_val_for_calc & psid_mask_in_hextet3) >> shift_for_psid ))
+        PSID=$(( (h3_val_for_calc >> 8) & 0x3F ))
     fi
 
     local o1 o2 o3_base o4_base o3_val o4_val temp_ip
