@@ -114,7 +114,7 @@ get_rule_from_api() {
     return 0
 }
 
-parse_user_ipv6() {
+OK_parse_user_ipv6() {
     local ipv6_to_parse="$1"
     if [ -z "$ipv6_to_parse" ]; then
         USER_IPV6_HEXTETS=""
@@ -215,6 +215,58 @@ parse_user_ipv6() {
     
     if [ -z "$USER_IPV6_HEXTETS" ] || [ $(echo "$USER_IPV6_HEXTETS" | wc -w) -ne 8 ]; then
         USER_IPV6_HEXTETS="" 
+        return 1
+    fi
+    return 0
+}
+
+parse_user_ipv6() {
+    local ipv6_to_parse="$1"
+    if [ -z "$ipv6_to_parse" ]; then
+        USER_IPV6_HEXTETS=""
+        return 1
+    fi
+
+    USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk -F: '
+    {
+        # Remove /prefixlen if present
+        sub(/\/.*/, "", $0);
+        addr = $0;
+
+        # Handle :: expansion
+        if (match(addr, /::/)) {
+            left = substr(addr, 1, RSTART-1)
+            right = substr(addr, RSTART+2)
+            
+            # Count existing fields
+            left_count = gsub(/:/, ":", left) + (left != "" ? 1 : 0)
+            right_count = gsub(/:/, ":", right) + (right != "" ? 1 : 0)
+            zeros_needed = 8 - left_count - right_count
+            
+            # Rebuild address
+            result = left
+            for(i=0; i<zeros_needed; i++) result = result ":0"
+            if(right != "") result = result ":" right
+            
+            # Clean up leading/trailing colons
+            gsub(/^:/, "", result)
+            gsub(/:$/, "", result)
+            addr = result
+        }
+        
+        # Split and pad each hextet to 4 digits
+        split(addr, parts, ":")
+        output = ""
+        for(i=1; i<=8; i++) {
+            hextet = (parts[i] != "") ? parts[i] : "0"
+            while(length(hextet) < 4) hextet = "0" hextet
+            output = output (i > 1 ? " " : "") hextet
+        }
+        print output
+    }')
+    
+    if [ -z "$USER_IPV6_HEXTETS" ] || [ $(echo "$USER_IPV6_HEXTETS" | wc -w) -ne 8 ]; then
+        USER_IPV6_HEXTETS=""
         return 1
     fi
     return 0
