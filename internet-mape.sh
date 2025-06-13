@@ -174,32 +174,95 @@ parse_user_ipv6() {
         OFS=" ";
     }
     {
-        if (index($0, "::")) {
-            sub("::", "0:0:0:0:0:0:0:0");
+        # Remove /prefixlen if present
+        sub(/\/.*/, "", $0);
+        addr = $0;
+
+        if (addr == "::") { # Handle the "::" case specifically
+            print "0000 0000 0000 0000 0000 0000 0000 0000";
+            next; # Exit processing for this line
         }
 
-        num_fields = split($0, hextets_arr, ":");
-        
-        output_str = "";
-        for (i=1; i<=8; i++) {
-            current_segment = "";
-            if (i <= num_fields && hextets_arr[i] != "") {
-                current_segment = hextets_arr[i];
+        # Logic for addresses containing "::"
+        if (addr ~ /::/) {
+            left_part = "";
+            right_part = "";
+            
+            # Split address by "::"
+            # index() returns the position of "::"
+            double_colon_pos = index(addr, "::");
+            
+            if (double_colon_pos > 0) {
+                left_part = substr(addr, 1, double_colon_pos - 1);
+                right_part = substr(addr, double_colon_pos + 2); # +2 to skip "::"
             } else {
-                current_segment = "0";
+                # This case should ideally not be reached if addr ~ /::/ is true
+                # Fallback or error handling can be added here if necessary
+            }
+
+            num_left_fields = 0;
+            if (left_part != "") {
+                # Count fields in the left part
+                # split() returns the number of elements
+                num_left_fields = split(left_part, left_arr, ":");
             }
             
-            while (length(current_segment) < 4) {
-                current_segment = "0" current_segment;
+            num_right_fields = 0;
+            if (right_part != "") {
+                # Count fields in the right part
+                num_right_fields = split(right_part, right_arr, ":");
             }
             
-            output_str = output_str (i > 1 ? OFS : "") current_segment;
+            zeros_to_add = 8 - (num_left_fields + num_right_fields);
+            
+            result_str = "";
+            
+            # Process left part
+            for (k=1; k<=num_left_fields; k++) {
+                current_segment = left_arr[k];
+                while (length(current_segment) < 4) {
+                    current_segment = "0" current_segment;
+                }
+                result_str = result_str (length(result_str) > 0 ? OFS : "") current_segment;
+            }
+            
+            # Add zeros for "::" expansion
+            for (k=1; k<=zeros_to_add; k++) {
+                result_str = result_str (length(result_str) > 0 ? OFS : "") "0000";
+            }
+            
+            # Process right part
+            for (k=1; k<=num_right_fields; k++) {
+                current_segment = right_arr[k];
+                while (length(current_segment) < 4) {
+                    current_segment = "0" current_segment;
+                }
+                result_str = result_str (length(result_str) > 0 ? OFS : "") current_segment;
+            }
+            print result_str;
+
+        } else {
+            # Logic for addresses NOT containing "::" (should be full 8 hextets)
+            num_fields = split(addr, hextets_arr, ":");
+            output_str = "";
+            # If num_fields is not 8, it might be an invalid or already malformed address.
+            # This script will format what it gets.
+            for (i = 1; i <= num_fields; i++) {
+                current_segment = hextets_arr[i];
+                while (length(current_segment) < 4) {
+                    current_segment = "0" current_segment;
+                }
+                output_str = output_str (i > 1 ? OFS : "") current_segment;
+            }
+            print output_str;
         }
-        print output_str;
     }'
     
     USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk "$awk_script")
-    if [ -z "$USER_IPV6_HEXTETS" ]; then
+    
+    if [ -z "$USER_IPV6_HEXTETS" ] || [ $(echo "$USER_IPV6_HEXTETS" | wc -w) -ne 8 ]; then
+        debug_log "parse_user_ipv6: Failed to parse IPv6 into 8 hextets. Input: $ipv6_to_parse, Parsed: $USER_IPV6_HEXTETS"
+        USER_IPV6_HEXTETS="" 
         return 1
     fi
     return 0
@@ -242,14 +305,12 @@ EOF
         return 1
     fi
 
-    # PSID calculation (FC2/ok準拠: h3の上位バイトから必要bitだけ抜く)
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
     else
         PSID=$(( (h3_val >> 8) & ((1 << PSIDLEN) - 1) ))
     fi
 
-    # IPv4アドレス計算
     local o1 o2 o3_base o4_base o3_val o4_val temp_ip
     temp_ip="$IPV4_NET_PREFIX"
     o1="${temp_ip%%.*}"
@@ -264,7 +325,6 @@ EOF
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
 
-    # CEアドレス計算
     local ce_h0_str=$(printf "%04x" "$h0_val")
     local ce_h1_str=$(printf "%04x" "$h1_val")
     local ce_h2_str=$(printf "%04x" "$h2_val")
@@ -646,3 +706,4 @@ internet_map_main() {
 }
 
 # internet_map_main
+test_internet_map_main
