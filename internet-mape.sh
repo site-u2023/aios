@@ -561,13 +561,10 @@ test_internet_map_main() {
 
     printf "\033[33m実際の設定及び再起動は行いません。\033[0m\n"
     
-    printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
     printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
 
-    printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
     printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
 
-    printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
     printf "\033[32mUCI設定適用成功。\033[0m\n"
     
     printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
