@@ -50,11 +50,9 @@ initialize_info() {
 
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
         USER_IPV6_ADDR="$NET_ADDR6"
-        GUA="gua"
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
-        GUA=""
         return 0
     else
         return 1
@@ -297,7 +295,7 @@ configure_openwrt_mape() {
     uci -q set network.${WANMAP_NAME}.mtu="${MTU}" 
     uci -q set network.${WANMAP_NAME}.encaplimit='ignore'
 
-    if [ -n "$GUA" ]; then 
+    if [ -n "$NET_ADDR6" ]; then 
         uci -q set network.${WANMAP6_NAME}.ip6prefix="$WAN6_PREFIX"
     fi
     
@@ -408,7 +406,7 @@ replace_map_sh() {
 
 display_mape() {
     local ipv6_label
-    case "$GUA" in
+    case "$NET_ADDR6" in
         "") ipv6_label="IPv6プレフィックス:" ;;
         *)  ipv6_label="IPv6アドレス:" ;;
     esac
