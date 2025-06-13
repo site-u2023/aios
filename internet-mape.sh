@@ -529,6 +529,52 @@ restore_mape() {
     return 0
 }
 
+test_internet_map_main() {
+    if ! initialize_info; then
+        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
+        return 1
+    fi
+
+    if ! get_rule_from_api "$WAN6_NAME"; then
+        printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    if [ -z "$USER_IPV6_ADDR" ]; then
+        printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
+        return 1
+    fi
+    if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
+        printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    if ! calculate_mape_params; then
+        printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    if ! display_mape; then
+        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    printf "\033[33m実際の設定及び再起動は行いません。\033[0m\n"
+    
+    printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
+    printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
+
+    printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
+    printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
+
+    printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
+    printf "\033[32mUCI設定適用成功。\033[0m\n"
+    
+    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
+    read -r -n1 -s
+    return 0
+}
+
 internet_map_main() {
     if ! initialize_info; then
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
