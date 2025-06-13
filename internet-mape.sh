@@ -430,7 +430,9 @@ display_mape() {
         local port_range_size=$(( 1 << psid_shift ))
         [ "$port_range_size" -le 0 ] && port_range_size=1
         local port_end=$(( port + port_range_size - 1 ))
-        
+
+        # [ "$port_end" -lt 1024 ] && continue
+        # [ "$port" -lt 1024 ] && port=1024
         printf "%d-%d" "$port" "$port_end"
         [ "$port_idx" -lt "$AMAX" ] && printf " "
     done
