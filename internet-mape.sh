@@ -474,7 +474,7 @@ display_mape() {
     printf "\n"
     printf "\033[1mconfig-softwire\033[0m\n"
     printf "\n"   
-    printf "\033[1m%s\033[0m %s/64\n" "$ipv6_label" "$USER_IPV6_ADDR"
+    printf "\033[1m%s\033[0m %s\n" "$ipv6_label" "$USER_IPV6_ADDR"
     printf "\n"
     printf "\033[1m• CE:\033[0m %s\n" "$CE"
     printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
