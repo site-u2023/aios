@@ -125,32 +125,26 @@ parse_user_ipv6() {
 
     USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk -F: '
     {
-        # Remove /prefixlen if present
         sub(/\/.*/, "", $0);
         addr = $0;
 
-        # Handle :: expansion
         if (match(addr, /::/)) {
             left = substr(addr, 1, RSTART-1)
             right = substr(addr, RSTART+2)
             
-            # Count existing fields
             left_count = gsub(/:/, ":", left) + (left != "" ? 1 : 0)
             right_count = gsub(/:/, ":", right) + (right != "" ? 1 : 0)
             zeros_needed = 8 - left_count - right_count
             
-            # Rebuild address
             result = left
             for(i=0; i<zeros_needed; i++) result = result ":0"
             if(right != "") result = result ":" right
             
-            # Clean up leading/trailing colons
             gsub(/^:/, "", result)
             gsub(/:$/, "", result)
             addr = result
         }
         
-        # Split and pad each hextet to 4 digits
         split(addr, parts, ":")
         output = ""
         for(i=1; i<=8; i++) {
