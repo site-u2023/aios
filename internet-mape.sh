@@ -116,7 +116,7 @@ get_rule_from_api() {
     return 0
 }
 
-parse_user_ipv6() {
+OK_parse_user_ipv6() {
     local ipv6_to_parse="$1"
     if [ -z "$ipv6_to_parse" ]; then
         USER_IPV6_HEXTETS=""
@@ -156,6 +156,40 @@ parse_user_ipv6() {
     }')
     
     if [ -z "$USER_IPV6_HEXTETS" ] || [ $(echo "$USER_IPV6_HEXTETS" | wc -w) -ne 8 ]; then
+        USER_IPV6_HEXTETS=""
+        return 1
+    fi
+    return 0
+}
+
+parse_user_ipv6() {
+    local ipv6_to_parse="$1"
+    if [ -z "$ipv6_to_parse" ]; then
+        USER_IPV6_HEXTETS=""
+        return 1
+    fi
+
+    USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk '
+    BEGIN {FS=":"}
+    {
+        sub(/\/.*/, "", $0)
+        n=split($0, a, ":")
+        if (n < 8) {
+            # expand ::
+            m=8-n+1
+            for(i=1;i<=n;i++) if(a[i]=="") {s=i;break}
+            for(i=8;i>=s+m;i--) a[i]=a[i-m+1]
+            for(i=s+m-1;i>=s;i--) a[i]="0"
+        }
+        out=""
+        for(i=1;i<=8;i++) {
+            h=a[i]; while(length(h)<4) h="0"h
+            out = out (i>1?" ":"") h
+        }
+        print out
+    }')
+
+    if [ -z "$USER_IPV6_HEXTETS" ] || [ "$(echo "$USER_IPV6_HEXTETS" | wc -w)" -ne 8 ]; then
         USER_IPV6_HEXTETS=""
         return 1
     fi
