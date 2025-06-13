@@ -10,7 +10,7 @@ LAN_DEF="br-lan"
 WAN_DEF="wan"
 LAN_NAME="lan"
 WAN_NAME="wan"
-WAN6_NAME=""
+WAN6_NAME="wan6"
 WANMAP_NAME="wanmap"
 WANMAP6_NAME="wanmap6"
 
@@ -50,6 +50,7 @@ initialize_info() {
         return 1
     fi
     
+    local ipv6_detected=0
     for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
         local ipv6_addr=""
         if network_get_ipaddr6 ipv6_addr "$iface" && [ -n "$ipv6_addr" ]; then
@@ -57,18 +58,48 @@ initialize_info() {
             USER_IPV6_ADDR="$ipv6_addr"
             WAN6_PREFIX=$(echo "$ipv6_addr" | awk -F/ '{print $1}' | awk -F: '{if (NF>=4) printf "%s:%s:%s:%s::/64", $1, $2, $3, $4; else print ""}')
             GUA="gua"
-            return 0
+            ipv6_detected=1
+            break
         fi
         
         local ipv6_prefix_only=""
         if network_get_prefix6 ipv6_prefix_only "$iface" && [ -n "$ipv6_prefix_only" ]; then
             WAN6_NAME="$iface"
             USER_IPV6_ADDR="$ipv6_prefix_only"
-            return 0
+            ipv6_detected=1
+            break
         fi
     done
     
-    return 1
+    if [ "$ipv6_detected" = "0" ]; then
+        return 1
+    fi
+
+    local wan_detected=0
+    for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
+        local wan_ipv4="" wan_gw=""
+        if network_get_ipaddr wan_ipv4 "$iface" && network_get_gateway wan_gw "$iface" && [ -n "$wan_ipv4" ]; then
+            WAN_NAME="$iface"
+            WAN_IPADDR="$wan_ipv4"
+            wan_detected=1
+            break
+        fi
+    done
+
+    if [ "$wan_detected" = "0" ]; then
+        return 1
+    fi
+
+    for iface in $(uci show network | grep "=interface" | cut -d. -f2 | cut -d= -f1); do
+        local lan_ipv4=""
+        if network_get_ipaddr lan_ipv4 "$iface" && [ -n "$lan_ipv4" ] && [ "$iface" != "$WAN_NAME" ]; then
+            LAN_NAME="$iface"
+            LAN_IPADDR="$lan_ipv4"
+            break
+        fi
+    done
+
+    return 0
 }
 
 get_rule_from_api() {
