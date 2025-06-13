@@ -57,7 +57,7 @@ initialize_info() {
     return 0
 }
 
-get_rule_from_api() {
+OK_get_rule_from_api() {
     local _wan6_if_name_arg="$1" 
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
     local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
@@ -95,6 +95,63 @@ get_rule_from_api() {
         $2 == "ipv6PrefixLength" { print "_ipv6_rule_prefixlen=\"" $4 "\"" }
         $2 == "psIdOffset"       { print "_offset=\"" $4 "\"" }
     ')
+
+    if [ -z "$_br" ] || [ -z "$_ealen" ] || [ -z "$_ipv4_net_prefix" ] || \
+       [ -z "$_ip4prefixlen" ] || [ -z "$_ipv6_rule_prefix" ] || \
+       [ -z "$_ipv6_rule_prefixlen" ] || [ -z "$_offset" ]; then
+        BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
+        return 1
+    fi
+
+    BR="$_br"
+    EALEN="$_ealen"
+    IPV4_NET_PREFIX="$_ipv4_net_prefix"
+    IP4PREFIXLEN="$_ip4prefixlen"
+    IPV6_RULE_PREFIX="$_ipv6_rule_prefix"
+    IPV6_RULE_PREFIXLEN="$_ipv6_rule_prefixlen"
+    OFFSET="$_offset"
+    
+    return 0
+}
+
+get_rule_from_api() {
+    local _wan6_if_name_arg="$1" 
+    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
+    local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
+    local api_response=""
+    local user_prefix_for_api=""
+    local ret_code=1
+    
+    local _br _ealen _ipv4_net_prefix _ip4prefixlen _ipv6_rule_prefix _ipv6_rule_prefixlen _offset
+
+    if [ -z "$current_user_ipv6_addr_for_api" ]; then
+        return 1
+    fi
+
+    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+
+    if [ -z "$user_prefix_for_api" ]; then
+        return 1
+    fi
+    
+    api_response=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
+    ret_code=$?
+
+    if [ $ret_code -ne 0 ] || [ -z "$api_response" ]; then
+        BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
+        return 1
+    fi
+
+    _br="" _ealen="" _ipv4_net_prefix="" _ip4prefixlen="" _ipv6_rule_prefix="" _ipv6_rule_prefixlen="" _offset=""
+    eval $(echo "$api_response" | awk -F'"' '{
+        if($2=="brIpv6Address") print "_br=\""$4"\""
+        else if($2=="eaBitLength") print "_ealen=\""$4"\""
+        else if($2=="ipv4Prefix") print "_ipv4_net_prefix=\""$4"\""
+        else if($2=="ipv4PrefixLength") print "_ip4prefixlen=\""$4"\""
+        else if($2=="ipv6Prefix") print "_ipv6_rule_prefix=\""$4"\""
+        else if($2=="ipv6PrefixLength") print "_ipv6_rule_prefixlen=\""$4"\""
+        else if($2=="psIdOffset") print "_offset=\""$4"\""
+    }')
 
     if [ -z "$_br" ] || [ -z "$_ealen" ] || [ -z "$_ipv4_net_prefix" ] || \
        [ -z "$_ip4prefixlen" ] || [ -z "$_ipv6_rule_prefix" ] || \
