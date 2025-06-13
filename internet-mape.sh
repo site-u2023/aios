@@ -47,7 +47,7 @@ initialize_info() {
     fi
 
     local ipv6_info
-    if ipv6_info=$(ip -6 addr show scope global | grep "inet6" | grep -v "fd" | sort -k2 -t/ -n | head -1); then
+    if ipv6_info=$(ip -6 addr show scope global | grep "inet6" | grep -v "fd" | head -1); then
         USER_IPV6_ADDR=$(echo "$ipv6_info" | awk '{print $2}')
         GUA="gua"
     else
