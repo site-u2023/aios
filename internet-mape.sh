@@ -304,7 +304,8 @@ calculate_mape_params() {
 
     for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$OFFSET"; do
         case "$value_to_check" in
-            ''|*[!0-9]*) return 1 ;;
+            ''|*[!0-9]*)
+                return 1 ;;
         esac
     done
 
@@ -318,11 +319,16 @@ EOF
     local h3_val=$((0x${h3:-0}))
 
     local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
-    [ "$ipv4_suffix_len" -lt 0 ] && return 1
-    
+    if [ "$ipv4_suffix_len" -lt 0 ]; then
+        return 1
+    fi
     PSIDLEN=$((EALEN - ipv4_suffix_len))
-    [ "$PSIDLEN" -lt 0 ] && PSIDLEN=0
-    [ "$PSIDLEN" -gt 16 ] && return 1
+    if [ "$PSIDLEN" -lt 0 ]; then
+        PSIDLEN=0
+    fi
+    if [ "$PSIDLEN" -gt 16 ]; then
+        return 1
+    fi
 
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
@@ -330,18 +336,30 @@ EOF
         PSID=$(( (h3_val >> 8) & ((1 << PSIDLEN) - 1) ))
     fi
 
-    eval $(echo "$IPV4_NET_PREFIX" | awk -F. '{printf "o1=%s o2=%s o3_base=%s o4_base=%s", $1, $2, $3, $4}')
+    local o1 o2 o3_base o4_base o3_val o4_val temp_ip
+    temp_ip="$IPV4_NET_PREFIX"
+    o1="${temp_ip%%.*}"
+    temp_ip="${temp_ip#*.}"
+    o2="${temp_ip%%.*}"
+    temp_ip="${temp_ip#*.}"
+    o3_base="${temp_ip%%.*}"
+    o4_base="${temp_ip#*.}"
 
-    local o3_val=$(( o3_base | ( (h2_val & 0x03C0) >> 6 ) ))
-    local o4_val=$(( ( (h2_val & 0x003F) << 2 ) | ( (h3_val & 0xC000) >> 14 ) ))
+    o3_val=$(( o3_base | ( (h2_val & 0x03C0) >> 6 ) ))
+    o4_val=$(( ( (h2_val & 0x003F) << 2 ) | ( (h3_val & 0xC000) >> 14 ) ))
+
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
 
-    CE=$(printf "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x" \
-        "$h0_val" "$h1_val" "$h2_val" \
-        $(( h3_val & ~(((1 << PSIDLEN) - 1) << 8) )) \
-        "$o1" $(( (o2 << 8) | o3_val )) \
-        $(( o4_val << 8 )) $(( PSID << 8 )))
+    local ce_h0_str=$(printf "%x" "$h0_val")
+    local ce_h1_str=$(printf "%x" "$h1_val")
+    local ce_h2_str=$(printf "%x" "$h2_val")
+    local ce_h3_str=$(printf "%x" "$h3_val")
+    local ce_h4_str=$(printf "%x" "$o1")
+    local ce_h5_str=$(printf "%x" $(( (o2 << 8) | o3_val )) )
+    local ce_h6_str=$(printf "%x" $(( o4_val << 8 )) )
+    local ce_h7_str=$(printf "%x" $(( PSID << 8 )) )
 
+    CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
     return 0
 }
 
