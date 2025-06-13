@@ -36,25 +36,29 @@ OS_VERSION=""
 GUA=""
 
 initialize_info() {
-    if . /lib/functions.sh && . /lib/functions/network.sh; then
-        : 
-    else
-        return 1
-    fi
 
     if [ -f "/etc/openwrt_release" ]; then
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
-
-    local ipv6_info
-    if ipv6_info=$(ip -6 addr show scope global | grep "inet6" | grep -v "fd" | head -1); then
-        USER_IPV6_ADDR=$(echo "$ipv6_info" | awk '{print $2}')
-        GUA="gua"
+    
+    if . /lib/functions.sh && . /lib/functions/network.sh; then
+        network_flush_cache
+        network_find_wan6 NET_IF6
     else
         return 1
     fi
 
-    return 0
+    if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
+        USER_IPV6_ADDR="$NET_ADDR6"
+        GUA="gua"
+        return 0
+    elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
+        USER_IPV6_ADDR="$NET_PFX6"
+        GUA=""
+        return 0
+    else
+        return 1
+    fi    
 }
 
 get_rule_from_api() {
