@@ -9,7 +9,7 @@ PROVIDER_DATABASE_CONTENT=""
 PROVIDER_DATABASE_INITIALIZED="false"
 
 provider_data_definitions() {
-    add_provider_record "2518|240b::/16| |v6plus|v6 Plus|map-e|download internet-mape.sh chmod load; internet_map_main"
+    add_provider_record "2518|240b::/16|gw.v6plus.jp|v6plus|v6 Plus|map-e|download internet-mape.sh chmod load; internet_map_main"
     add_provider_record "7413|2404:7a80::/30|gw.transix.jp|biglobe_dslite|BIGLOBE|ds-lite|download internet-dslite.sh chmod load; internet_dslite_main"
     add_provider_record "7413|2404:7a84::/30| |biglobe_mape|BIGLOBE|map-e|download internet-mape.sh chmod load; internet_map_main"
     add_provider_record "4713|2400:4150::/30| |ocn|OCN Virtual Connect|map-e|download internet-mape.sh chmod load; internet_map_main"
