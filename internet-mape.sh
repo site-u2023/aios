@@ -175,13 +175,11 @@ calculate_mape_params() {
         return 1
     fi
 
-    if [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || \
-       [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || \
-       [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ]; then
+    if [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$OFFSET" ]; then
         return 1
     fi
 
-    for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$IPV6_RULE_PREFIXLEN" "$OFFSET"; do
+    for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$OFFSET"; do
         case "$value_to_check" in
             ''|*[!0-9]*)
                 return 1 ;;
@@ -192,18 +190,16 @@ calculate_mape_params() {
 $USER_IPV6_HEXTETS
 EOF
 
-    local h0_val_for_calc h1_val_for_calc h2_val_for_calc h3_val_for_calc
-    h0_val_for_calc=$((0x${h0:-0}))
-    h1_val_for_calc=$((0x${h1:-0}))
-    h2_val_for_calc=$((0x${h2:-0}))
-    h3_val_for_calc=$((0x${h3:-0}))
+    local h0_val=$((0x${h0:-0}))
+    local h1_val=$((0x${h1:-0}))
+    local h2_val=$((0x${h2:-0}))
+    local h3_val=$((0x${h3:-0}))
 
     local ipv4_suffix_len=$((32 - IP4PREFIXLEN))
     if [ "$ipv4_suffix_len" -lt 0 ]; then
         return 1
     fi
     PSIDLEN=$((EALEN - ipv4_suffix_len))
-
     if [ "$PSIDLEN" -lt 0 ]; then
         PSIDLEN=0
     fi
@@ -211,25 +207,15 @@ EOF
         return 1
     fi
 
-    local shift_for_psid=$((16 - OFFSET - PSIDLEN))
-    if [ "$shift_for_psid" -lt 0 ]; then
-        return 1
-    fi
-
-    local psid_field_only_mask=0
-    if [ "$PSIDLEN" -gt 0 ]; then
-        psid_field_only_mask=$(( (1 << PSIDLEN) - 1 ))
-    fi
-    local psid_mask_in_hextet3=$(( psid_field_only_mask << shift_for_psid ))
-
+    # PSID calculation (FC2/ok準拠: h3の上位バイトから必要bitだけ抜く)
     if [ "$PSIDLEN" -eq 0 ]; then
         PSID=0
     else
-        PSID=$(( (h3_val_for_calc >> 8) & 0x3F ))
+        PSID=$(( (h3_val >> 8) & ((1 << PSIDLEN) - 1) ))
     fi
 
+    # IPv4アドレス計算
     local o1 o2 o3_base o4_base o3_val o4_val temp_ip
-    
     temp_ip="$IPV4_NET_PREFIX"
     o1="${temp_ip%%.*}"
     temp_ip="${temp_ip#*.}"
@@ -238,24 +224,20 @@ EOF
     o3_base="${temp_ip%%.*}"
     o4_base="${temp_ip#*.}"
 
-    o3_val=$(( o3_base | ( (h2_val_for_calc & 0x03C0) >> 6 ) ))
-    o4_val=$(( ( (h2_val_for_calc & 0x003F) << 2 ) | (( (h3_val_for_calc & 0xC000) >> 14) & 0x0003 ) ))
+    o3_val=$(( o3_base | ( (h2_val & 0x03C0) >> 6 ) ))
+    o4_val=$(( ( (h2_val & 0x003F) << 2 ) | ( (h3_val & 0xC000) >> 14 ) ))
 
     IPADDR="${o1}.${o2}.${o3_val}.${o4_val}"
 
-    local ce_h0_str=$(printf "%04x" "$h0_val_for_calc")
-    local ce_h1_str=$(printf "%04x" "$h1_val_for_calc")
-    local ce_h2_str=$(printf "%04x" "$h2_val_for_calc")
-    local ce_h3_masked_val=$(( h3_val_for_calc & (~psid_mask_in_hextet3 & 0xFFFF) ))
-    local ce_h3_str=$(printf "%04x" "$ce_h3_masked_val")
+    # CEアドレス計算
+    local ce_h0_str=$(printf "%04x" "$h0_val")
+    local ce_h1_str=$(printf "%04x" "$h1_val")
+    local ce_h2_str=$(printf "%04x" "$h2_val")
+    local ce_h3_str=$(printf "%04x" $(( h3_val & ~(((1 << PSIDLEN) - 1) << 8) )) )
     local ce_h4_str=$(printf "%04x" "$o1")
     local ce_h5_str=$(printf "%04x" $(( (o2 << 8) | o3_val )) )
     local ce_h6_str=$(printf "%04x" $(( o4_val << 8 )) )
-    local ce_h7_val=0
-    if [ "$PSIDLEN" -gt 0 ]; then
-         ce_h7_val=$(( PSID << shift_for_psid ))
-    fi
-    local ce_h7_str=$(printf "%04x" "$ce_h7_val")
+    local ce_h7_str=$(printf "%04x" $(( PSID << 8 )) )
 
     CE="${ce_h0_str}:${ce_h1_str}:${ce_h2_str}:${ce_h3_str}:${ce_h4_str}:${ce_h5_str}:${ce_h6_str}:${ce_h7_str}"
     return 0
@@ -443,22 +425,19 @@ display_mape() {
     printf "\033[1m• IPv4アドレス:\033[0m %s\n" "$IPADDR"
     
     printf "\033[1m• ポート番号:\033[0m "
-    local shift_bits=$((16 - OFFSET))
-    local psid_shift=$((16 - OFFSET - PSIDLEN))
-    [ "$psid_shift" -lt 0 ] && psid_shift=0
-    local range_size=$((1 << psid_shift))
-    local max_blocks=$((1 << OFFSET))
-    local last=$((max_blocks - 1))
 
-    local A=0
-    while [ "$A" -le "$last" ]; do
-        local base=$((A << shift_bits))
-        local part=$((PSID << psid_shift))
-        local start=$((base | part))
-        local end=$((start + range_size - 1))
-        printf "%d-%d" "$start" "$end"
-        [ "$A" -lt "$last" ] && printf " "
-        A=$((A + 1))
+    # --- FC2/ok式ポート範囲表示 ---
+    local psid_shift=$((OFFSET))               # PSIDを左シフト
+    local block_shift=$((OFFSET + PSIDLEN))    # blockを左シフト
+    local n_blocks=$((1 << (16 - block_shift))) # block数
+    local range_size=$((1 << OFFSET))          # 各範囲の幅
+
+    local block
+    for block in $(seq 0 $((n_blocks - 1))); do
+        local start_port=$(( (block << block_shift) + (PSID << psid_shift) ))
+        local end_port=$(( start_port + range_size - 1 ))
+        printf "%d-%d" "$start_port" "$end_port"
+        [ "$block" -lt $((n_blocks-1)) ] && printf " "
     done
 
     printf "\n"    
