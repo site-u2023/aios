@@ -10,7 +10,7 @@ LAN_DEF="br-lan"
 WAN_DEF="wan"
 LAN_NAME="lan"
 WAN_NAME="wan"
-WAN6_NAME="wan6"
+WAN6_NAME=""
 WANMAP_NAME="wanmap"
 WANMAP6_NAME="wanmap6"
 
