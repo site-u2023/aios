@@ -559,7 +559,7 @@ test_internet_map_main() {
         return 1
     fi
 
-    printf "\033[33m実際の設定及び再起動は行いません。\033[0m\n"
+    printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"
     
     printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
 
