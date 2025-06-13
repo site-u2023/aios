@@ -6,14 +6,10 @@ MENU_INTERNET selector MENU_INTERNET
 MENU_PACKAGES selector MENU_PACKAGES
 
 [MENU_INTERNET]
-MENU_INTERNET download "internet-auto.sh" "chmod" "load"
-# MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
+MENU_INTERNET_AUTO download "internet-auto.sh" "chmod" "load"
 MENU_INTERNET_MAPE selector MENU_INTERNET_MAPE
 MENU_INTERNET_DSLITE selector MENU_INTERNET_DSLITE
-
-[MENU_INTERNET_PPPOE]
-MENU_INTERNET_PPPOE menu_yn && download "internet-pppoe.sh" "chmod" "load" && internet_pppoe_main
-MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
+# MENU_INTERNET_PPPOE selector MENU_INTERNET_PPPOE
 
 [MENU_INTERNET_MAPE]
 MENU_INTERNET_MAPE_MAPOCNV6PLUS menu_yn && download "internet-mape.sh" "chmod" "load" && internet_map_main
@@ -26,6 +22,10 @@ MENU_INTERNET_DSLITE_TRANS_WEST menu_yn && download "internet-dslite.sh" "chmod"
 MENU_INTERNET_DSLITE_XPASS menu_yn && download "internet-dslite.sh" "chmod" "load" && internet_dslite_main "dgw.xpass.jp"
 MENU_INTERNET_DSLITE_V6OPTION menu_yn && download "internet-dslite.sh" "chmod" "load" && internet_dslite_main "gw.example.v6option.ne.jp"
 MENU_INTERNET_RESTORE download "internet-dslite.sh" "chmod" "load"; restore_dslite
+
+[MENU_INTERNET_PPPOE]
+MENU_INTERNET_PPPOE menu_yn && download "internet-pppoe.sh" "chmod" "load" && internet_pppoe_main
+MENU_INTERNET_RESTORE download "internet-pppoe.sh" "chmod" "load"; restore_pppoe
 
 [MENU_SYSTEM]
 MENU_SYSTEM printf "\n%s\n" "$(color yellow "Coming soon")"
