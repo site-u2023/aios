@@ -103,13 +103,15 @@ fetch_rule_api_ocn() {
     API_RESPONSE=$(wget -6 -q -O - --timeout=10 "$api_url")
     [ -z "$API_RESPONSE" ] && return 1
 
-    API_RESPONSE=$(echo "$API_RESPONSE" | awk -v prefix="$user_prefix_for_api" '
+    local prefix_pattern=$(echo "$user_prefix_for_api" | awk -F':' '{printf "%s:%s:%s", $1, $2, substr($3,1,1)}')
+    
+    API_RESPONSE=$(echo "$API_RESPONSE" | awk -v prefix="$prefix_pattern" '
     BEGIN { in_block=0; block=""; }
     /\{/ { in_block=1; block=$0; next; }
     in_block {
         block = block "\n" $0
         if (/\}/) {
-            if (block ~ /2400:4151:8/) {
+            if (block ~ prefix) {
                 print block
                 exit
             }
