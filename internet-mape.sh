@@ -33,7 +33,6 @@ STATIC_API_RULE_LINE=""
 MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
 OS_VERSION="" 
-GUA=""
 
 initialize_info() {
 
