@@ -3,7 +3,7 @@
 # OpenWrt 19.07+ configuration
 # Powered by https://ipv4.web.fc2.com/map-e.html
 
-SCRIPT_VERSION="2025.06.12-00-00"
+SCRIPT_VERSION="2025.06.14-00-00"
 
 LAN_IPADDR="192.168.1.1"
 LAN_DEF="br-lan" 
@@ -29,10 +29,10 @@ MTU="1460"
 LEGACYMAP="1"
 USER_IPV6_ADDR=""
 USER_IPV6_HEXTETS=""
-STATIC_API_RULE_LINE=""
-MAPE_IPV6_ACQUISITION_METHOD=""
+USER_IPV6_PREFIX=""
 WAN6_PREFIX=""
 OS_VERSION="" 
+API_RESPONSE=""
 
 initialize_info() {
 
@@ -50,44 +50,89 @@ initialize_info() {
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
         USER_IPV6_ADDR="$NET_ADDR6"
         WAN6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::/64", $1, $2, $3, $4}')
+        USER_IPV6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
+        USER_IPV6_PREFIX=$(echo "$NET_PFX6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
         return 0
     else
         return 1
-    fi    
+    fi
 }
 
-get_rule_from_api() {
-    local _wan6_if_name_arg="$1" 
+fetch_rule_api() {
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
+    local user_prefix_for_api="$USER_IPV6_PREFIX"
     local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
-    local api_response=""
-    local user_prefix_for_api=""
-    local ret_code=1
     
-    local _br _ealen _ipv4_net_prefix _ip4prefixlen _ipv6_rule_prefix _ipv6_rule_prefixlen _offset
-
     if [ -z "$current_user_ipv6_addr_for_api" ]; then
         return 1
     fi
-
-    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
 
     if [ -z "$user_prefix_for_api" ]; then
         return 1
     fi
     
-    api_response=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
-    ret_code=$?
+    API_RESPONSE=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
+    
+    if [ -z "$API_RESPONSE" ]; then
+        return 1
+    fi
+    
+    return 0
+}
 
-    if [ $ret_code -ne 0 ] || [ -z "$api_response" ]; then
-        BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
+fetch_rule_api_ocn() {
+    local ocn_api_code="$1"
+    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
+    local user_prefix_for_api="$USER_IPV6_PREFIX"
+    local api_url=""
+    
+    if [ -z "$ocn_api_code" ]; then
+        printf "\nOCN APIコードを入力してください: "
+        read -s ocn_api_code
+        echo
+    fi
+    [ -z "$ocn_api_code" ] && return 1
+    [ -z "$current_user_ipv6_addr_for_api" ] && return 1
+    [ -z "$user_prefix_for_api" ] && return 1
+
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${user_prefix_for_api}&ipv6PrefixLength=64&code=${ocn_api_code}"
+
+    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "$api_url")
+    [ -z "$API_RESPONSE" ] && return 1
+
+    API_RESPONSE=$(echo "$API_RESPONSE" | awk -v prefix="$user_prefix_for_api" '
+    BEGIN { in_block=0; block=""; }
+    /\{/ { in_block=1; block=$0; next; }
+    in_block {
+        block = block "\n" $0
+        if (/\}/) {
+            if (block ~ /2400:4151:8/) {
+                print block
+                exit
+            }
+            in_block=0; block="";
+        }
+    }')
+
+    [ -n "$API_RESPONSE" ] && return 0 || return 1
+}
+
+get_rule_api() {
+    local api_response="$API_RESPONSE"
+    
+    local _br _ealen _ipv4_net_prefix _ip4prefixlen _ipv6_rule_prefix _ipv6_rule_prefixlen _offset
+
+    BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
+
+    if [ -z "$api_response" ]; then
         return 1
     fi
 
     _br="" _ealen="" _ipv4_net_prefix="" _ip4prefixlen="" _ipv6_rule_prefix="" _ipv6_rule_prefixlen="" _offset=""
+    
     eval $(echo "$api_response" | awk -F'"' '{
         if($2=="brIpv6Address") print "_br=\""$4"\""
         else if($2=="eaBitLength") print "_ealen=\""$4"\""
@@ -101,7 +146,6 @@ get_rule_from_api() {
     if [ -z "$_br" ] || [ -z "$_ealen" ] || [ -z "$_ipv4_net_prefix" ] || \
        [ -z "$_ip4prefixlen" ] || [ -z "$_ipv6_rule_prefix" ] || \
        [ -z "$_ipv6_rule_prefixlen" ] || [ -z "$_offset" ]; then
-        BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
         return 1
     fi
 
@@ -113,52 +157,6 @@ get_rule_from_api() {
     IPV6_RULE_PREFIXLEN="$_ipv6_rule_prefixlen"
     OFFSET="$_offset"
     
-    return 0
-}
-
-OK_parse_user_ipv6() {
-    local ipv6_to_parse="$1"
-    if [ -z "$ipv6_to_parse" ]; then
-        USER_IPV6_HEXTETS=""
-        return 1
-    fi
-
-    USER_IPV6_HEXTETS=$(echo "$ipv6_to_parse" | awk -F: '
-    {
-        sub(/\/.*/, "", $0);
-        addr = $0;
-
-        if (match(addr, /::/)) {
-            left = substr(addr, 1, RSTART-1)
-            right = substr(addr, RSTART+2)
-            
-            left_count = gsub(/:/, ":", left) + (left != "" ? 1 : 0)
-            right_count = gsub(/:/, ":", right) + (right != "" ? 1 : 0)
-            zeros_needed = 8 - left_count - right_count
-            
-            result = left
-            for(i=0; i<zeros_needed; i++) result = result ":0"
-            if(right != "") result = result ":" right
-            
-            gsub(/^:/, "", result)
-            gsub(/:$/, "", result)
-            addr = result
-        }
-        
-        split(addr, parts, ":")
-        output = ""
-        for(i=1; i<=8; i++) {
-            hextet = (parts[i] != "") ? parts[i] : "0"
-            while(length(hextet) < 4) hextet = "0" hextet
-            output = output (i > 1 ? " " : "") hextet
-        }
-        print output
-    }')
-    
-    if [ -z "$USER_IPV6_HEXTETS" ] || [ $(echo "$USER_IPV6_HEXTETS" | wc -w) -ne 8 ]; then
-        USER_IPV6_HEXTETS=""
-        return 1
-    fi
     return 0
 }
 
@@ -535,17 +533,19 @@ restore_mape() {
     return 0
 }
 
-test_internet_map_main() {
+internet_map_ocn_main() {
     if ! initialize_info; then
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
     fi
-
-    if ! get_rule_from_api "$WAN6_NAME"; then
+    if ! fetch_rule_api_ocn; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
-
+    if ! get_rule_api; then
+        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
+        return 1
+    fi
     if [ -z "$USER_IPV6_ADDR" ]; then
         printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
         return 1
@@ -554,27 +554,50 @@ test_internet_map_main() {
         printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
         return 1
     fi
-
     if ! calculate_mape_params; then
         printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
         return 1
     fi
-
     if ! display_mape; then
         printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
         return 1
     fi
 
-    printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"
-    
-    printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
+    printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"    
+    return 0
+}
 
-    printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
+test_internet_map_main() {
+    if ! initialize_info; then
+        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
+        return 1
+    fi
+    if ! fetch_rule_api; then
+        printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
+        return 1
+    fi
+    if ! get_rule_api; then
+        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
+        return 1
+    fi
+    if [ -z "$USER_IPV6_ADDR" ]; then
+        printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
+        return 1
+    fi
+    if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
+        printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
+        return 1
+    fi
+    if ! calculate_mape_params; then
+        printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
+        return 1
+    fi
+    if ! display_mape; then
+        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
+        return 1
+    fi
 
-    printf "\033[32mUCI設定適用成功。\033[0m\n"
-    
-    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
-    read -r -n1 -s
+    printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"    
     return 0
 }
 
@@ -583,12 +606,14 @@ internet_map_main() {
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
     fi
-
-    if ! get_rule_from_api "$WAN6_NAME"; then
+    if ! fetch_rule_api; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
-
+    if ! get_rule_api; then
+        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
+        return 1
+    fi
     if [ -z "$USER_IPV6_ADDR" ]; then
         printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
         return 1
@@ -597,43 +622,39 @@ internet_map_main() {
         printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
         return 1
     fi
-
     if ! calculate_mape_params; then
         printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
         return 1
     fi
-
     if ! display_mape; then
         printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
         return 1
     fi
-
     if ! install_map_package; then
         printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
         return 1
     else
         printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
     fi
-
     if ! replace_map_sh; then
         printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
         return 1
     else
         printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
     fi
-
     if ! configure_openwrt_mape; then
         printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
         return 1
     else
         printf "\033[32mUCI設定適用成功。\033[0m\n"
     fi
-    
+   
     printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
     read -r -n1 -s
     reboot
     return 0
 }
 
+# internet_map_ocn_main "$@"
 # test_internet_map_main
 # internet_map_main
