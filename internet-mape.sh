@@ -53,7 +53,6 @@ initialize_info() {
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
-        WAN6_PREFIX="$NET_PFX6"
         return 0
     else
         return 1
