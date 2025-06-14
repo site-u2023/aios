@@ -3,7 +3,7 @@
 # OpenWrt 19.07+ configuration
 # Powered by https://ipv4.web.fc2.com/map-e.html
 
-SCRIPT_VERSION="2025.06.12-00-00"
+SCRIPT_VERSION="2025.06.14-00-00"
 
 LAN_IPADDR="192.168.1.1"
 LAN_DEF="br-lan" 
@@ -62,7 +62,6 @@ fetch_rule_api() {
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
     local user_prefix_for_api=""
     local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
-    local api_response_content="" 
     
     if [ -z "$current_user_ipv6_addr_for_api" ]; then
         return 1
@@ -74,41 +73,37 @@ fetch_rule_api() {
         return 1
     fi
     
-    api_response_content=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
-    local wget_exit_status=$?
-
-    if [ $wget_exit_status -ne 0 ]; then
-        return 1
-    fi
-
-    if [ -z "$api_response_content" ]; then
+    API_RESPONSE=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
+    
+    if [ -z "$API_RESPONSE" ]; then
         return 1
     fi
     
-    API_RESPONSE="$api_response_content"
     return 0
 }
 
 fetch_rule_api_ocn() {
-    local ocn_api_code=""
+    local ocn_api_code="$1"
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
     local user_prefix_for_api=""
-    local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${user_prefix_for_api}&ipv6PrefixLength=64&code=${ocn_api_code}"
-    local api_response_content=""
+    local api_url=""
     
-    echo -n "OCN APIコードを入力してください: "
-    read ocn_api_code
+    if [ -z "$ocn_api_code" ]; then
+        echo -n "OCN APIコードを入力してください: "
+        read ocn_api_code
+    fi
     [ -z "$ocn_api_code" ] && return 1
     [ -z "$current_user_ipv6_addr_for_api" ] && return 1
 
     user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
     [ -z "$user_prefix_for_api" ] && return 1
 
-    api_response_content=$(wget -6 -q -O - --timeout=10 "$api_url")
-    [ $? -ne 0 ] && return 1
-    [ -z "$api_response_content" ] && return 1
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${user_prefix_for_api}&ipv6PrefixLength=64&code=${ocn_api_code}"
 
-    API_RESPONSE=$(echo "$api_response_content" | awk -v prefix="$user_prefix_for_api" '
+    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "$api_url")
+    [ -z "$API_RESPONSE" ] && return 1
+
+    API_RESPONSE=$(echo "$API_RESPONSE" | awk -v prefix="$user_prefix_for_api" '
     BEGIN { in_block=0; block=""; }
     /\{/ { in_block=1; block=$0; next; }
     in_block {
@@ -538,13 +533,13 @@ restore_mape() {
     return 0
 }
 
-test2_internet_map_main() {
+internet_map_ocn_main() {
     if ! initialize_info; then
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
     fi
 
-    if ! fetch_rule_api; then
+    if ! fetch_rule_api_ocn; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
@@ -592,7 +587,7 @@ test_internet_map_main() {
         return 1
     fi
 
-    if ! fetch_rule_api_ocn; then
+    if ! fetch_rule_api; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
@@ -696,6 +691,6 @@ internet_map_main() {
     return 0
 }
 
-# test_internet_map_main "$@"
-test2_internet_map_main
+# internet_map_ocn_main "$@"
+# test_internet_map_main
 # internet_map_main
