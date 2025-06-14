@@ -105,39 +105,21 @@ fetch_rule_api_ocn() {
 get_rule_api() {
     local api_response="$API_RESPONSE"
     
-    local _br _ealen _ipv4_net_prefix _ip4prefixlen _ipv6_rule_prefix _ipv6_rule_prefixlen _offset
-
     BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
 
-    if [ -z "$api_response" ]; then
-        return 1
-    fi
-
-    _br="" _ealen="" _ipv4_net_prefix="" _ip4prefixlen="" _ipv6_rule_prefix="" _ipv6_rule_prefixlen="" _offset=""
+    [ -z "$api_response" ] && return 1
     
     eval $(echo "$api_response" | awk -F'"' '{
-        if($2=="brIpv6Address") print "_br=\""$4"\""
-        else if($2=="eaBitLength") print "_ealen=\""$4"\""
-        else if($2=="ipv4Prefix") print "_ipv4_net_prefix=\""$4"\""
-        else if($2=="ipv4PrefixLength") print "_ip4prefixlen=\""$4"\""
-        else if($2=="ipv6Prefix") print "_ipv6_rule_prefix=\""$4"\""
-        else if($2=="ipv6PrefixLength") print "_ipv6_rule_prefixlen=\""$4"\""
-        else if($2=="psIdOffset") print "_offset=\""$4"\""
+        if($2=="brIpv6Address") print "BR=\""$4"\""
+        else if($2=="eaBitLength") print "EALEN=\""$4"\""
+        else if($2=="ipv4Prefix") print "IPV4_NET_PREFIX=\""$4"\""
+        else if($2=="ipv4PrefixLength") print "IP4PREFIXLEN=\""$4"\""
+        else if($2=="ipv6Prefix") print "IPV6_RULE_PREFIX=\""$4"\""
+        else if($2=="ipv6PrefixLength") print "IPV6_RULE_PREFIXLEN=\""$4"\""
+        else if($2=="psIdOffset") print "OFFSET=\""$4"\""
     }')
 
-    if [ -z "$_br" ] || [ -z "$_ealen" ] || [ -z "$_ipv4_net_prefix" ] || \
-       [ -z "$_ip4prefixlen" ] || [ -z "$_ipv6_rule_prefix" ] || \
-       [ -z "$_ipv6_rule_prefixlen" ] || [ -z "$_offset" ]; then
-        return 1
-    fi
-
-    BR="$_br"
-    EALEN="$_ealen"
-    IPV4_NET_PREFIX="$_ipv4_net_prefix"
-    IP4PREFIXLEN="$_ip4prefixlen"
-    IPV6_RULE_PREFIX="$_ipv6_rule_prefix"
-    IPV6_RULE_PREFIXLEN="$_ipv6_rule_prefixlen"
-    OFFSET="$_offset"
+    [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ] && return 1
     
     return 0
 }
