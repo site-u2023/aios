@@ -49,9 +49,11 @@ initialize_info() {
 
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
         USER_IPV6_ADDR="$NET_ADDR6"
+        WAN6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::/64", $1, $2, $3, $4}')
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
+        WAN6_PREFIX="$NET_PFX6"
         return 0
     else
         return 1
