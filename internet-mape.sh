@@ -49,8 +49,8 @@ initialize_info() {
 
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
         USER_IPV6_ADDR="$NET_ADDR6"
-        WAN6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::/64", $1, $2, $3, $4}')
         USER_IPV6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+        WAN6_PREFIX="${USER_IPV6_PREFIX}/64"
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
@@ -62,30 +62,16 @@ initialize_info() {
 }
 
 fetch_rule_api() {
-    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
-    local user_prefix_for_api="$USER_IPV6_PREFIX"
-    local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
+    [ -z "$USER_IPV6_ADDR" ] && return 1
+    [ -z "$USER_IPV6_PREFIX" ] && return 1
     
-    if [ -z "$current_user_ipv6_addr_for_api" ]; then
-        return 1
-    fi
-
-    if [ -z "$user_prefix_for_api" ]; then
-        return 1
-    fi
+    API_RESPONSE=$(wget -q -O - --timeout=10 "https://map-api-worker.site-u.workers.dev/map-rule?user_prefix=${USER_IPV6_PREFIX}")
     
-    API_RESPONSE=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
-    
-    if [ -z "$API_RESPONSE" ]; then
-        return 1
-    fi
-    
-    return 0
+    [ -z "$API_RESPONSE" ] && return 1 || return 0
 }
 
 fetch_rule_api_ocn() {
     local ocn_api_code="$1"
-    local api_url=""
     
     if [ -z "$ocn_api_code" ]; then
         printf "\nOCN APIコードを入力してください: "
@@ -96,9 +82,7 @@ fetch_rule_api_ocn() {
     [ -z "$USER_IPV6_ADDR" ] && return 1
     [ -z "$USER_IPV6_PREFIX" ] && return 1
 
-    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=64&code=${ocn_api_code}"
-
-    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "$api_url")
+    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=64&code=${ocn_api_code}")
     [ -z "$API_RESPONSE" ] && return 1
 
     API_RESPONSE=$(echo "$API_RESPONSE" | awk '
@@ -115,7 +99,7 @@ fetch_rule_api_ocn() {
         }
     }')
 
-    [ -n "$API_RESPONSE" ] && return 0 || return 1
+    [ -z "$API_RESPONSE" ] && return 1 || return 0
 }
 
 get_rule_api() {
