@@ -85,8 +85,6 @@ fetch_rule_api() {
 
 fetch_rule_api_ocn() {
     local ocn_api_code="$1"
-    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
-    local user_prefix_for_api="$USER_IPV6_PREFIX"
     local api_url=""
     
     if [ -z "$ocn_api_code" ]; then
@@ -95,21 +93,21 @@ fetch_rule_api_ocn() {
         echo
     fi
     [ -z "$ocn_api_code" ] && return 1
-    [ -z "$current_user_ipv6_addr_for_api" ] && return 1
-    [ -z "$user_prefix_for_api" ] && return 1
+    [ -z "$USER_IPV6_ADDR" ] && return 1
+    [ -z "$USER_IPV6_PREFIX" ] && return 1
 
-    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${user_prefix_for_api}&ipv6PrefixLength=64&code=${ocn_api_code}"
+    api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=64&code=${ocn_api_code}"
 
     API_RESPONSE=$(wget -6 -q -O - --timeout=10 "$api_url")
     [ -z "$API_RESPONSE" ] && return 1
 
-    API_RESPONSE=$(echo "$API_RESPONSE" | awk -v target_prefix="$user_prefix_for_api" '
+    API_RESPONSE=$(echo "$API_RESPONSE" | awk '
     BEGIN { in_block=0; block=""; }
     /\{/ { in_block=1; block=$0; next; }
     in_block {
         block = block "\n" $0
         if (/\}/) {
-            if (block ~ "\"ipv6Prefix\":" && block ~ "\"" target_prefix "\"") {
+            if (block ~ /"brIpv6Address":/) {
                 print block
                 exit
             }
@@ -531,7 +529,7 @@ internet_map_ocn_main() {
         printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
         return 1
     fi
-    if ! fetch_rule_api_ocn; then
+    if ! fetch_rule_api_ocn "$1"; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
