@@ -29,8 +29,6 @@ MTU="1460"
 LEGACYMAP="1"
 USER_IPV6_ADDR=""
 USER_IPV6_HEXTETS=""
-STATIC_API_RULE_LINE=""
-MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
 OS_VERSION="" 
 API_RESPONSE=""
@@ -50,6 +48,7 @@ initialize_info() {
 
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
         USER_IPV6_ADDR="$NET_ADDR6"
+        WAN6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::/64", $1, $2, $3, $4}')
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
@@ -88,6 +87,42 @@ fetch_rule_api() {
     
     API_RESPONSE="$api_response_content"
     return 0
+}
+
+fetch_rule_api_ocn() {
+    local ocn_api_code=""
+    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
+    local user_prefix_for_api=""
+    local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${user_prefix_for_api}&ipv6PrefixLength=64&code=${ocn_api_code}"
+    local api_response_content=""
+    
+    echo -n "OCN APIコードを入力してください: "
+    read ocn_api_code
+    [ -z "$ocn_api_code" ] && return 1
+    [ -z "$current_user_ipv6_addr_for_api" ] && return 1
+
+    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+    [ -z "$user_prefix_for_api" ] && return 1
+
+    api_response_content=$(wget -6 -q -O - --timeout=10 "$api_url")
+    [ $? -ne 0 ] && return 1
+    [ -z "$api_response_content" ] && return 1
+
+    API_RESPONSE=$(echo "$api_response_content" | awk -v prefix="$user_prefix_for_api" '
+    BEGIN { in_block=0; block=""; }
+    /\{/ { in_block=1; block=$0; next; }
+    in_block {
+        block = block "\n" $0
+        if (/\}/) {
+            if (block ~ /2400:4151:8/) {
+                print block
+                exit
+            }
+            in_block=0; block="";
+        }
+    }')
+
+    [ -n "$API_RESPONSE" ] && return 0 || return 1
 }
 
 get_rule_api() {
@@ -509,7 +544,7 @@ test_internet_map_main() {
         return 1
     fi
 
-    if ! fetch_rule_api; then
+    if ! fetch_rule_api_ocn; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
         return 1
     fi
@@ -613,5 +648,5 @@ internet_map_main() {
     return 0
 }
 
-# test_internet_map_main
+# test_internet_map_main "$@"
 # internet_map_main
