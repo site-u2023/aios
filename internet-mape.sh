@@ -203,13 +203,6 @@ calculate_mape_params() {
         return 1
     fi
 
-    for value_to_check in "$EALEN" "$IP4PREFIXLEN" "$OFFSET"; do
-        case "$value_to_check" in
-            ''|*[!0-9]*)
-                return 1 ;;
-        esac
-    done
-
     read -r h0 h1 h2 h3 _h4 _h5 _h6 _h7 <<EOF
 $USER_IPV6_HEXTETS
 EOF
