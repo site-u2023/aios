@@ -104,20 +104,18 @@ fetch_rule_api_ocn() {
     [ -z "$API_RESPONSE" ] && return 1
 
     API_RESPONSE=$(echo "$API_RESPONSE" | awk -v target_prefix="$user_prefix_for_api" '
-    BEGIN { in_block=0; block=""; found=0; }
+    BEGIN { in_block=0; block=""; }
     /\{/ { in_block=1; block=$0; next; }
     in_block {
         block = block "\n" $0
         if (/\}/) {
             if (block ~ "\"ipv6Prefix\":" && block ~ "\"" target_prefix "\"") {
                 print block
-                found=1
                 exit
             }
             in_block=0; block="";
         }
-    }
-    END { exit (found ? 0 : 1) }')
+    }')
 
     [ -n "$API_RESPONSE" ] && return 0 || return 1
 }
