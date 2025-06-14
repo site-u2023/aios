@@ -29,6 +29,7 @@ MTU="1460"
 LEGACYMAP="1"
 USER_IPV6_ADDR=""
 USER_IPV6_HEXTETS=""
+USER_IPV6_PREFIX=""
 WAN6_PREFIX=""
 OS_VERSION="" 
 API_RESPONSE=""
@@ -49,25 +50,25 @@ initialize_info() {
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
         USER_IPV6_ADDR="$NET_ADDR6"
         WAN6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::/64", $1, $2, $3, $4}')
+        USER_IPV6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
         return 0
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
         USER_IPV6_ADDR="$NET_PFX6"
+        USER_IPV6_PREFIX=$(echo "$NET_PFX6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
         return 0
     else
         return 1
-    fi    
+    fi
 }
 
 fetch_rule_api() {
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
-    local user_prefix_for_api=""
+    local user_prefix_for_api="$USER_IPV6_PREFIX"
     local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
     
     if [ -z "$current_user_ipv6_addr_for_api" ]; then
         return 1
     fi
-
-    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
 
     if [ -z "$user_prefix_for_api" ]; then
         return 1
@@ -85,7 +86,7 @@ fetch_rule_api() {
 fetch_rule_api_ocn() {
     local ocn_api_code="$1"
     local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
-    local user_prefix_for_api=""
+    local user_prefix_for_api="$USER_IPV6_PREFIX"
     local api_url=""
     
     if [ -z "$ocn_api_code" ]; then
@@ -94,8 +95,6 @@ fetch_rule_api_ocn() {
     fi
     [ -z "$ocn_api_code" ] && return 1
     [ -z "$current_user_ipv6_addr_for_api" ] && return 1
-
-    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
     [ -z "$user_prefix_for_api" ] && return 1
 
     api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${user_prefix_for_api}&ipv6PrefixLength=64&code=${ocn_api_code}"
