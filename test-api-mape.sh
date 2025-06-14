@@ -33,6 +33,7 @@ STATIC_API_RULE_LINE=""
 MAPE_IPV6_ACQUISITION_METHOD=""
 WAN6_PREFIX=""
 OS_VERSION="" 
+API_RESPONSE=""
 
 initialize_info() {
 
@@ -59,12 +60,19 @@ initialize_info() {
 }
 
 fetch_rule_api() {
-    local user_prefix_for_api="$1"
+    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
+    local user_prefix_for_api=""
     local api_url="https://map-api-worker.site-u.workers.dev/map-rule"
     local api_response_content="" 
     
+    if [ -z "$current_user_ipv6_addr_for_api" ]; then
+        return 1
+    fi
+
+    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+
     if [ -z "$user_prefix_for_api" ]; then
-        return 1 
+        return 1
     fi
     
     api_response_content=$(wget -q -O - --timeout=10 "${api_url}?user_prefix=${user_prefix_for_api}")
@@ -78,34 +86,17 @@ fetch_rule_api() {
         return 1
     fi
     
-    echo "$api_response_content"
+    API_RESPONSE="$api_response_content"
     return 0
 }
 
 get_rule_api() {
-    local current_user_ipv6_addr_for_api="$USER_IPV6_ADDR"
-    local api_response=""
-    local user_prefix_for_api=""
+    local api_response="$API_RESPONSE"
     
     local _br _ealen _ipv4_net_prefix _ip4prefixlen _ipv6_rule_prefix _ipv6_rule_prefixlen _offset
 
     BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
 
-    if [ -z "$current_user_ipv6_addr_for_api" ]; then
-        return 1
-    fi
-
-    user_prefix_for_api=$(echo "$current_user_ipv6_addr_for_api" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
-
-    if [ -z "$user_prefix_for_api" ]; then
-        return 1
-    fi
-    
-    api_response=$(fetch_rule_api "$user_prefix_for_api")
-    if [ $? -ne 0 ]; then
-        return 1
-    fi
-    
     if [ -z "$api_response" ]; then
         return 1
     fi
@@ -518,8 +509,13 @@ test_internet_map_main() {
         return 1
     fi
 
-    if ! get_rule_from_api "$WAN6_NAME"; then
+    if ! fetch_rule_api; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    if ! get_rule_api; then
+        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
         return 1
     fi
 
@@ -561,8 +557,13 @@ internet_map_main() {
         return 1
     fi
 
-    if ! get_rule_from_api "$WAN6_NAME"; then
+    if ! fetch_rule_api; then
         printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    if ! get_rule_api; then
+        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
         return 1
     fi
 
