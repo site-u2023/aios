@@ -35,7 +35,6 @@ OS_VERSION=""
 API_RESPONSE=""
 
 initialize_info() {
-
     if [ -f "/etc/openwrt_release" ]; then
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
@@ -221,32 +220,36 @@ EOF
     return 0
 }
 
-configure_openwrt_mape() {
-    
+configure_openwrt_mape() {    
     cp /etc/config/network /etc/config/network.map-e.bak 2>/dev/null
     cp /etc/config/dhcp /etc/config/dhcp.map-e.bak 2>/dev/null
     cp /etc/config/firewall /etc/config/firewall.map-e.bak 2>/dev/null
+
+    uci -q set network.${WAN_NAME}.disabled='1'
+    uci -q set network.${WAN_NAME}.auto='0'
+    uci -q set network.${WAN6_NAME}.disabled='1'
+    uci -q set network.${WAN6_NAME}.auto='0'
     
-    if ! uci -q get network.lan >/dev/null; then
-        uci -q set network.lan=interface
-        uci -q set network.lan.proto='static'
-        uci -q set network.lan.device="${LAN_DEF}"
-        uci -q set network.lan.ipaddr="${LAN_IPADDR}"
-        uci -q set network.lan.netmask='255.255.255.0'
+    if ! uci -q get network.${LAN_NAME} >/dev/null; then
+        uci -q set network.${LAN_NAME}=interface
+        uci -q set network.${LAN_NAME}.proto='static'
+        uci -q set network.${LAN_NAME}.device="${LAN_DEF}"
+        uci -q set network.${LAN_NAME}.ipaddr="${LAN_IPADDR}"
+        uci -q set network.${LAN_NAME}.netmask='255.255.255.0'
     fi
-    
-    if ! uci -q get dhcp.lan >/dev/null; then
-        uci -q set dhcp.lan=dhcp
-        uci -q set dhcp.lan.interface='lan'
-        uci -q set dhcp.lan.start='100'
-        uci -q set dhcp.lan.limit='150'
-        uci -q set dhcp.lan.leasetime='12h'
+
+    if ! uci -q get dhcp.${LAN_NAME} >/dev/null; then
+        uci -q set dhcp.${LAN_NAME}=dhcp
+        uci -q set dhcp.${LAN_NAME}.interface="${LAN_NAME}"
+        uci -q set dhcp.${LAN_NAME}.start='100'
+        uci -q set dhcp.${LAN_NAME}.limit='150'
+        uci -q set dhcp.${LAN_NAME}.leasetime='12h'
     fi
-    
-    uci -q set dhcp.lan.ra='relay'
-    uci -q set dhcp.lan.dhcpv6='relay'
-    uci -q set dhcp.lan.ndp='relay'
-    uci -q set dhcp.lan.force='1'
+
+    uci -q set dhcp.${LAN_NAME}.ra='relay'
+    uci -q set dhcp.${LAN_NAME}.dhcpv6='relay'
+    uci -q set dhcp.${LAN_NAME}.ndp='relay'
+    uci -q set dhcp.${LAN_NAME}.force='1'
 
     uci -q delete network.${WANMAP6_NAME}
     uci -q delete dhcp.${WANMAP6_NAME}
@@ -281,7 +284,7 @@ configure_openwrt_mape() {
     if [ -n "$NET_ADDR6" ]; then 
         uci -q set network.${WANMAP6_NAME}.ip6prefix="$WAN6_PREFIX"
     fi
-    
+
     if echo "$OS_VERSION" | grep -q "^19"; then
         uci -q delete network.${WANMAP_NAME}.legacymap
         uci -q delete network.${WANMAP_NAME}.tunlink 
@@ -291,17 +294,22 @@ configure_openwrt_mape() {
         uci -q set network.${WANMAP_NAME}.tunlink="${WANMAP6_NAME}"
         uci -q set dhcp.${WANMAP6_NAME}.ignore='1'
     fi
-    
+
     local current_firewall_wan_networks
     current_firewall_wan_networks=$(uci -q get firewall.@zone[1].network 2>/dev/null)
-    if ! echo "$current_firewall_wan_networks" | grep -q "\b${WANMAP_NAME}\b"; then
+    if ! echo "$current_firewall_wan_networks" | grep -qw "${WANMAP_NAME}"; then
         uci -q add_list firewall.@zone[1].network="${WANMAP_NAME}"
     fi
-    if ! echo "$current_firewall_wan_networks" | grep -q "\b${WANMAP6_NAME}\b"; then
+    if ! echo "$current_firewall_wan_networks" | grep -qw "${WANMAP6_NAME}"; then
         uci -q add_list firewall.@zone[1].network="${WANMAP6_NAME}"
     fi
+    local current_firewall_lan_networks
+    current_firewall_lan_networks=$(uci -q get firewall.@zone[0].network 2>/dev/null)
+    if ! echo "$current_firewall_lan_networks" | grep -qw "${LAN_NAME}"; then
+        uci -q add_list firewall.@zone[0].network="${LAN_NAME}"
+    fi
     uci -q set firewall.@zone[1].masq='1'
-    uci -q set firewall.@zone[1].mtu_fix='1'  
+    uci -q set firewall.@zone[1].mtu_fix='1'
     local commit_failed=0
 
     uci -q commit network
@@ -313,7 +321,7 @@ configure_openwrt_mape() {
     if [ "$commit_failed" -eq 1 ]; then
         return 1
     fi
-    
+
     return 0
 }
 
@@ -387,6 +395,48 @@ replace_map_sh() {
     return 1
 }
 
+restore_mape() {
+    local error_occurred=0
+    local file_pairs
+    local item
+    local original_file
+    local backup_file
+
+    file_pairs="
+        /etc/config/network:/etc/config/network.map-e.bak
+        /etc/config/dhcp:/etc/config/dhcp.map-e.bak
+        /etc/config/firewall:/etc/config/firewall.map-e.bak
+        /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
+    "
+
+    for item in $file_pairs; do
+        original_file="${item%%:*}"
+        backup_file="${item#*:}"
+
+        [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
+    done
+
+    if opkg list-installed | grep -q '^map '; then
+        if ! opkg remove map >/dev/null 2>&1; then
+            error_occurred=1
+        fi
+    fi
+    
+    if [ "$error_occurred" -ne 0 ]; then
+        printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    printf "\033[32mUCI設定復元成功。\033[0m\n"
+    printf "\033[32mMAPスクリプト復元成功。\033[0m\n"
+    printf "\033[32mMAPパッケージ削除成功。\033[0m\n"
+    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
+    read -r -n 1 -s
+    reboot
+    
+    return 0
+}
+
 display_mape() {
     local ipv6_label
     case "$NET_ADDR6" in
@@ -448,57 +498,26 @@ display_mape() {
     return 0
 }
 
-restore_mape() {
-    local error_occurred=0
-    local file_pairs
-    local item
-    local original_file
-    local backup_file
+internet_map_common() {
+    local api_mode="$1"
+    local apply_mode="$2"
+    local ocn_code="$3"
 
-    file_pairs="
-        /etc/config/network:/etc/config/network.map-e.bak
-        /etc/config/dhcp:/etc/config/dhcp.map-e.bak
-        /etc/config/firewall:/etc/config/firewall.map-e.bak
-        /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
-    "
-
-    for item in $file_pairs; do
-        original_file="${item%%:*}"
-        backup_file="${item#*:}"
-
-        [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
-    done
-
-    if opkg list-installed | grep -q '^map '; then
-        if ! opkg remove map >/dev/null 2>&1; then
-            error_occurred=1
+    if ! initialize_info; then
+        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
+        return 1
+    fi
+    if [ "$api_mode" = "ocn" ]; then
+        if ! fetch_rule_api_ocn "$ocn_code"; then
+            printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
+            return 1
+        fi
+    else
+        if ! fetch_rule_api; then
+            printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
+            return 1
         fi
     fi
-    
-    if [ "$error_occurred" -ne 0 ]; then
-        printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
-        return 1
-    fi
-
-    printf "\033[32mUCI設定復元成功。\033[0m\n"
-    printf "\033[32mMAPスクリプト復元成功。\033[0m\n"
-    printf "\033[32mMAPパッケージ削除成功。\033[0m\n"
-    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
-    read -r -n 1 -s
-    reboot
-    
-    return 0
-}
-
-internet_map_ocn_main() {
-    if ! initialize_info; then
-        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
-        return 1
-    fi
-    if ! fetch_rule_api_ocn "$1"; then
-        printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
-        return 1
-    fi
     if ! get_rule_api; then
         printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
         return 1
@@ -520,98 +539,38 @@ internet_map_ocn_main() {
         return 1
     fi
 
-    printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"    
+    if [ "$apply_mode" = "apply" ]; then
+        if ! install_map_package; then
+            printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
+            return 1
+        else
+            printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
+        fi
+        if ! replace_map_sh; then
+            printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
+            return 1
+        else
+            printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
+        fi
+        if ! configure_openwrt_mape; then
+            printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
+            return 1
+        else
+            printf "\033[32mUCI設定適用成功。\033[0m\n"
+        fi
+        printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
+        read -r -n1 -s
+        reboot
+    else
+        printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"
+    fi
     return 0
 }
 
-test_internet_map_main() {
-    if ! initialize_info; then
-        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
-        return 1
-    fi
-    if ! fetch_rule_api; then
-        printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! get_rule_api; then
-        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if [ -z "$USER_IPV6_ADDR" ]; then
-        printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
-        return 1
-    fi
-    if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
-        printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! calculate_mape_params; then
-        printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! display_mape; then
-        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
-        return 1
-    fi
+test_internet_map_ocn_main()  { internet_map_common "ocn" "dry" "$1"; }
+test_internet_map_main()      { internet_map_common "default" "dry"; }
+internet_map_main()           { internet_map_common "default" "apply"; }
 
-    printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"    
-    return 0
-}
-
-internet_map_main() {
-    if ! initialize_info; then
-        printf "\033[31mERROR: IPv6初期化失敗、または非対応環境。\033[0m\n" >&2
-        return 1
-    fi
-    if ! fetch_rule_api; then
-        printf "\033[31mERROR: MAP-Eルール取得失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! get_rule_api; then
-        printf "\033[31mERROR: MAP-Eルール解析失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if [ -z "$USER_IPV6_ADDR" ]; then
-        printf "\033[31mERROR: ユーザーIPv6アドレス未設定。\033[0m\n" >&2
-        return 1
-    fi
-    if ! parse_user_ipv6 "$USER_IPV6_ADDR"; then
-        printf "\033[31mERROR: IPv6アドレス解析失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! calculate_mape_params; then
-        printf "\033[31mERROR: MAP-Eパラメータ計算失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! display_mape; then
-        printf "\033[31mERROR: MAP-Eパラメータ表示失敗。\033[0m\n" >&2
-        return 1
-    fi
-    if ! install_map_package; then
-        printf "\033[31mERROR: MAPパッケージ導入失敗。\033[0m\n" >&2
-        return 1
-    else
-        printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
-    fi
-    if ! replace_map_sh; then
-        printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
-        return 1
-    else
-        printf "\033[32mMAPスクリプト更新成功。\033[0m\n"
-    fi
-    if ! configure_openwrt_mape; then
-        printf "\033[31mERROR: UCI設定適用失敗。\033[0m\n" >&2
-        return 1
-    else
-        printf "\033[32mUCI設定適用成功。\033[0m\n"
-    fi
-   
-    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
-    read -r -n1 -s
-    reboot
-    return 0
-}
-
-# internet_map_ocn_main "$@"
+# test_internet_map_ocn_main "$@"
 # test_internet_map_main
 # internet_map_main
