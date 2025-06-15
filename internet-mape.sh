@@ -577,11 +577,9 @@ test_internet_map_main() {
         read input_ipv6
         if [ -n "$input_ipv6" ]; then
             USER_IPV6_ADDR="$input_ipv6"
-            USER_IPV6_PREFIX=$(echo "$input_ipv6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
         fi
     else
         USER_IPV6_ADDR="$1"
-        USER_IPV6_PREFIX=$(echo "$1" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
     fi
     internet_map_common "default" "dry"
 }
