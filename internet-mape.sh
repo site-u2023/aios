@@ -67,6 +67,7 @@ initialize_info() {
         /etc/init.d/sysntpd restart >/dev/null 2>&1
         sleep 5
     fi
+    
     return 0
 }
 
@@ -107,40 +108,6 @@ fetch_rule_api_ocn() {
     }')
 
     [ -z "$API_RESPONSE" ] && return 1 || return 0
-}
-
-OK_get_rule_api() {
-    local api_response="$API_RESPONSE"
-    
-    BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
-
-    [ -z "$api_response" ] && return 1
-    
-    eval $(echo "$api_response" | awk -F'"' '
-    BEGIN { ipv6_raw="" }
-    {
-        if($2=="brIpv6Address") print "BR=\""$4"\""
-        else if($2=="eaBitLength") print "EALEN=\""$4"\""
-        else if($2=="ipv4Prefix") print "IPV4_NET_PREFIX=\""$4"\""
-        else if($2=="ipv4PrefixLength") print "IP4PREFIXLEN=\""$4"\""
-        else if($2=="ipv6Prefix") ipv6_raw=$4
-        else if($2=="ipv6PrefixLength") print "IPV6_RULE_PREFIXLEN=\""$4"\""
-        else if($2=="psIdOffset") print "OFFSET=\""$4"\""
-    }
-    END {
-        if(ipv6_raw != "") {
-            gsub(/:0+([0-9a-fA-F])/, ":\\1", ipv6_raw)
-            gsub(/:0+$/, "::", ipv6_raw)
-            gsub(/^0+:/, "::", ipv6_raw)
-            gsub(/:::+/, "::", ipv6_raw)
-            if(ipv6_raw == "0" || ipv6_raw == ":") ipv6_raw = "::"
-            print "IPV6_RULE_PREFIX=\"" ipv6_raw "\""
-        }
-    }')
-
-    [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ] && return 1
-    
-    return 0
 }
 
 get_rule_api() {
@@ -228,65 +195,7 @@ parse_user_ipv6() {
         USER_IPV6_HEXTETS=""
         return 1
     fi
-    return 0
-}
-
-OK_calculate_mape_params() {
-    [ -z "$USER_IPV6_HEXTETS" ] && return 1
-    [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$OFFSET" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] && return 1
-
-    set -- $USER_IPV6_HEXTETS
-    local h0_val=$((0x${1:-0}))
-    local h1_val=$((0x${2:-0}))
-    local h2_val=$((0x${3:-0}))
-    local h3_val=$((0x${4:-0}))
-
-    local user_ipv6_first64bits=$(( (h0_val << 48) | (h1_val << 32) | (h2_val << 16) | h3_val ))
-
-    local ealen_num=$((EALEN))
-    local rule_prefixlen_num=$((IPV6_RULE_PREFIXLEN))
-    local ip4prefixlen_num=$((IP4PREFIXLEN))
-    local ea_bits_end_offset=$((64 - rule_prefixlen_num - ealen_num))
-
-    [ "$ea_bits_end_offset" -lt 0 ] && return 1
-
-    local ea_bits=$(( (user_ipv6_first64bits >> ea_bits_end_offset) & ((1 << ealen_num) - 1) ))
-
-    local ipv4_suffix_len_num=$((32 - ip4prefixlen_num))
-    [ "$ipv4_suffix_len_num" -lt 0 ] && return 1
-
-    PSIDLEN=$((ealen_num - ipv4_suffix_len_num))
-    [ "$PSIDLEN" -lt 0 ] && PSIDLEN=0
-    [ "$PSIDLEN" -gt 16 ] && return 1
-
-    local ipv4_suffix=$(( ea_bits >> PSIDLEN ))
-    PSID=$(( ea_bits & ((1 << PSIDLEN) - 1) ))
-
-    local ipv4_work="$IPV4_NET_PREFIX"
-    local o1_val="${ipv4_work%%.*}"; ipv4_work="${ipv4_work#*.}"
-    local o2_val="${ipv4_work%%.*}"; ipv4_work="${ipv4_work#*.}"
-    local o3_val="${ipv4_work%%.*}"
-    local o4_val="${ipv4_work#*.}"
-
-    if [ "$ipv4_suffix_len_num" -gt 0 ]; then
-        case "$ipv4_suffix_len_num" in
-            [1-8])   o4_val=$(( o4_val | ipv4_suffix )) ;;
-            [9-16])  o3_val=$(( o3_val | (ipv4_suffix >> 8) ))
-                     o4_val=$(( o4_val | (ipv4_suffix & 0xFF) )) ;;
-            [17-24]) o2_val=$(( o2_val | (ipv4_suffix >> 16) ))
-                     o3_val=$(( o3_val | ((ipv4_suffix >> 8) & 0xFF) ))
-                     o4_val=$(( o4_val | (ipv4_suffix & 0xFF) )) ;;
-            *)       o1_val=$(( o1_val | (ipv4_suffix >> 24) ))
-                     o2_val=$(( o2_val | ((ipv4_suffix >> 16) & 0xFF) ))
-                     o3_val=$(( o3_val | ((ipv4_suffix >> 8) & 0xFF) ))
-                     o4_val=$(( o4_val | (ipv4_suffix & 0xFF) )) ;;
-        esac
-    fi
-
-    IPADDR="${o1_val}.${o2_val}.${o3_val}.${o4_val}"
-
-    CE=$(printf "%x:%x:%x:%x:%x:%x:%x:%x" "$h0_val" "$h1_val" "$h2_val" "$h3_val" "$o1_val" $(( (o2_val << 8) | o3_val )) $(( o4_val << 8 )) $(( PSID << 8 )))
-
+    
     return 0
 }
 
@@ -464,6 +373,7 @@ install_map_package() {
             fi
             ;;
     esac
+    
     return 0
 }
 
@@ -560,6 +470,7 @@ display_mape() {
     printf "\n"
     printf "Powered by \033[1mhttps://ipv4.web.fc2.com/map-e.html\033[0m\n"
     printf "\n"
+    
     return 0
 }
 
@@ -688,6 +599,7 @@ internet_map_common() {
     else
         printf "\033[33m注: 実際の設定及び再起動は行いません。\033[0m\n"
     fi
+    
     return 0
 }
 
