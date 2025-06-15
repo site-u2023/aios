@@ -109,7 +109,7 @@ fetch_rule_api_ocn() {
     [ -z "$API_RESPONSE" ] && return 1 || return 0
 }
 
-get_rule_api() {
+OK_get_rule_api() {
     local api_response="$API_RESPONSE"
     
     BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
@@ -135,6 +135,64 @@ get_rule_api() {
             gsub(/:::+/, "::", ipv6_raw)
             if(ipv6_raw == "0" || ipv6_raw == ":") ipv6_raw = "::"
             print "IPV6_RULE_PREFIX=\"" ipv6_raw "\""
+        }
+    }')
+
+    [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ] && return 1
+    
+    return 0
+}
+
+get_rule_api() {
+    local api_response="$API_RESPONSE"
+    
+    BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
+
+    [ -z "$api_response" ] && return 1
+    
+    eval $(echo "$api_response" | awk -F'"' '
+    BEGIN { ipv6_raw="" }
+    {
+        if($2=="brIpv6Address") print "BR=\""$4"\""
+        else if($2=="eaBitLength") print "EALEN=\""$4"\""
+        else if($2=="ipv4Prefix") print "IPV4_NET_PREFIX=\""$4"\""
+        else if($2=="ipv4PrefixLength") print "IP4PREFIXLEN=\""$4"\""
+        else if($2=="ipv6Prefix") ipv6_raw=$4
+        else if($2=="ipv6PrefixLength") print "IPV6_RULE_PREFIXLEN=\""$4"\""
+        else if($2=="psIdOffset") print "OFFSET=\""$4"\""
+    }
+    END {
+        if(ipv6_raw != "") {
+            # Split by colons and process each segment
+            n = split(ipv6_raw, segments, ":")
+            result = ""
+            
+            for (i = 1; i <= n; i++) {
+                if (segments[i] == "") {
+                    # Handle :: notation
+                    if (i == 1 || i == n) result = result ":"
+                    else if (substr(result, length(result)) != ":") result = result ":"
+                    result = result ":"
+                } else {
+                    # Remove leading zeros
+                    seg = segments[i]
+                    gsub(/^0+/, "", seg)
+                    if (seg == "") seg = "0"
+                    
+                    # Add colon separator if needed
+                    if (result != "" && substr(result, length(result)) != ":") {
+                        result = result ":"
+                    }
+                    result = result seg
+                }
+            }
+            
+            # Clean up consecutive colons and trailing zeros
+            gsub(/:::+/, "::", result)
+            gsub(/:0+::/, "::", result)
+            gsub(/::0$/, "::", result)
+            
+            print "IPV6_RULE_PREFIX=\"" result "\""
         }
     }')
 
@@ -177,7 +235,7 @@ parse_user_ipv6() {
     return 0
 }
 
-calculate_mape_params() {
+OK_calculate_mape_params() {
     [ -z "$USER_IPV6_HEXTETS" ] && return 1
     [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$OFFSET" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] && return 1
 
@@ -231,6 +289,55 @@ calculate_mape_params() {
 
     IPADDR="${o1_val}.${o2_val}.${o3_val}.${o4_val}"
 
+    CE=$(printf "%x:%x:%x:%x:%x:%x:%x:%x" "$h0_val" "$h1_val" "$h2_val" "$h3_val" "$o1_val" $(( (o2_val << 8) | o3_val )) $(( o4_val << 8 )) $(( PSID << 8 )))
+
+    return 0
+}
+
+calculate_mape_params() {
+    [ -z "$USER_IPV6_HEXTETS" ] && return 1
+    [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$OFFSET" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] && return 1
+
+    set -- $USER_IPV6_HEXTETS
+    local h0_val=$((0x${1:-0})) h1_val=$((0x${2:-0})) h2_val=$((0x${3:-0})) h3_val=$((0x${4:-0}))
+
+    local ealen_num=$((EALEN)) rule_prefixlen_num=$((IPV6_RULE_PREFIXLEN)) ip4prefixlen_num=$((IP4PREFIXLEN))
+    local ea_bits_end_offset=$((64 - rule_prefixlen_num - ealen_num))
+    [ "$ea_bits_end_offset" -lt 0 ] && return 1
+
+    local ea_bits ipv4_suffix_len_num=$((32 - ip4prefixlen_num))
+    [ "$ipv4_suffix_len_num" -lt 0 ] && return 1
+
+    if [ "$ea_bits_end_offset" -ge 48 ]; then
+        ea_bits=$(( (h0_val >> (ea_bits_end_offset - 48)) & ((1 << ealen_num) - 1) ))
+    elif [ "$ea_bits_end_offset" -ge 32 ]; then
+        ea_bits=$(( ((h0_val << (48 - ea_bits_end_offset)) | (h1_val >> (ea_bits_end_offset - 32))) & ((1 << ealen_num) - 1) ))
+    elif [ "$ea_bits_end_offset" -ge 16 ]; then
+        ea_bits=$(( ((h1_val << (32 - ea_bits_end_offset)) | (h2_val >> (ea_bits_end_offset - 16))) & ((1 << ealen_num) - 1) ))
+    else
+        ea_bits=$(( ((h2_val << (16 - ea_bits_end_offset)) | (h3_val >> ea_bits_end_offset)) & ((1 << ealen_num) - 1) ))
+    fi
+
+    PSIDLEN=$((ealen_num - ipv4_suffix_len_num))
+    [ "$PSIDLEN" -lt 0 ] && PSIDLEN=0
+    [ "$PSIDLEN" -gt 16 ] && return 1
+
+    local ipv4_suffix=$(( ea_bits >> PSIDLEN ))
+    PSID=$(( ea_bits & ((1 << PSIDLEN) - 1) ))
+
+    local ipv4_work="$IPV4_NET_PREFIX"
+    local o1_val="${ipv4_work%%.*}"; ipv4_work="${ipv4_work#*.}"
+    local o2_val="${ipv4_work%%.*}"; ipv4_work="${ipv4_work#*.}"
+    local o3_val="${ipv4_work%%.*}"; local o4_val="${ipv4_work#*.}"
+
+    [ "$ipv4_suffix_len_num" -gt 0 ] && {
+        o4_val=$(( o4_val | (ipv4_suffix & 0xFF) ))
+        [ "$ipv4_suffix_len_num" -gt 8 ] && o3_val=$(( o3_val | ((ipv4_suffix >> 8) & 0xFF) ))
+        [ "$ipv4_suffix_len_num" -gt 16 ] && o2_val=$(( o2_val | ((ipv4_suffix >> 16) & 0xFF) ))
+        [ "$ipv4_suffix_len_num" -gt 24 ] && o1_val=$(( o1_val | ((ipv4_suffix >> 24) & 0xFF) ))
+    }
+
+    IPADDR="${o1_val}.${o2_val}.${o3_val}.${o4_val}"
     CE=$(printf "%x:%x:%x:%x:%x:%x:%x:%x" "$h0_val" "$h1_val" "$h2_val" "$h3_val" "$o1_val" $(( (o2_val << 8) | o3_val )) $(( o4_val << 8 )) $(( PSID << 8 )))
 
     return 0
