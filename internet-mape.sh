@@ -395,48 +395,6 @@ replace_map_sh() {
     return 1
 }
 
-restore_mape() {
-    local error_occurred=0
-    local file_pairs
-    local item
-    local original_file
-    local backup_file
-
-    file_pairs="
-        /etc/config/network:/etc/config/network.map-e.bak
-        /etc/config/dhcp:/etc/config/dhcp.map-e.bak
-        /etc/config/firewall:/etc/config/firewall.map-e.bak
-        /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
-    "
-
-    for item in $file_pairs; do
-        original_file="${item%%:*}"
-        backup_file="${item#*:}"
-
-        [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
-    done
-
-    if opkg list-installed | grep -q '^map '; then
-        if ! opkg remove map >/dev/null 2>&1; then
-            error_occurred=1
-        fi
-    fi
-    
-    if [ "$error_occurred" -ne 0 ]; then
-        printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
-        return 1
-    fi
-
-    printf "\033[32mUCI設定復元成功。\033[0m\n"
-    printf "\033[32mMAPスクリプト復元成功。\033[0m\n"
-    printf "\033[32mMAPパッケージ削除成功。\033[0m\n"
-    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
-    read -r -n 1 -s
-    reboot
-    
-    return 0
-}
-
 display_mape() {
     local ipv6_label
     case "$NET_ADDR6" in
@@ -495,6 +453,48 @@ display_mape() {
     printf "\n"
     printf "Powered by \033[1mhttps://ipv4.web.fc2.com/map-e.html\033[0m\n"
     printf "\n"
+    return 0
+}
+
+restore_mape() {
+    local error_occurred=0
+    local file_pairs
+    local item
+    local original_file
+    local backup_file
+
+    file_pairs="
+        /etc/config/network:/etc/config/network.map-e.bak
+        /etc/config/dhcp:/etc/config/dhcp.map-e.bak
+        /etc/config/firewall:/etc/config/firewall.map-e.bak
+        /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
+    "
+
+    for item in $file_pairs; do
+        original_file="${item%%:*}"
+        backup_file="${item#*:}"
+
+        [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
+    done
+
+    if opkg list-installed | grep -q '^map '; then
+        if ! opkg remove map >/dev/null 2>&1; then
+            error_occurred=1
+        fi
+    fi
+    
+    if [ "$error_occurred" -ne 0 ]; then
+        printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
+        return 1
+    fi
+
+    printf "\033[32mUCI設定復元成功。\033[0m\n"
+    printf "\033[32mMAPスクリプト復元成功。\033[0m\n"
+    printf "\033[32mMAPパッケージ削除成功。\033[0m\n"
+    printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
+    read -r -n 1 -s
+    reboot
+    
     return 0
 }
 
