@@ -61,8 +61,7 @@ initialize_info() {
 }
 
 fetch_rule_api() {
-    [ -z "$USER_IPV6_ADDR" ] && return 1
-    [ -z "$USER_IPV6_PREFIX" ] && return 1
+    [ -z "$USER_IPV6_ADDR" ] || [ -z "$USER_IPV6_PREFIX" ] && return 1
     
     API_RESPONSE=$(wget -q -O - --timeout=10 "https://map-api-worker.site-u.workers.dev/map-rule?user_prefix=${USER_IPV6_PREFIX}")
     
@@ -77,10 +76,9 @@ fetch_rule_api_ocn() {
         read -s ocn_api_code
         echo
     fi
-    [ -z "$ocn_api_code" ] && return 1
-    [ -z "$USER_IPV6_ADDR" ] && return 1
-    [ -z "$USER_IPV6_PREFIX" ] && return 1
-
+    
+    [ -z "$ocn_api_code" ] || [ -z "$USER_IPV6_ADDR" ] || [ -z "$USER_IPV6_PREFIX" ] && return 1
+    
     API_RESPONSE=$(wget -6 -q -O - --timeout=10 "https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=64&code=${ocn_api_code}")
     [ -z "$API_RESPONSE" ] && return 1
 
