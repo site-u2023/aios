@@ -116,22 +116,27 @@ get_rule_api() {
 
     [ -z "$api_response" ] && return 1
     
-    eval $(echo "$api_response" | awk -F'"' '{
+    eval $(echo "$api_response" | awk -F'"' '
+    BEGIN { ipv6_raw="" }
+    {
         if($2=="brIpv6Address") print "BR=\""$4"\""
         else if($2=="eaBitLength") print "EALEN=\""$4"\""
         else if($2=="ipv4Prefix") print "IPV4_NET_PREFIX=\""$4"\""
         else if($2=="ipv4PrefixLength") print "IP4PREFIXLEN=\""$4"\""
-        else if($2=="ipv6Prefix") print "IPV6_RULE_PREFIX_RAW=\""$4"\"" 
+        else if($2=="ipv6Prefix") ipv6_raw=$4
         else if($2=="ipv6PrefixLength") print "IPV6_RULE_PREFIXLEN=\""$4"\""
         else if($2=="psIdOffset") print "OFFSET=\""$4"\""
+    }
+    END {
+        if(ipv6_raw != "") {
+            gsub(/:0+([0-9a-fA-F])/, ":\\1", ipv6_raw)
+            gsub(/:0+$/, "::", ipv6_raw)
+            gsub(/^0+:/, "::", ipv6_raw)
+            gsub(/:::+/, "::", ipv6_raw)
+            if(ipv6_raw == "0" || ipv6_raw == ":") ipv6_raw = "::"
+            print "IPV6_RULE_PREFIX=\"" ipv6_raw "\""
+        }
     }')
-
-    if [ -n "$IPV6_RULE_PREFIX_RAW" ]; then
-        IPV6_RULE_PREFIX=$(echo "$IPV6_RULE_PREFIX_RAW" | \
-            awk 'BEGIN{FS=OFS=":"} {for(i=1;i<=NF;i++){if($i==""){continue} else {sub(/^0+/,"",$i); if($i==""){$i="0"}}}}1' | sed 's/:0::/::/g; s/^0::/::/g; s/:0:0:0:0:0:0/:/g; s/:0:0:0:0:0/:/g; s/:0:0:0:0/:/g; s/:0:0:0/:/g; s/:0:0/:/g; s/:0$/::/g' | sed 's/:::/::/g')
-        if [ "$IPV6_RULE_PREFIX" = "0" ] || [ "$IPV6_RULE_PREFIX" = ":" ]; then IPV6_RULE_PREFIX="::"; fi
-    fi
-    unset IPV6_RULE_PREFIX_RAW
 
     [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ] && return 1
     
