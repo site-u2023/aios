@@ -380,10 +380,8 @@ install_map_package() {
 replace_map_sh() {
     local proto_script_path="/lib/netifd/proto/map.sh"
     local backup_script_path="${proto_script_path}.bak"
-    local osversion=""
     local source_url=""
     local wget_rc
-    local chmod_rc
 
     if echo "$OS_VERSION" | grep -q "^19"; then
         source_url="https://raw.githubusercontent.com/site-u2023/map-e/main/map.sh.19"
@@ -399,7 +397,7 @@ replace_map_sh() {
         fi
     fi
 
-    command wget -q ${WGET_IPV_OPT} --no-check-certificate -O "$proto_script_path" "$source_url"
+    command wget -6 -q -O "$proto_script_path" --timeout=10 --no-check-certificate "$source_url"
     wget_rc=$?
     if [ "$wget_rc" -eq 0 ]; then
         if [ -s "$proto_script_path" ]; then
