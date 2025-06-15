@@ -35,6 +35,11 @@ OS_VERSION=""
 API_RESPONSE=""
 
 initialize_info() {
+    if [ -n "$USER_IPV6_ADDR" ]; then
+        USER_IPV6_PREFIX=$(echo "$USER_IPV6_ADDR" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+        return 0
+    fi
+    
     if [ -f "/etc/openwrt_release" ]; then
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
@@ -565,10 +570,24 @@ internet_map_common() {
     return 0
 }
 
-test_internet_map_main()      { internet_map_common "default" "dry"; }
+test_internet_map_main() {
+    local input_ipv6=""
+    if [ -z "$1" ]; then
+        printf "\nGUAまたはPDを入力してください（空欄の場合はデバイス値を利用します）: "
+        read input_ipv6
+        if [ -n "$input_ipv6" ]; then
+            USER_IPV6_ADDR="$input_ipv6"
+            USER_IPV6_PREFIX=$(echo "$input_ipv6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+        fi
+    else
+        USER_IPV6_ADDR="$1"
+        USER_IPV6_PREFIX=$(echo "$1" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+    fi
+    internet_map_common "default" "dry"
+}
 internet_map_ocn_main()       { internet_map_common "ocn" "apply" "$1"; }
 internet_map_main()           { internet_map_common "default" "apply"; }
 
 # test_internet_map_ocn_main "$@"
-# test_internet_map_main
+# test_internet_map_main "$@"
 # internet_map_main
