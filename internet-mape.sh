@@ -622,6 +622,6 @@ test_internet_map_main() {
 internet_map_ocn_main()       { internet_map_common "ocn" "apply" "$1"; }
 internet_map_main()           { internet_map_common "default" "apply"; }
 
-# test_internet_map_ocn_main "$@"
 # test_internet_map_main "$@"
+# internet_map_ocn_main "$@"
 # internet_map_main
