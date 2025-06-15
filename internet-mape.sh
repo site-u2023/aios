@@ -253,9 +253,7 @@ EOF
     local ce_h6=$(printf "%x" $(( o4_val_calc << 8 )) )
     local ce_h7=$(printf "%x" $(( PSID << 8 )) )
 
-    CE=$(printf "%s:%s:%s:%s:%s:%s:%s:%s" \
-        "$ce_h0_disp" "$ce_h1_disp" "$ce_h2_disp" "$ce_h3_disp" \
-        "$ce_h4" "$ce_h5" "$ce_h6" "$ce_h7")
+    CE=$(printf "%s:%s:%s:%s:%s:%s:%s:%s" "$ce_h0_disp" "$ce_h1_disp" "$ce_h2_disp" "$ce_h3_disp" "$ce_h4" "$ce_h5" "$ce_h6" "$ce_h7")
         
     return 0
 }
