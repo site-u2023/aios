@@ -38,7 +38,7 @@ initialize_info() {
     if [ -f "/etc/openwrt_release" ]; then
         OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2)
     fi
-    
+
     if . /lib/functions.sh && . /lib/functions/network.sh; then
         network_flush_cache
         network_find_wan6 NET_IF6
@@ -46,18 +46,23 @@ initialize_info() {
         return 1
     fi
 
+    local ipv6_addr=""
     if network_get_ipaddr6 NET_ADDR6 "$NET_IF6" && [ -n "$NET_ADDR6" ]; then
-        USER_IPV6_ADDR="$NET_ADDR6"
-        USER_IPV6_PREFIX=$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
-        WAN6_PREFIX="${USER_IPV6_PREFIX}/64"
-        return 0
+        ipv6_addr="$NET_ADDR6"
+        WAN6_PREFIX="$(echo "$NET_ADDR6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::/64", $1, $2, $3, $4}')"
     elif network_get_prefix6 NET_PFX6 "$NET_IF6" && [ -n "$NET_PFX6" ]; then
-        USER_IPV6_ADDR="$NET_PFX6"
-        USER_IPV6_PREFIX=$(echo "$NET_PFX6" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
-        return 0
+        ipv6_addr="$NET_PFX6"
     else
         return 1
     fi
+    USER_IPV6_ADDR="$ipv6_addr"
+    USER_IPV6_PREFIX=$(echo "$ipv6_addr" | awk -F'[/:]' '{printf "%s:%s:%s:%s::", $1, $2, $3, $4}')
+
+    if command -v /etc/init.d/sysntpd >/dev/null 2>&1; then
+        /etc/init.d/sysntpd restart >/dev/null 2>&1
+        sleep 5
+    fi
+    return 0
 }
 
 fetch_rule_api() {
@@ -316,11 +321,6 @@ install_map_package() {
     else
         return 1
     fi
-
-    if command -v /etc/init.d/sysntpd >/dev/null 2>&1; then
-        /etc/init.d/sysntpd restart >/dev/null 2>&1
-        sleep 5
-    fi
     
     case "$pkg_manager" in
         "opkg")
@@ -438,12 +438,9 @@ display_mape() {
 }
 
 restore_mape() {
-    local error_occurred=0
     local file_pairs
-    local item
-    local original_file
-    local backup_file
-
+    local pkg_manager
+    
     file_pairs="
         /etc/config/network:/etc/config/network.map-e.bak
         /etc/config/dhcp:/etc/config/dhcp.map-e.bak
@@ -451,31 +448,51 @@ restore_mape() {
         /lib/netifd/proto/map.sh:/lib/netifd/proto/map.sh.bak
     "
 
+    if command -v opkg >/dev/null 2>&1; then
+        pkg_manager="opkg"
+    elif command -v apk >/dev/null 2>&1; then
+        pkg_manager="apk"
+    fi
+
+    local error_msg="\033[31mERROR: 復元処理に失敗しました。\033[0m"
+    local item original_file backup_file
     for item in $file_pairs; do
         original_file="${item%%:*}"
         backup_file="${item#*:}"
-
-        [ ! -f "$backup_file" ] || (cp "$backup_file" "$original_file" && rm "$backup_file") || error_occurred=1
-    done
-
-    if opkg list-installed | grep -q '^map '; then
-        if ! opkg remove map >/dev/null 2>&1; then
-            error_occurred=1
+        if [ -f "$backup_file" ]; then
+            if ! (cp "$backup_file" "$original_file" && rm "$backup_file"); then
+                printf "$error_msg\n" >&2
+                return 1
+            fi
         fi
-    fi
-    
-    if [ "$error_occurred" -ne 0 ]; then
-        printf "\033[31mUCI設定復元失敗。\033[0m\n" >&2
-        return 1
-    fi
-
+    done
     printf "\033[32mUCI設定復元成功。\033[0m\n"
     printf "\033[32mMAPスクリプト復元成功。\033[0m\n"
+
+    local pkg_error_msg="\033[31mERROR: パッケージ削除に失敗しました。\033[0m"
+    case "$pkg_manager" in
+        opkg)
+            if opkg list-installed | grep -q '^map '; then
+                if ! opkg remove map >/dev/null 2>&1; then
+                    printf "$pkg_error_msg\n" >&2
+                    return 1
+                fi
+            fi
+            ;;
+        apk)
+            if apk info -e map >/dev/null 2>&1; then
+                if ! apk del map >/dev/null 2>&1; then
+                    printf "$pkg_error_msg\n" >&2
+                    return 1
+                fi
+            fi
+            ;;
+    esac
     printf "\033[32mMAPパッケージ削除成功。\033[0m\n"
+
     printf "\033[33m何かキーを押すとデバイスを再起動します。\033[0m\n"
     read -r -n 1 -s
     reboot
-    
     return 0
 }
 
