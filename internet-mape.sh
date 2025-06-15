@@ -81,6 +81,7 @@ fetch_rule_api() {
 
 fetch_rule_api_ocn() {
     local ocn_api_code="$1"
+    local user_ipv6_prefix_len="${user_ipv6_prefix_len:-64}"
     
     if [ -z "$ocn_api_code" ]; then
         printf "\nOCN APIコードを入力してください: "
@@ -88,9 +89,13 @@ fetch_rule_api_ocn() {
         echo
     fi
     
-    [ -z "$ocn_api_code" ] || [ -z "$USER_IPV6_ADDR" ] || [ -z "$USER_IPV6_PREFIX" ] && return 1
+    [ -z "$ocn_api_code" ] || [ -z "$USER_IPV6_PREFIX" ] && return 1
+
+    if [ -n "$NET_PFX6" ]; then
+        user_ipv6_prefix_len=$(echo "$NET_PFX6" | cut -d'/' -f2)
+    fi
     
-    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=64&code=${ocn_api_code}")
+    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=${user_ipv6_prefix_len}&code=${ocn_api_code}")
     [ -z "$API_RESPONSE" ] && return 1
 
     API_RESPONSE=$(echo "$API_RESPONSE" | awk '
