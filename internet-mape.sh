@@ -377,7 +377,7 @@ install_map_package() {
     return 0
 }
 
-replace_map_sh() {
+replace_map() {
     local proto_script_path="/lib/netifd/proto/map.sh"
     local backup_script_path="${proto_script_path}.bak"
     local source_url=""
@@ -579,7 +579,7 @@ internet_map_common() {
         else
             printf "\033[32mMAPパッケージ導入成功。\033[0m\n"
         fi
-        if ! replace_map_sh; then
+        if ! replace_map; then
             printf "\033[31mERROR: MAPスクリプト更新失敗。\033[0m\n" >&2
             return 1
         else
