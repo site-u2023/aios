@@ -291,8 +291,8 @@ configure_openwrt_mape() {
     fi
     uci -q set firewall.@zone[1].masq='1'
     uci -q set firewall.@zone[1].mtu_fix='1'
+    
     local commit_failed=0
-
     uci -q commit network
     if [ $? -ne 0 ]; then commit_failed=1; fi
     uci -q commit dhcp
