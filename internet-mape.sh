@@ -143,7 +143,7 @@ OK_get_rule_api() {
     return 0
 }
 
-OK_get_rule_api() {
+get_rule_api() {
     local api_response="$API_RESPONSE"
     
     BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
@@ -189,41 +189,6 @@ OK_get_rule_api() {
             gsub(/::0$/, "::", result)
             
             print "IPV6_RULE_PREFIX=\"" result "\""
-        }
-    }')
-
-    [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_NET_PREFIX" ] || [ -z "$IP4PREFIXLEN" ] || [ -z "$IPV6_RULE_PREFIX" ] || [ -z "$IPV6_RULE_PREFIXLEN" ] || [ -z "$OFFSET" ] && return 1
-    
-    return 0
-}
-
-get_rule_api() {
-    local api_response="$API_RESPONSE"
-    
-    BR=""; EALEN=""; IPV4_NET_PREFIX=""; IP4PREFIXLEN=""; IPV6_RULE_PREFIX=""; IPV6_RULE_PREFIXLEN=""; OFFSET=""
-
-    [ -z "$api_response" ] && return 1
-    
-    eval $(echo "$api_response" | awk -F'"' '
-    BEGIN { ipv6_raw="" }
-    {
-        if($2=="brIpv6Address") print "BR=\""$4"\""
-        else if($2=="eaBitLength") print "EALEN=\""$4"\""
-        else if($2=="ipv4Prefix") print "IPV4_NET_PREFIX=\""$4"\""
-        else if($2=="ipv4PrefixLength") print "IP4PREFIXLEN=\""$4"\""
-        else if($2=="ipv6Prefix") ipv6_raw=$4
-        else if($2=="ipv6PrefixLength") print "IPV6_RULE_PREFIXLEN=\""$4"\""
-        else if($2=="psIdOffset") print "OFFSET=\""$4"\""
-    }
-    END {
-        if(ipv6_raw != "") {
-            gsub(/(^|:)0+([1-9a-fA-F])/, "\\1\\2", ipv6_raw)
-            gsub(/(^|:)0+$/, "\\1", ipv6_raw)
-            gsub(/(^|:)0000(:|$)/, "\\1\\2", ipv6_raw)
-            gsub(/::+/, "::", ipv6_raw)
-            gsub(/^:([^:])/, "\\1", ipv6_raw)
-            gsub(/([^:]):$/, "\\1", ipv6_raw)
-            print "IPV6_RULE_PREFIX=\"" ipv6_raw "\""
         }
     }')
 
