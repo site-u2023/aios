@@ -169,7 +169,7 @@ get_rule_api() {
     return 0
 }
 
-parse_user_ipv6() {
+OK_parse_user_ipv6() {
     local ipv6_to_parse="$1"
     if [ -z "$ipv6_to_parse" ]; then
         USER_IPV6_HEXTETS=""
@@ -201,6 +201,63 @@ parse_user_ipv6() {
         return 1
     fi
     
+    return 0
+}
+
+parse_user_ipv6() {
+    local ipv6_to_parse="$1"
+    [ -z "$ipv6_to_parse" ] && { USER_IPV6_HEXTETS=""; return 1; }
+    
+    ipv6_to_parse=${ipv6_to_parse%/*}
+    
+    if [ "${ipv6_to_parse}" != "${ipv6_to_parse#*::}" ]; then
+        local before="${ipv6_to_parse%::*}"
+        local after="${ipv6_to_parse#*::}"
+        [ "$before" = "$ipv6_to_parse" ] && before=""
+        [ "$after" = "$ipv6_to_parse" ] && after=""
+        
+        local before_count=0 after_count=0
+        if [ -n "$before" ]; then
+            before_count=1
+            local temp="$before"
+            while [ "${temp#*:}" != "$temp" ]; do
+                before_count=$((before_count + 1))
+                temp="${temp#*:}"
+            done
+        fi
+        if [ -n "$after" ]; then
+            after_count=1
+            local temp="$after"
+            while [ "${temp#*:}" != "$temp" ]; do
+                after_count=$((after_count + 1))
+                temp="${temp#*:}"
+            done
+        fi
+        
+        local zero_count=$((8 - before_count - after_count))
+        local zeros=""
+        while [ $((zero_count -= 1)) -ge 0 ]; do
+            zeros="$zeros:0"
+        done
+        
+        ipv6_to_parse="$before$zeros"
+        [ -n "$after" ] && ipv6_to_parse="$ipv6_to_parse:$after"
+        ipv6_to_parse=${ipv6_to_parse#:}
+    fi
+    
+    USER_IPV6_HEXTETS=""
+    local IFS=':'
+    set -- $ipv6_to_parse
+    
+    [ $# -ne 8 ] && { USER_IPV6_HEXTETS=""; return 1; }
+    
+    for segment in "$@"; do
+        segment="0000$segment"
+        segment=${segment#${segment%????}}
+        USER_IPV6_HEXTETS="$USER_IPV6_HEXTETS$segment "
+    done
+    
+    USER_IPV6_HEXTETS=${USER_IPV6_HEXTETS% }
     return 0
 }
 
@@ -622,6 +679,6 @@ test_internet_map_main() {
 internet_map_ocn_main()       { internet_map_common "ocn" "apply" "$1"; }
 internet_map_main()           { internet_map_common "default" "apply"; }
 
-# test_internet_map_main "$@"
+test_internet_map_main "$@"
 # internet_map_ocn_main "$@"
 # internet_map_main
