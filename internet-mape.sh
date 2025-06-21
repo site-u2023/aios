@@ -632,7 +632,7 @@ internet_map_common() {
 test_internet_map_main() {
     local input_ipv6=""
     if [ -z "$1" ]; then
-        printf "\nGUAまたはPDを入力してください（空欄の場合はデバイスで取得したGUAまたPDを利用します）: "
+        printf "\nGUAまたはPDを入力してください（空欄の場合はデバイスで取得した値を利用します）: "
         read input_ipv6
         if [ -n "$input_ipv6" ]; then
             USER_IPV6_ADDR="$input_ipv6"
