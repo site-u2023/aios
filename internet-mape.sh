@@ -3,7 +3,7 @@
 # OpenWrt 19.07+ configuration
 # Powered by https://ipv4.web.fc2.com/map-e.html
 
-SCRIPT_VERSION="2025.06.14-00-00"
+SCRIPT_VERSION="2025.06.21-00-00"
 
 LAN_IPADDR="192.168.1.1"
 LAN_DEF="br-lan" 
