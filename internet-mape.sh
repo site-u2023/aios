@@ -136,7 +136,6 @@ get_rule_api() {
     }
     END {
         if(ipv6_raw != "") {
-            # Split by colons and process each segment
             n = split(ipv6_raw, segments, ":")
             result = ""
             
