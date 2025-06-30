@@ -237,7 +237,7 @@ OK_update_package_list() {
 
 # パッケージリストの更新
 update_package_list() {
-    local silent_mode="$1"                     # silentモードパラメータ
+    local silent_mode="$1"                     # silentモードパラメータを追加
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
@@ -267,18 +267,18 @@ update_package_list() {
         return 0
     fi
 
-    # silent モードでない場合のみスピナー表示
+    # silent モードでない場合のみ表示
     if [ "$silent_mode" != "yes" ]; then
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
-    # PACKAGE_MANAGER を取得
+    # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
-    # ─── ここから追加：OSバージョン判定（24.10.2 以上ならフィードを差し替え） ───
+    # ─── 追加：OSバージョン判定 ───
     local osverfile="${CACHE_DIR}/osversion.ch"
     local osver major minor patch
     if [ -r "$osverfile" ]; then
@@ -296,17 +296,27 @@ EOF
     fi
     debug_log "DEBUG" "OS version ${osver} → is_new_os=${is_new_os}"
 
-    if [ "$is_new_os" -eq 1 ]; then
-        # 24.10.2 以上では custom feed の URL を差し替え
-        # (新しいミラー http://new.domain.com/packages を使用する)
-        sed -i "s|^src/gz otherfeeds .*|src/gz otherfeeds http://new.domain.com/packages/${OTHER_FEEDS}/${VERSION}/${BOARD_SUFFIX}|g" /etc/opkg/distfeeds.conf
+    # 24.10.2以上なら一時的に opkg 設定切り替え
+    local opkg_args=""
+    if [ "$PACKAGE_MANAGER" = "opkg" ] && [ "$is_new_os" -eq 1 ]; then
+        local tmp_conf="${CACHE_DIR}/opkg_override.conf"
+        cat >"$tmp_conf" <<-EOF
+dest root /
+lists_dir ext /var/opkg-lists
+option overlay_root /overlay
+option check_signature
+# 新しいシステム用フィード
+src/gz otherfeeds http://new.domain.com/packages/${OTHER_FEEDS}/${VERSION}/${BOARD_SUFFIX}
+EOF
+        opkg_args="--config $tmp_conf"
+        debug_log "DEBUG" "Using override opkg config: $tmp_conf"
     fi
-    # ───────────────────────────────────────────────────────────────
+    # ───────────────────────────────────
 
     # パッケージリストの更新実行
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "Running opkg update"
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+        opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
