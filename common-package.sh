@@ -241,40 +241,40 @@ update_package_list() {
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time cache_time max_age
-    current_time=$(date '+%s')
+    current_time=$(date +%s)
     cache_time=0
-    max_age=$((24 * 60 * 60))
+    max_age=$((24*60*60))
 
-    # キャッシュディレクトリ作成
+    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # キャッシュの有効性チェック
+    # キャッシュ有効性チェック
     local need_update="yes"
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
-        cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
+        cache_time=$(date -r "$update_cache" +%s 2>/dev/null || echo 0)
         if [ $((current_time - cache_time)) -lt $max_age ]; then
             debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
             need_update="no"
         else
-            debug_log "DEBUG" "Cache expired. Will update package list."
+            debug_log "DEBUG" "Cache expired. Updating package list."
         fi
     else
-        debug_log "DEBUG" "No cache found. Will create new package list cache."
+        debug_log "DEBUG" "No cache found. Creating new package list cache."
     fi
     [ "$need_update" = "no" ] && return 0
 
-    # スピナー表示（silentモード時は省略）
+    # スピナー表示（silentモードでは省略）
     if [ "$silent_mode" != "yes" ]; then
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
-    # パッケージマネージャ取得
+    # PACKAGE_MANAGER取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(<"${CACHE_DIR}/package_manager.ch")
     fi
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
-    # ─── OS バージョン判定（24.10.2以上） ───
+    # ─── OSバージョン判定 (24.10.2以上?) ───
     local osverfile="${CACHE_DIR}/osversion.ch"
     local osver major minor patch
     if [ -r "$osverfile" ]; then
@@ -288,78 +288,78 @@ $osver
 EOF
     local is_new_os=0
     if [ "$major" -gt 24 ] || \
-       { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
+       { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || \
+       { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
         is_new_os=1
     fi
     debug_log "DEBUG" "OS version $osver → is_new_os=$is_new_os"
 
-    # ─── 24.10.2以上なら一時 opkg 設定を用意 ───
+    # ─── 24.10.2以上＋opkg時は一時configでフィード追加 ───
     local opkg_args=""
     if [ "$PACKAGE_MANAGER" = "opkg" ] && [ "$is_new_os" -eq 1 ]; then
         local tmp_conf="${CACHE_DIR}/opkg_override.conf"
         mkdir -p "$(dirname "$tmp_conf")"
+
+        # まずシステム標準の設定を丸ごとコピー
+        cp /etc/opkg.conf "$tmp_conf"
+
+        # さらに新フィードを追記
         . /etc/openwrt_release
-        local version="$DISTRIB_RELEASE"
+        local version=$DISTRIB_RELEASE
         local board_suffix="${DISTRIB_ARCH_SUFFIX:-$(echo "$DISTRIB_ARCH" | tr '[:upper:]' '[:lower:]')}"
         local other_feeds="${OTHER_FEEDS:-luci_app}"
+        echo "src/gz otherfeeds http://new.domain.com/packages/${other_feeds}/${version}/${board_suffix}" \
+            >> "$tmp_conf"
 
-        cat >"$tmp_conf" <<-EOF
-include /etc/opkg/distfeeds.conf
-src/gz otherfeeds http://new.domain.com/packages/${other_feeds}/${version}/${board_suffix}
-EOF
         opkg_args="--config $tmp_conf"
-        debug_log "DEBUG" "Override opkg config created: $tmp_conf"
+        debug_log "DEBUG" "Using override opkg config: $tmp_conf"
     fi
 
     # ─── パッケージリスト更新 ───
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "Running: opkg $opkg_args update"
-        opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1 \
-            || {
-                [ "$silent_mode" != "yes" ] \
-                  && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
-                  || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-                debug_log "DEBUG" "opkg update failed"
-                rm -f "$update_cache"
-                return 1
-            }
+        opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1 || {
+            [ "$silent_mode" != "yes" ] \
+                && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
+                || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            debug_log "DEBUG" "opkg update failed"
+            rm -f "$update_cache"
+            return 1
+        }
         debug_log "DEBUG" "Saving package list to cache"
-        opkg list > "$package_cache" 2>/dev/null \
-            || {
-                [ "$silent_mode" != "yes" ] \
-                  && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
-                  || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-                debug_log "DEBUG" "opkg list failed"
-                rm -f "$update_cache"
-                return 1
-            }
+        opkg list > "$package_cache" 2>/dev/null || {
+            [ "$silent_mode" != "yes" ] \
+                && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
+                || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            debug_log "DEBUG" "opkg list failed"
+            rm -f "$update_cache"
+            return 1
+        }
 
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
         debug_log "DEBUG" "Running apk update"
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1 \
-            || {
-                [ "$silent_mode" != "yes" ] \
-                  && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
-                  || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-                debug_log "DEBUG" "apk update failed"
-                rm -f "$update_cache"
-                return 1
-            }
+        apk update > "${LOG_DIR}/apk_update.log" 2>&1 || {
+            [ "$silent_mode" != "yes" ] \
+                && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
+                || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            debug_log "DEBUG" "apk update failed"
+            rm -f "$update_cache"
+            return 1
+        }
         debug_log "DEBUG" "Saving package list to cache"
-        apk search > "$package_cache" 2>/dev/null \
-            || {
-                [ "$silent_mode" != "yes" ] \
-                  && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
-                  || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-                debug_log "DEBUG" "apk search failed"
-                rm -f "$update_cache"
-                return 1
-            }
+        apk search > "$package_cache" 2>/dev/null || {
+            [ "$silent_mode" != "yes" ] \
+                && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
+                || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            debug_log "DEBUG" "apk search failed"
+            rm -f "$update_cache"
+            return 1
+        }
 
     else
         [ "$silent_mode" != "yes" ] \
-          && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
-          || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")" \
+            || printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
         rm -f "$update_cache"
         return 1
@@ -367,10 +367,10 @@ EOF
 
     # ─── 成功処理 ───
     [ "$silent_mode" != "yes" ] \
-      && stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
+        && stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
 
     touch "$update_cache" 2>/dev/null \
-        && debug_log "DEBUG" "Updated cache timestamp: $update_cache" \
+        && debug_log "DEBUG" "Cache timestamp updated: $update_cache" \
         || debug_log "DEBUG" "Failed to touch cache timestamp"
 
     if [ -s "$package_cache" ]; then
