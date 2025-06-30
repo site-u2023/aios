@@ -235,7 +235,7 @@ OK_update_package_list() {
     return 0
 }
 
-OK_update_package_list() {
+update_package_list() {
     local silent_mode="$1"
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
