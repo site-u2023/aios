@@ -245,10 +245,8 @@ update_package_list() {
     local cache_time=0
     local max_age=$((24 * 60 * 60))            # 24時間 (86400秒)
 
-    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # キャッシュの状態確認
     local need_update="yes"
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
@@ -262,23 +260,20 @@ update_package_list() {
         debug_log "DEBUG" "Package list cache not found or incomplete. Will create it now."
     fi
 
-    # 更新が必要ない場合は終了
     if [ "$need_update" = "no" ]; then
         return 0
     fi
 
-    # silent モードでない場合のみ表示
     if [ "$silent_mode" != "yes" ]; then
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
-    # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
-    # ─── 追加：OSバージョン判定 ───
+    # ─── OSバージョン判定（24.10.2以上か） ───
     local osverfile="${CACHE_DIR}/osversion.ch"
     local osver major minor patch
     if [ -r "$osverfile" ]; then
@@ -288,7 +283,7 @@ update_package_list() {
         osver=${DISTRIB_RELEASE}
     fi
     IFS=. read major minor patch <<EOF
-${osver}
+$osver
 EOF
     local is_new_os=0
     if [ "$major" -gt 24 ] || { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
@@ -296,24 +291,28 @@ EOF
     fi
     debug_log "DEBUG" "OS version ${osver} → is_new_os=${is_new_os}"
 
-    # 24.10.2以上なら一時的に opkg 設定切り替え
+    # ─── 24.10.2以降用の一時フィード設定 ───
     local opkg_args=""
     if [ "$PACKAGE_MANAGER" = "opkg" ] && [ "$is_new_os" -eq 1 ]; then
         local tmp_conf="${CACHE_DIR}/opkg_override.conf"
+        mkdir -p "$(dirname "$tmp_conf")"
+
+        # BOARD_SUFFIX/OTHER_FEEDS/VERSION は事前に定義されている前提
+        : "${OTHER_FEEDS:=luci_app}"
+        : "${VERSION:=${DISTRIB_RELEASE:-unknown}}"
+        : "${BOARD_SUFFIX:=${DISTRIB_ARCH_SUFFIX:-$(echo ${DISTRIB_ARCH:-unknown} | tr '[:upper:]' '[:lower:]')}}"
+
         cat >"$tmp_conf" <<-EOF
 dest root /
 lists_dir ext /var/opkg-lists
 option overlay_root /overlay
 option check_signature
-# 新しいシステム用フィード
 src/gz otherfeeds http://new.domain.com/packages/${OTHER_FEEDS}/${VERSION}/${BOARD_SUFFIX}
 EOF
         opkg_args="--config $tmp_conf"
         debug_log "DEBUG" "Using override opkg config: $tmp_conf"
     fi
-    # ───────────────────────────────────
 
-    # パッケージリストの更新実行
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         debug_log "DEBUG" "Running opkg update"
         opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1
@@ -379,12 +378,10 @@ EOF
         return 1
     fi
 
-    # スピナー停止（成功メッセージを表示）- silent モードでなければ表示
     if [ "$silent_mode" != "yes" ]; then
         stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
     fi
 
-    # キャッシュのタイムスタンプを更新
     touch "$update_cache" 2>/dev/null
     if [ $? -ne 0 ]; then
         debug_log "DEBUG" "Failed to create/update cache file: $update_cache"
@@ -393,7 +390,6 @@ EOF
         debug_log "DEBUG" "Cache timestamp updated: $update_cache"
     fi
 
-    # package_cacheが作成されたか確認
     if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
         debug_log "DEBUG" "Package list cache successfully created: $package_cache"
     else
