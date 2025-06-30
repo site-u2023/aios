@@ -235,7 +235,6 @@ OK_update_package_list() {
     return 0
 }
 
-# パッケージリストの更新
 update_package_list() {
     local silent_mode="$1"
     local update_cache="${CACHE_DIR}/update.ch"
@@ -253,13 +252,8 @@ update_package_list() {
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" +%s 2>/dev/null || echo 0)
         if [ $((current_time - cache_time)) -lt $max_age ]; then
-            debug_log "DEBUG" "Package list updated within 24h, skipping."
             need_update="no"
-        else
-            debug_log "DEBUG" "Cache expired, will update."
         fi
-    else
-        debug_log "DEBUG" "No cache, will create new one."
     fi
     [ "$need_update" = "no" ] && return 0
 
@@ -268,124 +262,34 @@ update_package_list() {
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
-    # PACKAGE_MANAGER取得（事前ファイル or fallback）
-    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
-        PACKAGE_MANAGER=$(<"${CACHE_DIR}/package_manager.ch")
-    elif command -v opkg >/dev/null 2>&1; then
-        PACKAGE_MANAGER=opkg
-    elif command -v apk >/dev/null 2>&1; then
-        PACKAGE_MANAGER=apk
-    else
-        debug_log "DEBUG" "No package manager found."
-        [ "$silent_mode" != "yes" ] \
-          && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-        return 1
-    fi
-    debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
-
-    # OS バージョン判定 (24.10.2 以上か)
-    local osverfile="${CACHE_DIR}/osversion.ch"
-    local osver major minor patch is_new_os=0
-    if [ -r "$osverfile" ]; then
-        osver=$(<"$osverfile")
-    else
-        . /etc/openwrt_release
-        osver=$DISTRIB_RELEASE
-    fi
-    IFS=. read major minor patch <<EOF
-$osver
-EOF
-    if [ "$major" -gt 24 ] || { [ "$major" -eq 24 ] && \
-       { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
-        is_new_os=1
-    fi
-    debug_log "DEBUG" "OS version $osver → is_new_os=$is_new_os"
-
-    # opkg + 新OSなら一時configを組み立て
-    local opkg_args=""
-    if [ "$PACKAGE_MANAGER" = "opkg" ] && [ "$is_new_os" -eq 1 ]; then
-        local tmp_conf="${CACHE_DIR}/opkg_override.conf"
-        mkdir -p "$(dirname "$tmp_conf")"
-
-        # 1) 基本設定
-        [ -f /etc/opkg.conf ] \
-          && cat /etc/opkg.conf > "$tmp_conf"
-
-        # 2) 公式フィード
-        [ -f /etc/opkg/distfeeds.conf ] \
-          && cat /etc/opkg/distfeeds.conf >> "$tmp_conf"
-
-        # 3) カスタムフィード
-        [ -f /etc/opkg/customfeeds.conf ] \
-          && cat /etc/opkg/customfeeds.conf >> "$tmp_conf"
-
-        # 4) 新フィード追記
-        . /etc/openwrt_release
-        local other_feeds="${OTHER_FEEDS:-luci_app}"
-        local version="$DISTRIB_RELEASE"
-        local board_suffix="${DISTRIB_ARCH_SUFFIX:-$(echo "$DISTRIB_ARCH" | tr '[:upper:]' '[:lower:]')}"
-        printf "\nsrc/gz otherfeeds http://new.domain.com/packages/%s/%s/%s\n" \
-          "$other_feeds" "$version" "$board_suffix" \
-          >> "$tmp_conf"
-
-        opkg_args="--config $tmp_conf"
-        debug_log "DEBUG" "Override opkg config assembled: $tmp_conf"
-    fi
-
-    # --- パッケージリスト更新処理 ---
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "DEBUG" "Running: opkg $opkg_args update"
-        if ! opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1; then
+    # opkgコマンドの仕様変更対応
+    if command -v opkg >/dev/null 2>&1; then
+        debug_log "DEBUG" "Running opkg update"
+        if ! opkg update > "${LOG_DIR}/opkg_update.log" 2>&1; then
             [ "$silent_mode" != "yes" ] \
-              && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            debug_log "DEBUG" "opkg update failed"
-            rm -f "$update_cache"
+                && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            rm -f "$update_cache" 2>/dev/null
             return 1
         fi
         debug_log "DEBUG" "Saving opkg list to cache"
         if ! opkg list > "$package_cache" 2>/dev/null; then
             [ "$silent_mode" != "yes" ] \
-              && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            debug_log "DEBUG" "opkg list failed"
-            rm -f "$update_cache"
+                && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
+            rm -f "$update_cache" 2>/dev/null
             return 1
         fi
-
-    else  # apk
-        debug_log "DEBUG" "Running: apk update"
-        if ! apk update > "${LOG_DIR}/apk_update.log" 2>&1; then
-            [ "$silent_mode" != "yes" ] \
-              && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            debug_log "DEBUG" "apk update failed"
-            rm -f "$update_cache"
-            return 1
-        fi
-        debug_log "DEBUG" "Saving apk search to cache"
-        if ! apk search > "$package_cache" 2>/dev/null; then
-            [ "$silent_mode" != "yes" ] \
-              && stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            debug_log "DEBUG" "apk search failed"
-            rm -f "$update_cache"
-            return 1
-        fi
-    fi
-
-    # --- 成功時処理 ---
-    [ "$silent_mode" != "yes" ] \
-      && stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-
-    if touch "$update_cache" 2>/dev/null; then
-        debug_log "DEBUG" "Cache timestamp updated: $update_cache"
     else
-        debug_log "DEBUG" "Failed to update cache timestamp"
+        debug_log "DEBUG" "opkg command not found. Cannot update package list."
+        return 1
     fi
 
-    if [ -s "$package_cache" ]; then
-        debug_log "DEBUG" "Package list cache created: $package_cache"
-    else
-        debug_log "DEBUG" "Package list cache is empty!"
+    # スピナー停止（成功メッセージを表示）- silent モードでなければ表示
+    if [ "$silent_mode" != "yes" ]; then
+        stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
     fi
 
+    # キャッシュのタイムスタンプを更新
+    touch "$update_cache" 2>/dev/null
     return 0
 }
 
