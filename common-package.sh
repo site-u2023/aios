@@ -250,7 +250,6 @@ update_package_list() {
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
         if [ $((current_time - cache_time)) -lt $max_age ]; then
-            debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
             need_update="no"
         fi
     fi
@@ -267,9 +266,7 @@ update_package_list() {
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
 
-    debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
-
-    # バージョン判定（キャッシュ優先）
+    # OpenWrtバージョン判定（キャッシュ優先）
     local osverfile="${CACHE_DIR}/osversion.ch"
     local osver major minor patch is_new_os=0
     if [ -r "$osverfile" ]; then
@@ -289,8 +286,6 @@ EOF
         fi
     fi
 
-    debug_log "DEBUG" "OS version: $osver → is_new_os=$is_new_os"
-
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         local opkg_args=""
         if [ "$is_new_os" = "1" ]; then
@@ -302,12 +297,9 @@ EOF
             opkg_args="--conf $tmp_conf"
         fi
 
-        debug_log "DEBUG" "Running opkg update"
         opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1
         local rc_update=$?
-        debug_log "DEBUG" "opkg update exit code: $rc_update"
         if [ $rc_update -ne 0 ]; then
-            tail -n 10 "${LOG_DIR}/opkg_update.log" | while read -r line; do debug_log "DEBUG" "opkg_update.log: $line"; done
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
@@ -315,12 +307,9 @@ EOF
             return 1
         fi
 
-        debug_log "DEBUG" "Saving package list to $package_cache"
         opkg $opkg_args list > "$package_cache" 2> "${LOG_DIR}/opkg_list_stderr.log"
         local rc_list=$?
-        debug_log "DEBUG" "opkg list exit code: $rc_list"
         if [ $rc_list -ne 0 ] || [ ! -s "$package_cache" ]; then
-            tail -n 10 "${LOG_DIR}/opkg_list_stderr.log" | while read -r line; do debug_log "DEBUG" "opkg_list_stderr.log: $line"; done
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
@@ -328,7 +317,6 @@ EOF
             return 1
         fi
     elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        debug_log "DEBUG" "Running apk update"
         apk update > "${LOG_DIR}/apk_update.log" 2>&1
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then
@@ -338,7 +326,6 @@ EOF
             return 1
         fi
 
-        debug_log "DEBUG" "Saving package list to $package_cache"
         apk search > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             if [ "$silent_mode" != "yes" ]; then
