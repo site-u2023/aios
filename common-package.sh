@@ -236,16 +236,18 @@ OK_update_package_list() {
 }
 
 update_package_list() {
-    local silent_mode="$1"
+    local silent_mode="$1"  # silentモードパラメータを追加
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
-    current_time=$(date '+%s')
+    current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
     local cache_time=0
-    local max_age=$((24 * 60 * 60))
+    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
 
+    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
+    # キャッシュの状態確認
     local need_update="yes"
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
@@ -267,31 +269,44 @@ update_package_list() {
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
+    # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
 
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        local opkg_version opkg_major opkg_minor opkg_patch is_new_opkg=0
-        opkg_version=$(opkg --version 2>/dev/null | awk '{print $3}' | head -n1)
-        opkg_major=$(echo "$opkg_version" | cut -d. -f1)
-        opkg_minor=$(echo "$opkg_version" | cut -d. -f2)
-        opkg_patch=$(echo "$opkg_version" | cut -d. -f3)
-        if [ "$opkg_major" -gt 24 ] || { [ "$opkg_major" -eq 24 ] && { [ "$opkg_minor" -gt 10 ] || { [ "$opkg_minor" -eq 10 ] && [ "$opkg_patch" -ge 2 ]; }; }; }; then
-            is_new_opkg=1
+    # OpenWrtバージョン判定（キャッシュ優先・なければ作成）
+    local osverfile="${CACHE_DIR}/osversion.ch"
+    local osver major minor patch is_new_os=0
+    if [ -r "$osverfile" ]; then
+        osver=$(cat "$osverfile")
+    elif [ -r /etc/openwrt_release ]; then
+        . /etc/openwrt_release
+        osver=$DISTRIB_RELEASE
+        echo "$osver" > "$osverfile"
+    else
+        osver=""
+    fi
+    major=0; minor=0; patch=0
+    if [ -n "$osver" ]; then
+        IFS=. read major minor patch <<EOF
+$osver
+EOF
+        if [ "$major" -gt 24 ] || { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
+            is_new_os=1
         fi
-        debug_log "DEBUG" "opkg version: $opkg_version, is_new_opkg=$is_new_opkg"
+    fi
+    debug_log "DEBUG" "OS version: $osver → is_new_os=$is_new_os"
 
+    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         local opkg_args=""
-        if [ "$is_new_opkg" = "1" ]; then
+        if [ "$is_new_os" = "1" ]; then
             local tmp_conf="${CACHE_DIR}/opkg_override.conf"
             [ -f /etc/opkg.conf ] && cat /etc/opkg.conf > "$tmp_conf"
             [ -f /etc/opkg/distfeeds.conf ] && cat /etc/opkg/distfeeds.conf >> "$tmp_conf"
             [ -f /etc/opkg/customfeeds.conf ] && cat /etc/opkg/customfeeds.conf >> "$tmp_conf"
             opkg_args="--conf $tmp_conf"
-            debug_log "DEBUG" "opkg_args: $opkg_args"
         fi
 
         debug_log "DEBUG" "Running opkg update"
