@@ -236,29 +236,23 @@ OK_update_package_list() {
 }
 
 update_package_list() {
-    local silent_mode="$1"  # silentモードパラメータを追加
+    local silent_mode="$1"
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
-    current_time=$(date '+%s')  # 現在のUNIXタイムスタンプ取得
+    current_time=$(date '+%s')
     local cache_time=0
-    local max_age=$((24 * 60 * 60))  # 24時間 (86400秒)
+    local max_age=$((24 * 60 * 60))  # 24時間
 
-    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # キャッシュの状態確認
     local need_update="yes"
     if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
         cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
         if [ $((current_time - cache_time)) -lt $max_age ]; then
             debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
             need_update="no"
-        else
-            debug_log "DEBUG" "Package list cache is outdated. Will update now."
         fi
-    else
-        debug_log "DEBUG" "Package list cache not found or incomplete. Will create it now."
     fi
 
     if [ "$need_update" = "no" ]; then
@@ -269,14 +263,13 @@ update_package_list() {
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
-    # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
 
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
-    # OpenWrtバージョン判定（キャッシュ優先・なければ作成）
+    # バージョン判定（キャッシュ優先）
     local osverfile="${CACHE_DIR}/osversion.ch"
     local osver major minor patch is_new_os=0
     if [ -r "$osverfile" ]; then
@@ -285,8 +278,6 @@ update_package_list() {
         . /etc/openwrt_release
         osver=$DISTRIB_RELEASE
         echo "$osver" > "$osverfile"
-    else
-        osver=""
     fi
     major=0; minor=0; patch=0
     if [ -n "$osver" ]; then
@@ -297,13 +288,15 @@ EOF
             is_new_os=1
         fi
     fi
+
     debug_log "DEBUG" "OS version: $osver → is_new_os=$is_new_os"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
         local opkg_args=""
         if [ "$is_new_os" = "1" ]; then
             local tmp_conf="${CACHE_DIR}/opkg_override.conf"
-            [ -f /etc/opkg.conf ] && cat /etc/opkg.conf > "$tmp_conf"
+            : > "$tmp_conf"
+            [ -f /etc/opkg.conf ] && cat /etc/opkg.conf >> "$tmp_conf"
             [ -f /etc/opkg/distfeeds.conf ] && cat /etc/opkg/distfeeds.conf >> "$tmp_conf"
             [ -f /etc/opkg/customfeeds.conf ] && cat /etc/opkg/customfeeds.conf >> "$tmp_conf"
             opkg_args="--conf $tmp_conf"
@@ -317,10 +310,7 @@ EOF
             tail -n 10 "${LOG_DIR}/opkg_update.log" | while read -r line; do debug_log "DEBUG" "opkg_update.log: $line"; done
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            else
-                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
-            debug_log "DEBUG" "Failed to update package lists with opkg"
             rm -f "$update_cache" 2>/dev/null
             return 1
         fi
@@ -333,10 +323,7 @@ EOF
             tail -n 10 "${LOG_DIR}/opkg_list_stderr.log" | while read -r line; do debug_log "DEBUG" "opkg_list_stderr.log: $line"; done
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            else
-                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
-            debug_log "DEBUG" "Failed to save package list to $package_cache"
             rm -f "$update_cache" 2>/dev/null
             return 1
         fi
@@ -346,10 +333,7 @@ EOF
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            else
-                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
-            debug_log "DEBUG" "Failed to update package lists with apk"
             rm -f "$update_cache" 2>/dev/null
             return 1
         fi
@@ -359,20 +343,14 @@ EOF
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            else
-                printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
             fi
-            debug_log "DEBUG" "Failed to save package list to $package_cache"
             rm -f "$update_cache" 2>/dev/null
             return 1
         fi
     else
         if [ "$silent_mode" != "yes" ]; then
             stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-        else
-            printf "%s\n" "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
         fi
-        debug_log "DEBUG" "Unknown package manager: $PACKAGE_MANAGER"
         rm -f "$update_cache" 2>/dev/null
         return 1
     fi
@@ -382,18 +360,6 @@ EOF
     fi
 
     touch "$update_cache" 2>/dev/null
-    if [ $? -ne 0 ]; then
-        debug_log "DEBUG" "Failed to create/update cache file: $update_cache"
-        debug_log "DEBUG" "Cache timestamp could not be updated, next run will force update"
-    else
-        debug_log "DEBUG" "Cache timestamp updated: $update_cache"
-    fi
-
-    if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
-        debug_log "DEBUG" "Package list cache successfully created: $package_cache"
-    else
-        debug_log "DEBUG" "Package list cache not properly created: $package_cache"
-    fi
 
     return 0
 }
