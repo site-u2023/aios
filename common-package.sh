@@ -298,7 +298,7 @@ EOF
 
     if [ "$is_new_os" -eq 1 ]; then
         # 24.10.2 以上では custom feed の URL を差し替え
-        # (例: 新しいミラー http://new.domain.com/packages を使用する)
+        # (新しいミラー http://new.domain.com/packages を使用する)
         sed -i "s|^src/gz otherfeeds .*|src/gz otherfeeds http://new.domain.com/packages/${OTHER_FEEDS}/${VERSION}/${BOARD_SUFFIX}|g" /etc/opkg/distfeeds.conf
     fi
     # ───────────────────────────────────────────────────────────────
