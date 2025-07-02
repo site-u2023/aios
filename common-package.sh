@@ -235,122 +235,6 @@ OK_update_package_list() {
     return 0
 }
 
-Ok2_update_package_list() {
-    local silent_mode="$1"
-    local update_cache="${CACHE_DIR}/update.ch"
-    local package_cache="${CACHE_DIR}/package_list.ch"
-    local current_time
-    current_time=$(date '+%s')
-    local cache_time=0
-    local max_age=$((24 * 60 * 60))  # 24時間
-
-    mkdir -p "$CACHE_DIR"
-
-    local need_update="yes"
-    if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
-        cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
-        if [ $((current_time - cache_time)) -lt $max_age ]; then
-            need_update="no"
-        fi
-    fi
-
-    if [ "$need_update" = "no" ]; then
-        return 0
-    fi
-
-    if [ "$silent_mode" != "yes" ]; then
-        start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
-    fi
-
-    if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
-        PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
-    fi
-
-    # OpenWrtバージョン判定（キャッシュ優先）
-    local osverfile="${CACHE_DIR}/osversion.ch"
-    local osver major minor patch is_new_os=0
-    if [ -r "$osverfile" ]; then
-        osver=$(cat "$osverfile")
-    elif [ -r /etc/openwrt_release ]; then
-        . /etc/openwrt_release
-        osver=$DISTRIB_RELEASE
-        echo "$osver" > "$osverfile"
-    fi
-    major=0; minor=0; patch=0
-    if [ -n "$osver" ]; then
-        IFS=. read major minor patch <<EOF
-$osver
-EOF
-        if [ "$major" -gt 24 ] || { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
-            is_new_os=1
-        fi
-    fi
-
-    if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        local opkg_args=""
-        if [ "$is_new_os" = "1" ]; then
-            local tmp_conf="${CACHE_DIR}/opkg_override.conf"
-            : > "$tmp_conf"
-            [ -f /etc/opkg.conf ] && cat /etc/opkg.conf >> "$tmp_conf"
-            [ -f /etc/opkg/distfeeds.conf ] && cat /etc/opkg/distfeeds.conf >> "$tmp_conf"
-            [ -f /etc/opkg/customfeeds.conf ] && cat /etc/opkg/customfeeds.conf >> "$tmp_conf"
-            opkg_args="--conf $tmp_conf"
-        fi
-
-        opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1
-        local rc_update=$?
-        if [ $rc_update -ne 0 ]; then
-            if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            fi
-            rm -f "$update_cache" 2>/dev/null
-            return 1
-        fi
-
-        opkg $opkg_args list > "$package_cache" 2> "${LOG_DIR}/opkg_list_stderr.log"
-        local rc_list=$?
-        if [ $rc_list -ne 0 ] || [ ! -s "$package_cache" ]; then
-            if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            fi
-            rm -f "$update_cache" 2>/dev/null
-            return 1
-        fi
-    elif [ "$PACKAGE_MANAGER" = "apk" ]; then
-        apk update > "${LOG_DIR}/apk_update.log" 2>&1
-        if [ $? -ne 0 ]; then
-            if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            fi
-            rm -f "$update_cache" 2>/dev/null
-            return 1
-        fi
-
-        apk search > "$package_cache" 2>/dev/null
-        if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
-            if [ "$silent_mode" != "yes" ]; then
-                stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-            fi
-            rm -f "$update_cache" 2>/dev/null
-            return 1
-        fi
-    else
-        if [ "$silent_mode" != "yes" ]; then
-            stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
-        fi
-        rm -f "$update_cache" 2>/dev/null
-        return 1
-    fi
-
-    if [ "$silent_mode" != "yes" ]; then
-        stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-    fi
-
-    touch "$update_cache" 2>/dev/null
-
-    return 0
-}
-
 update_package_list() {
     local silent_mode="$1"
     local update_cache="${CACHE_DIR}/update.ch"
@@ -390,7 +274,6 @@ update_package_list() {
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        # バージョン判定（OK2_流用）
         local osverfile="${CACHE_DIR}/osversion.ch"
         local osver major minor patch is_new_os=0
         if [ -r "$osverfile" ]; then
