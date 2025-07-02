@@ -352,83 +352,76 @@ EOF
 }
 
 update_package_list() {
-    local silent_mode="$1"  # silentモードパラメータ
+    local silent_mode="$1"
     local update_cache="${CACHE_DIR}/update.ch"
     local package_cache="${CACHE_DIR}/package_list.ch"
     local current_time
     current_time=$(date '+%s')
     local cache_time=0
-    local max_age=$((24 * 60 * 60))  # 24時間
+    local max_age=$((24 * 60 * 60))
 
-    # キャッシュディレクトリの作成
     mkdir -p "$CACHE_DIR"
 
-    # OpenWrtバージョン判定（キャッシュ優先）
-    local osverfile="${CACHE_DIR}/osversion.ch"
-    local osver major minor patch is_new_os=0
-    if [ -r "$osverfile" ]; then
-        osver=$(cat "$osverfile")
-    elif [ -r /etc/openwrt_release ]; then
-        . /etc/openwrt_release
-        osver=$DISTRIB_RELEASE
-        echo "$osver" > "$osverfile"
-    fi
-    major=0; minor=0; patch=0
-    if [ -n "$osver" ]; then
-        IFS=. read major minor patch <<EOF
-$osver
-EOF
-        if [ "$major" -gt 24 ] || { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
-            is_new_os=1
-        fi
-    fi
-
-    # キャッシュの状態確認（24.10.2未満のみ）
     local need_update="yes"
-    if [ "$is_new_os" -eq 0 ]; then
-        if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
-            cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
-            if [ $((current_time - cache_time)) -lt $max_age ]; then
-                debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
-                need_update="no"
-            else
-                debug_log "DEBUG" "Package list cache is outdated. Will update now."
-            fi
+    if [ -f "$package_cache" ] && [ -f "$update_cache" ]; then
+        cache_time=$(date -r "$update_cache" '+%s' 2>/dev/null || echo 0)
+        if [ $((current_time - cache_time)) -lt $max_age ]; then
+            debug_log "DEBUG" "Package list was updated within 24 hours. Skipping update."
+            need_update="no"
         else
-            debug_log "DEBUG" "Package list cache not found or incomplete. Will create it now."
+            debug_log "DEBUG" "Package list cache is outdated. Will update now."
         fi
-
-        # 更新が必要ない場合は終了
-        if [ "$need_update" = "no" ]; then
-            return 0
-        fi
+    else
+        debug_log "DEBUG" "Package list cache not found or incomplete. Will create it now."
     fi
 
-    # silent モードでない場合のみ表示
+    if [ "$need_update" = "no" ]; then
+        return 0
+    fi
+
     if [ "$silent_mode" != "yes" ]; then
         start_spinner "$(color blue "$(get_message "MSG_RUNNING_UPDATE")")"
     fi
 
-    # PACKAGE_MANAGERを取得
     if [ -f "${CACHE_DIR}/package_manager.ch" ]; then
         PACKAGE_MANAGER=$(cat "${CACHE_DIR}/package_manager.ch")
     fi
+
     debug_log "DEBUG" "Using package manager: $PACKAGE_MANAGER"
 
-    # 24.10.2以降: opkg updateのみ実行、キャッシュは作らない
-    if [ "$PACKAGE_MANAGER" = "opkg" ] && [ "$is_new_os" -eq 1 ]; then
-        debug_log "DEBUG" "Detected OpenWrt >=24.10.2, running opkg update only (no cache build)"
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
-        if [ "$silent_mode" != "yes" ]; then
-            stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
-        fi
-        return 0
-    fi
-
-    # パッケージリストの更新実行（24.10.2未満、apk等は従来通りキャッシュ生成）
     if [ "$PACKAGE_MANAGER" = "opkg" ]; then
-        debug_log "DEBUG" "Running opkg update"
-        opkg update > "${LOG_DIR}/opkg_update.log" 2>&1
+        # バージョン判定（OK2_流用）
+        local osverfile="${CACHE_DIR}/osversion.ch"
+        local osver major minor patch is_new_os=0
+        if [ -r "$osverfile" ]; then
+            osver=$(cat "$osverfile")
+        elif [ -r /etc/openwrt_release ]; then
+            . /etc/openwrt_release
+            osver=$DISTRIB_RELEASE
+            echo "$osver" > "$osverfile"
+        fi
+        major=0; minor=0; patch=0
+        if [ -n "$osver" ]; then
+            IFS=. read major minor patch <<EOF
+$osver
+EOF
+            if [ "$major" -gt 24 ] || { [ "$major" -eq 24 ] && { [ "$minor" -gt 10 ] || { [ "$minor" -eq 10 ] && [ "$patch" -ge 2 ]; }; }; }; then
+                is_new_os=1
+            fi
+        fi
+
+        local opkg_args=""
+        if [ "$is_new_os" = "1" ]; then
+            local tmp_conf="${CACHE_DIR}/opkg_override.conf"
+            : > "$tmp_conf"
+            [ -f /etc/opkg.conf ] && cat /etc/opkg.conf >> "$tmp_conf"
+            [ -f /etc/opkg/distfeeds.conf ] && cat /etc/opkg/distfeeds.conf >> "$tmp_conf"
+            [ -f /etc/opkg/customfeeds.conf ] && cat /etc/opkg/customfeeds.conf >> "$tmp_conf"
+            opkg_args="--conf $tmp_conf"
+        fi
+
+        debug_log "DEBUG" "Running opkg update $opkg_args"
+        opkg $opkg_args update > "${LOG_DIR}/opkg_update.log" 2>&1
         if [ $? -ne 0 ]; then
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
@@ -441,7 +434,7 @@ EOF
         fi
 
         debug_log "DEBUG" "Saving package list to $package_cache"
-        opkg list > "$package_cache" 2>/dev/null
+        opkg $opkg_args list > "$package_cache" 2>/dev/null
         if [ $? -ne 0 ] || [ ! -s "$package_cache" ]; then
             if [ "$silent_mode" != "yes" ]; then
                 stop_spinner "$(color red "$(get_message "MSG_ERROR_UPDATE_FAILED")")"
@@ -489,12 +482,10 @@ EOF
         return 1
     fi
 
-    # スピナー停止（成功メッセージを表示）- silent モードでなければ表示
     if [ "$silent_mode" != "yes" ]; then
         stop_spinner "$(color green "$(get_message "MSG_UPDATE_SUCCESS")")"
     fi
 
-    # キャッシュのタイムスタンプを更新
     touch "$update_cache" 2>/dev/null
     if [ $? -ne 0 ]; then
         debug_log "DEBUG" "Failed to create/update cache file: $update_cache"
@@ -503,7 +494,6 @@ EOF
         debug_log "DEBUG" "Cache timestamp updated: $update_cache"
     fi
 
-    # package_cacheが作成されたか確認
     if [ -f "$package_cache" ] && [ -s "$package_cache" ]; then
         debug_log "DEBUG" "Package list cache successfully created: $package_cache"
     else
