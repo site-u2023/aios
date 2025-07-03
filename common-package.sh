@@ -313,7 +313,7 @@ EOF
             fi
             debug_log "DEBUG" "Failed to update package lists with opkg"
             rm -f "$update_cache" 2>/dev/null
-            return 1
+            return 0
         fi
 
         debug_log "DEBUG" "Saving package list to $package_cache"
