@@ -16,7 +16,7 @@ Release Build (opkg)
 opkg install https://github.com/site-u2023/aios-package/releases/download/ipk0.0/aios_all.ipk
 ```
 
-<details><summary>If your environment is IPv6-only (before MAP tunnel setup), use the following via Cloudflare Workers proxy:</summary>
+<details><summary>If you cannot resolve AAAA records (IPv6 addresses), please use the following via Cloudflare Workers proxy.</summary>
 
 ```sh
 opkg install "https://proxy.site-u.workers.dev/proxy?url=https://github.com/site-u2023/aios-package/releases/download/ipk0.0/aios_all.ipk"
@@ -37,7 +37,7 @@ wget -O /tmp/aios_all.ipk "https://github.com/site-u2023/aios-package/releases/d
 wget -O /tmp/aios.apk "https://github.com/site-u2023/aios-package/releases/download/apk0.1/aios.apk"; apk add --allow-untrusted /tmp/aios.apk
 ```
 
-<details><summary>If your environment is IPv6-only (before MAP tunnel setup), use the following via Cloudflare Workers proxy:</summary>
+<details><summary>If you cannot resolve AAAA records (IPv6 addresses), please use the following via Cloudflare Workers proxy.</summary>
 
 ```sh
 wget -O /tmp/aios.apk "https://proxy.site-u.workers.dev/proxy?url=https://github.com/site-u2023/aios-package/releases/download/apk0.1/aios.apk"
