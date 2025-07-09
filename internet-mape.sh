@@ -83,37 +83,91 @@ fetch_rule_api() {
 fetch_rule_api_ocn() {
     local ocn_api_code="$1"
     local user_ipv6_prefix_len="${user_ipv6_prefix_len:-64}"
-    
+
     if [ -z "$ocn_api_code" ]; then
         printf "\nOCN APIコードを入力してください: "
         read -s ocn_api_code
         echo
     fi
-    
-    [ -z "$ocn_api_code" ] || [ -z "$USER_IPV6_PREFIX" ] && return 1
+
+    # echo "DEBUG: fetch_rule_api_ocn - ocn_api_code = '$ocn_api_code'" >&2
+    # echo "DEBUG: fetch_rule_api_ocn - USER_IPV6_PREFIX = '$USER_IPV6_PREFIX'" >&2
+
+    [ -z "$ocn_api_code" ] || [ -z "$USER_IPV6_PREFIX" ] && {
+        # echo "ERROR: APIコードまたはIPv6プレフィックスが設定されていません。" >&2
+        return 1
+    }
 
     if [ -n "$NET_PFX6" ]; then
         user_ipv6_prefix_len=$(echo "$NET_PFX6" | cut -d'/' -f2)
     fi
-    
-    API_RESPONSE=$(wget -6 -q -O - --timeout=10 "https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=${user_ipv6_prefix_len}&code=${ocn_api_code}")
-    [ -z "$API_RESPONSE" ] && return 1
+    # echo "DEBUG: fetch_rule_api_ocn - user_ipv6_prefix_len = '$user_ipv6_prefix_len'" >&2
 
-    API_RESPONSE=$(echo "$API_RESPONSE" | awk '
-    BEGIN { in_block=0; block=""; }
-    /\{/ { in_block=1; block=$0; next; }
-    in_block {
-        block = block "\n" $0
-        if (/\}/) {
-            if (block ~ /"brIpv6Address":/) {
-                print block
-                exit
+    local raw_response
+    local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=${user_ipv6_prefix_len}&code=${ocn_api_code}"
+    # echo "DEBUG: fetch_rule_api_ocn - API URL = '$api_url'" >&2
+
+    raw_response=$(wget -6 -q -O - --timeout=10 "$api_url")
+    local wget_exit_code=$?
+
+    # echo "DEBUG: fetch_rule_api_ocn - wget_exit_code = $wget_exit_code" >&2
+
+    if [ "$wget_exit_code" -ne 0 ] || [ -z "$raw_response" ]; then
+        echo "ERROR: MAP-Eルール取得失敗。wgetがエラーを返したか、応答が空です。" >&2
+        return 1
+    fi
+
+    local user_match_for_api_comparison
+    user_match_for_api_comparison=$(echo "$USER_IPV6_PREFIX" | cut -d'/' -f1 | awk -F: '{printf("%s:%s:%s00::", $1, $2, substr($3, 1, 2))}')
+    # echo "DEBUG: fetch_rule_api_ocn - user_match_for_api_comparison (48-bit prefix rounded) = '$user_match_for_api_comparison'" >&2
+
+    local matched_rule_json=""
+
+    matched_rule_json=$(echo "$raw_response" | awk -v user_match_awk="$user_match_for_api_comparison" '
+        BEGIN { in_basic_map_rules = 0; current_object = ""; object_started = 0; }
+
+        /"basicMapRules": \[/ { in_basic_map_rules = 1; next; }
+        /^ *\]/ && in_basic_map_rules { in_basic_map_rules = 0; next; }
+
+        in_basic_map_rules {
+            if ($0 ~ /^[[:space:]]*\{/) {
+                object_started = 1;
+                current_object = $0;
+            } else if (object_started) {
+                current_object = current_object "\n" $0;
             }
-            in_block=0; block="";
-        }
-    }')
 
-    [ -z "$API_RESPONSE" ] && return 1 || return 0
+            if (object_started && $0 ~ /\}/) {
+                extracted_prefix = current_object;
+                gsub(/.*"ipv6Prefix": *"/, "", extracted_prefix);
+                gsub(/".*/, "", extracted_prefix);
+                split(extracted_prefix, a, "/");
+                split(a[1], b, ":");
+                api_prefix_rounded = b[1] ":" b[2] ":" substr(b[3], 1, 2) "00::";
+                
+                # print "DEBUG AWK: Parsed API IPv6 Prefix Rounded: " api_prefix_rounded ", Comparing with: " user_match_awk > "/dev/stderr";
+
+                if (api_prefix_rounded == user_match_awk) {
+                    print current_object;
+                    exit;
+                }
+                object_started = 0;
+                current_object = "";
+            }
+        }
+    ')
+
+    API_RESPONSE="$matched_rule_json"
+
+    # echo "DEBUG: fetch_rule_api_ocn - Final API_RESPONSE (after parsing):" >&2
+    # echo "$API_RESPONSE" >&2
+
+    if [ -z "$API_RESPONSE" ] || ! echo "$API_RESPONSE" | grep -q '{' || ! echo "$API_RESPONSE" | grep -q '}'; then
+        # echo "ERROR: MAP-Eルール解析失敗。一致するルールが見つからないか、パースに失敗しました。" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 get_rule_api() {
@@ -642,7 +696,7 @@ test_internet_map_main() {
     fi
     internet_map_common "default" "dry"
 }
-internet_map_ocn_main()       { internet_map_common "ocn" "apply" "$1"; }
+internet_map_ocn_main()       { internet_map_common "ocn" "dry" "$1"; }
 internet_map_main()           { internet_map_common "default" "apply"; }
 
 # test_internet_map_main "$@"
