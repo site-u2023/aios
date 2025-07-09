@@ -90,27 +90,19 @@ fetch_rule_api_ocn() {
         echo
     fi
 
-    # echo "DEBUG: fetch_rule_api_ocn - ocn_api_code = '$ocn_api_code'" >&2
-    # echo "DEBUG: fetch_rule_api_ocn - USER_IPV6_PREFIX = '$USER_IPV6_PREFIX'" >&2
-
     [ -z "$ocn_api_code" ] || [ -z "$USER_IPV6_PREFIX" ] && {
-        # echo "ERROR: APIコードまたはIPv6プレフィックスが設定されていません。" >&2
         return 1
     }
 
     if [ -n "$NET_PFX6" ]; then
         user_ipv6_prefix_len=$(echo "$NET_PFX6" | cut -d'/' -f2)
     fi
-    # echo "DEBUG: fetch_rule_api_ocn - user_ipv6_prefix_len = '$user_ipv6_prefix_len'" >&2
 
     local raw_response
     local api_url="https://rule.map.ocn.ad.jp/?ipv6Prefix=${USER_IPV6_PREFIX}&ipv6PrefixLength=${user_ipv6_prefix_len}&code=${ocn_api_code}"
-    # echo "DEBUG: fetch_rule_api_ocn - API URL = '$api_url'" >&2
 
     raw_response=$(wget -6 -q -O - --timeout=10 "$api_url")
     local wget_exit_code=$?
-
-    # echo "DEBUG: fetch_rule_api_ocn - wget_exit_code = $wget_exit_code" >&2
 
     if [ "$wget_exit_code" -ne 0 ] || [ -z "$raw_response" ]; then
         echo "ERROR: MAP-Eルール取得失敗。wgetがエラーを返したか、応答が空です。" >&2
@@ -119,7 +111,6 @@ fetch_rule_api_ocn() {
 
     local user_match_for_api_comparison
     user_match_for_api_comparison=$(echo "$USER_IPV6_PREFIX" | cut -d'/' -f1 | awk -F: '{printf("%s:%s:%s00::", $1, $2, substr($3, 1, 2))}')
-    # echo "DEBUG: fetch_rule_api_ocn - user_match_for_api_comparison (48-bit prefix rounded) = '$user_match_for_api_comparison'" >&2
 
     local matched_rule_json=""
 
@@ -159,11 +150,7 @@ fetch_rule_api_ocn() {
 
     API_RESPONSE="$matched_rule_json"
 
-    # echo "DEBUG: fetch_rule_api_ocn - Final API_RESPONSE (after parsing):" >&2
-    # echo "$API_RESPONSE" >&2
-
     if [ -z "$API_RESPONSE" ] || ! echo "$API_RESPONSE" | grep -q '{' || ! echo "$API_RESPONSE" | grep -q '}'; then
-        # echo "ERROR: MAP-Eルール解析失敗。一致するルールが見つからないか、パースに失敗しました。" >&2
         return 1
     fi
 
@@ -696,7 +683,7 @@ test_internet_map_main() {
     fi
     internet_map_common "default" "dry"
 }
-internet_map_ocn_main()       { internet_map_common "ocn" "dry" "$1"; }
+internet_map_ocn_main()       { internet_map_common "ocn" "apply" "$1"; }
 internet_map_main()           { internet_map_common "default" "apply"; }
 
 # test_internet_map_main "$@"
