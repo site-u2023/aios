@@ -16,6 +16,14 @@ Release Build (opkg)
 opkg install https://github.com/site-u2023/aios-package/releases/download/ipk0.0/aios_all.ipk
 ```
 
+<details><summary>If your environment is IPv6-only (before MAP tunnel setup), use the following via Cloudflare Workers proxy:</summary>
+
+```sh
+opkg install "https://proxy.site-u.workers.dev/proxy?url=https://github.com/site-u2023/aios-package/releases/download/ipk0.0/aios_all.ipk"
+```
+---
+</details>
+
 <details><summary>For version 21.02</summary>
 
 ```sh
@@ -24,13 +32,22 @@ wget -O /tmp/aios_all.ipk "https://github.com/site-u2023/aios-package/releases/d
 ---
 </details>
 
-“snapshot” build (apk)
+“Snapshot” build (apk)
 ```sh
 wget -O /tmp/aios.apk "https://github.com/site-u2023/aios-package/releases/download/apk0.1/aios.apk"; apk add --allow-untrusted /tmp/aios.apk
 ```
 
+<details><summary>If your environment is IPv6-only (before MAP tunnel setup), use the following via Cloudflare Workers proxy:</summary>
+
+```sh
+wget -O /tmp/aios.apk "https://proxy.site-u.workers.dev/proxy?url=https://github.com/site-u2023/aios-package/releases/download/apk0.1/aios.apk"
+apk add --allow-untrusted /tmp/aios.apk
+```
+---
+</details>
+
 ### How to use
-Command from the console
+Run from the console” or “Usage from the console
 ```sh
 aios
 ```
@@ -52,6 +69,6 @@ https://map-api-worker.site-u.workers.dev/map-rule?user_prefix=<IPV6_PREFIX>
 ```
 
 ### Qiita
-Japanese notation
+Japanese article
 
 https://qiita.com/site_u/items/bd331296ce535ed7a69e
