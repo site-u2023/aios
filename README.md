@@ -68,15 +68,6 @@ https://location-api-worker.site-u.workers.dev/
 https://map-api-worker.site-u.workers.dev/map-rule?user_prefix=<IPv6_PREFIX>
 ```
 
-### internet-mape.sh
-```
-mkdir -p /tmp/aios
-wget -O /tmp/aios/internet-mape.sh "https://proxy.site-u.workers.dev/proxy?url=https://raw.githubusercontent.com/site-u2023/aios/main/internet-mape.sh"
-chmod +x /tmp/aios/internet-mape.sh
-. /tmp/aios/internet-mape.sh
-internet_map_main
-```
-
 ### Qiita
 Japanese article
 
