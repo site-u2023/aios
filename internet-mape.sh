@@ -4,6 +4,8 @@
 # Reference: https://ipv4.web.fc2.com/map-e.html
 # このスクリプトファイルは単独利用が可能です。
 
+# set -ex
+
 SCRIPT_VERSION="2025.06.21-00-00"
 
 LAN_IPADDR="192.168.1.1"
