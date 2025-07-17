@@ -278,10 +278,10 @@ remove_adguardhome() {
   printf "Do you want to remove it? (y/N): "
   read -r confirm
   case "$confirm" in
-    [yY]|[yY][eE][sS]) ;;
+    [yY]*) ;; 
     *) echo "Cancelled"; return 0 ;;
   esac
-
+  
   /etc/init.d/"${AGH}" stop 2>/dev/null || true
   /etc/init.d/"${AGH}" disable 2>/dev/null || true
 
@@ -299,12 +299,8 @@ remove_adguardhome() {
     printf "Do you want to remove configuration directory /etc/${AGH}? (y/N): "
     read -r config_confirm
     case "$config_confirm" in
-      [yY]|[yY][eE][sS])
-        rm -rf "/etc/${AGH}"
-        ;;
-      *)
-        printf "\033[1;33mConfiguration directory preserved.\033[0m\n"
-        ;;
+        [yY]*) rm -rf "/etc/${AGH}" ;;
+        *) printf "\033[1;33mConfiguration directory preserved.\033[0m\n" ;;
     esac
   fi
 
