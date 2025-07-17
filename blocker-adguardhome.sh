@@ -57,13 +57,11 @@ install_prompt() {
 while true; do
     printf "\033[1;34m  1) Install Official binary\033[0m\n"
     printf "\033[1;34m  2) Install OpenWrt package\033[0m\n"
-    printf "\033[1;31m  r) Remove AdGuard Home\033[0m\n"
-    printf "Enter choice (1, 2, or r): "
+    printf "Enter choice (1, 2): "
     read -r choice
     case "$choice" in
       1|official) INSTALL_MODE="official"; break ;;
       2|openwrt) INSTALL_MODE="openwrt"; break ;;
-      [rR]) remove_adguardhome; exit 0 ;;
       *) printf "\033[1;31mInvalid choice '$choice'. Please enter 1, 2, or 'r'.\033[0m\n" ;;
     esac
   done
@@ -361,4 +359,4 @@ adguardhome_main() {
   printf "\033[1;34mAccess UI 👉    http://${NET_ADDR}:3000/\033[0m\n"
 }
 
-adguardhome_main "$@"
+# adguardhome_main "$@"
