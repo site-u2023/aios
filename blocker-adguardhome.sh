@@ -7,6 +7,8 @@
 
 SCRIPT_VERSION="2025.07.17-00-00"
 
+REQUIRED_MEM="50" # unit: MB
+REQUIRED_FLASH="100" # unit: MB
 LAN="${LAN:-br-lan}"
 NET_ADDR=""
 NET_ADDR6=""
@@ -61,12 +63,12 @@ check_system() {
   printf "Memory: \033[1mFree %s MB\033[0m / Total %s MB\n" "$MEM_FREE_MB" "$MEM_TOTAL_MB"
   printf "Flash:  \033[1mFree %s MB\033[0m / Total %s MB\n" "$FLASH_FREE_MB" "$FLASH_TOTAL_MB"
 
-  if [ "$MEM_FREE_MB" -lt 50 ]; then
-    printf "Error: Insufficient memory. At least 50MB RAM is required.\n"
+  if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
+    printf "Error: Insufficient memory. At least %sMB RAM is required.\n" "$REQUIRED_MEM"
     exit 1
   fi
-  if [ "$FLASH_FREE_MB" -lt 100 ]; then
-    printf "Error: Insufficient flash storage. At least 100MB free space is required.\n"
+  if [ "$FLASH_FREE_MB" -lt "$REQUIRED_FLASH" ]; then
+    printf "Error: Insufficient flash storage. At least %sMB free space is required.\n" "$REQUIRED_FLASH"
     exit 1
   fi
 
