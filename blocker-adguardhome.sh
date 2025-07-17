@@ -256,9 +256,6 @@ common_config() {
   /etc/init.d/"$SERVICE_NAME" enable
   /etc/init.d/"$SERVICE_NAME" start
   
-  printf "Router IPv4 : %s\n" "${NET_ADDR}"
-  printf "Router IPv6 : %s\n" "${NET_ADDR6}"
-  
   uci set dhcp.@dnsmasq[0].noresolv="1"
   uci set dhcp.@dnsmasq[0].cachesize="0"
   uci set dhcp.@dnsmasq[0].rebind_protection='0'
@@ -290,6 +287,21 @@ common_config() {
     printf "\033[1;31mFailed to restart odhcpd\033[0m\n"
     exit 1
   }
+
+  printf "\033[1;32mRouter IPv4  : %s\n" "${NET_ADDR}"
+  if [ -z "$NET_ADDR6_LIST" ]; then
+    printf "\033[1;33mRouter IPv6  : none found\033[0m\n"
+  else
+    COUNT=$(printf '%s\n' "$NET_ADDR6_LIST" | wc -l)
+    if [ "$COUNT" -eq 1 ]; then
+      printf "\033[1;32mRouter IPv6  : %s\n" "$NET_ADDR6"
+    else
+      printf "\033[1;32mRouter IPv6 addresses (%d):\n" "$COUNT"
+      for ip in $NET_ADDR6_LIST; do
+        printf "  - %s\n" "$ip"
+      done
+    fi
+  fi
 }
 
 remove_adguardhome() {
