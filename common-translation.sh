@@ -27,7 +27,8 @@ WGET_CAPABILITY_DETECTED="" # Initialized by translate_main if detect_wget_capab
 AI_TRANSLATION_FUNCTIONS="translate_with_google" # 使用したい関数名を空白区切りで列挙
 
 # --- Set MAX_PARALLEL_TASKS ---
-MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
+# MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-$(head -n 1 "${CACHE_DIR}/cpu_core.ch" 2>/dev/null)}"
+MAX_PARALLEL_TASKS="${MAX_PARALLEL_TASKS:-4}"
 
 # 翻訳処理時間を保持するグローバル変数
 LAST_ELAPSED_SECONDS_TRANSLATION=0
