@@ -268,8 +268,7 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option='15',"lan"
 
   # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
-  for OUTPUT in $(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep -E '^(fd|fc|2)'); do
-      OUTPUT=${OUTPUT%%/*}
+  for OUTPUT in $(ip -o -6 addr list br-lan scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1]}'); do
       printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
       uci add_list dhcp.lan.dns="$OUTPUT"
   done
