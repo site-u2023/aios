@@ -21,7 +21,7 @@ PACKAGE_MANAGER=""
 check_system() {
   if [ -x /etc/init.d/adguardhome ] || [ -x /etc/init.d/AdGuardHome ]; then
     printf "\033[1;33mAdGuard Home is already installed. Exiting.\033[0m\n"
-    exit 0
+    remove_adguardhome
   fi
 
   printf "\033[1;34mChecking lan interface\033[0m\n"
