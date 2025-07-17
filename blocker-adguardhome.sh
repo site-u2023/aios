@@ -7,6 +7,8 @@
 
 SCRIPT_VERSION="2025.07.17-00-00"
 
+# set -ex
+
 REQUIRED_MEM="50" # unit: MB
 REQUIRED_FLASH="100" # unit: MB
 LAN="${LAN:-br-lan}"
@@ -19,9 +21,11 @@ AGH=""
 PACKAGE_MANAGER=""
 
 check_system() {
+  printf "\033[1;34mChecking existing AdGuard Home installation…\033[0m\n"
   if [ -x /etc/init.d/adguardhome ] || [ -x /etc/init.d/AdGuardHome ] || [ -x /usr/bin/adguardhome ]; then
     printf "\033[1;33mAdGuard Home is already installed. Exiting.\033[0m\n"
     remove_adguardhome
+    exit 0
   fi
 
   printf "\033[1;34mChecking LAN interface\033[0m\n"
@@ -32,14 +36,14 @@ check_system() {
   fi
 
   printf "\033[1;34mChecking package manager\033[0m\n"
-  if [ -x "$(command -v opkg)" ]; then
+  if command -v opkg >/dev/null 2>&1; then
     PACKAGE_MANAGER="opkg"
-  elif [ -x "$(command -v apk)" ]; then
+  elif command -v apk >/dev/null 2>&1; then
     PACKAGE_MANAGER="apk"
   else
     PACKAGE_MANAGER="unknown"
   fi
-  
+
   printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
   
   MEM_TOTAL_KB=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
@@ -55,8 +59,8 @@ check_system() {
   MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
 
   DF_OUT=$(df -k / | awk 'NR==2 {print $2, $4}')
-  FLASH_TOTAL_KB=$(echo "$DF_OUT" | awk '{print $1}')
-  FLASH_FREE_KB=$(echo "$DF_OUT" | awk '{print $2}')
+  FLASH_TOTAL_KB=$(printf '%s\n' "$DF_OUT" | awk '{print $1}')
+  FLASH_FREE_KB=$(printf '%s\n' "$DF_OUT" | awk '{print $2}')
   FLASH_FREE_MB=$((FLASH_FREE_KB / 1024))
   FLASH_TOTAL_MB=$((FLASH_TOTAL_KB / 1024))
 
@@ -123,7 +127,7 @@ install_cacertificates() {
 }
 
 install_openwrt() {
-  printf "\033[1;34mInstalling AdGuard Home (OpenWrt package)…\033[0m\n"
+  printf "\033[1;34mInstalling AdGuard Home (OpenWrt package)\033[0m\n"
   case "$PACKAGE_MANAGER" in
     apk)
       apk add adguardhome || {
@@ -161,7 +165,7 @@ install_official() {
     i386|i686)     ARCH=386 ;;
     mips)          ARCH=mipsle ;;
     mips64)        ARCH=mips64le ;;
-    *) echo "Unsupported arch: $(uname -m)"; exit 1 ;;
+    *) printf "Unsupported arch: %s\n" "$(uname -m)"; exit 1 ;;
   esac
 
   TAR="AdGuardHome_linux_${ARCH}.tar.gz"
@@ -245,8 +249,8 @@ common_config() {
   /etc/init.d/"$SERVICE_NAME" enable
   /etc/init.d/"$SERVICE_NAME" start
   
-  echo "Router IPv4 : ""${NET_ADDR}"
-  echo "Router IPv6 : ""${NET_ADDR6}"
+  printf "Router IPv4 : %s\n" "${NET_ADDR}"
+  printf "Router IPv6 : %s\n" "${NET_ADDR6}"
   
   uci set dhcp.@dnsmasq[0].noresolv="1"
   uci set dhcp.@dnsmasq[0].cachesize="0"
@@ -266,7 +270,7 @@ common_config() {
   # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
   for OUTPUT in $(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep -E '^(fd|fc|2)'); do
       OUTPUT=${OUTPUT%%/*}
-      echo "Adding $OUTPUT to IPV6 DNS"
+      printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
       uci add_list dhcp.lan.dns="$OUTPUT"
   done
   
@@ -291,16 +295,19 @@ remove_adguardhome() {
     INSTALL_TYPE="openwrt"
     AGH="adguardhome"
   else
-    echo "AdGuard Home not found"
+    printf "\033[1;31mAdGuard Home not found\033[0m\n"
     return 1
   fi
 
-  echo "Found AdGuard Home ($INSTALL_TYPE version)"
+  printf "Found AdGuard Home (%s version)\n" "$INSTALL_TYPE"
   printf "Do you want to remove it? (y/N): "
   read -r confirm
   case "$confirm" in
     [yY]|[yY][eE][sS]) ;;
-    *) echo "Cancelled"; return 0 ;;
+    *)  
+      printf "\033[1;33mCancelled\033[0m\n"
+      return 0
+      ;;
   esac
 
   /etc/init.d/"${AGH}" stop 2>/dev/null || true
