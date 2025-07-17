@@ -7,8 +7,6 @@
 
 SCRIPT_VERSION="2025.07.17-00-00"
 
-# set -ex
-
 LAN="${LAN:-br-lan}"
 NET_ADDR=""
 NET_ADDR6=""
