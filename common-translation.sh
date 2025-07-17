@@ -102,28 +102,15 @@ translate_with_google() {
         
         if [ "$wget_exit_code" -eq 0 ] && [ -n "$response_data" ]; then
             if echo "$response_data" | grep -q '^\s*\[\[\["'; then
-                # MODIFIED: awk script reverted to only perform basic unescaping, no extra sanitization.
-                translated_text=$(printf %s "$response_data" | awk '
-                BEGIN { out = "" }
-                /^\s*\[\[\["/ {
-                    sub(/^\s*\[\[\["/, "")
-                    split($0, a, /","/)
-                    out = a[1]
-                    gsub(/\\u003d/, "=", out)
-                    gsub(/\\u003c/, "<", out)
-                    gsub(/\\u003e/, ">", out)
-                    gsub(/\\u0026/, "&", out)
-                    gsub(/\\"/, "\"", out)
-                    gsub(/\\n/, "\n", out)
-                    gsub(/\\r/, "", out)
-                    gsub(/\\\\/, "\\", out)
-                    print out
-                    exit
-                }
-                ')
+                translated_text=$(printf %s "$response_data" | jsonfilter -e '$[0][0][0]' 2>/dev/null)
+                
                 if [ -n "$translated_text" ]; then
+                    translated_text=$(echo "$translated_text" | sed -e 's/\\u003d/=/g' -e 's/\\u003c/</g' -e 's/\\u003e/>/g' -e 's/\\u0026/&/g' -e 's/\\"/\"/g' -e 's/\\n/\n/g' -e 's/\\r//g' -e 's/\\\\/\\/g')
+
                     printf "%s\n" "$translated_text"
                     return 0
+                else
+                    debug_log "ERROR" "jsonfilter failed to extract translation or returned empty."
                 fi
             fi
         fi
