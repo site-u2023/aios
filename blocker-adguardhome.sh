@@ -22,14 +22,14 @@ check_system() {
     remove_adguardhome
   fi
 
-  printf "\033[1;34mChecking lan interface\033[0m\n"
+  printf "\033[1;34mChecking LAN interface\033[0m\n"
   LAN="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@.l3_device')"
   if [ -z "$LAN" ]; then
     printf "\033[1;31mLAN interface not found. Aborting.\033[0m\n"
     exit 1
   fi
 
-  printf "\033[1;34mChecking Package manager\033[0m\n"
+  printf "\033[1;34mChecking package manager\033[0m\n"
   if [ -x "$(command -v opkg)" ]; then
     PACKAGE_MANAGER="opkg"
   elif [ -x "$(command -v apk)" ]; then
@@ -39,31 +39,39 @@ check_system() {
   fi
   
   printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
-  MEM_TOTAL_KB=$(awk '/MemTotal:/ { print $2 }' /proc/meminfo)
-  MEM_FREE_KB=$(awk '/MemAvailable:/ { print $2 }' /proc/meminfo)
-  MEM_USED_KB=$(( MEM_TOTAL_KB - MEM_FREE_KB ))
+  
+  MEM_TOTAL_KB=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+  MEM_FREE_KB=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+  BUFFERS_KB=$(awk '/^Buffers:/ {print $2}' /proc/meminfo)
+  CACHED_KB=$(awk '/^Cached:/ {print $2}' /proc/meminfo)
 
-  MEM_TOTAL_MB=$(( MEM_TOTAL_KB / 1024 ))
-  MEM_USED_MB=$(( MEM_USED_KB / 1024 ))
-  MEM_FREE_MB=$(( MEM_FREE_KB / 1024 ))
+  if [ -n "$MEM_FREE_KB" ]; then
+    MEM_FREE_MB=$((MEM_FREE_KB / 1024))
+  else
+    MEM_FREE_MB=$(((BUFFERS_KB + CACHED_KB) / 1024))
+  fi
+  MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
 
-  FLASH_TOTAL_KB=$(df -k / | awk 'NR==2 { print $2 }')
-  FLASH_USED_KB=$(df -k / | awk 'NR==2 { print $3 }')
-  FLASH_FREE_KB=$(df -k / | awk 'NR==2 { print $4 }')
+  DF_OUT=$(df -k / | awk 'NR==2 {print $2, $4}')
+  FLASH_TOTAL_KB=$(echo "$DF_OUT" | awk '{print $1}')
+  FLASH_FREE_KB=$(echo "$DF_OUT" | awk '{print $2}')
+  FLASH_FREE_MB=$((FLASH_FREE_KB / 1024))
+  FLASH_TOTAL_MB=$((FLASH_TOTAL_KB / 1024))
 
-  FLASH_TOTAL_MB=$(( FLASH_TOTAL_KB / 1024 ))
-  FLASH_USED_MB=$(( FLASH_USED_KB / 1024 ))
-  FLASH_FREE_MB=$(( FLASH_FREE_KB / 1024 ))
+  printf "Memory: \033[1mFree %s MB\033[0m / Total %s MB\n" "$MEM_FREE_MB" "$MEM_TOTAL_MB"
+  printf "Flash:  \033[1mFree %s MB\033[0m / Total %s MB\n" "$FLASH_FREE_MB" "$FLASH_TOTAL_MB"
 
-  if [ "$MEM_FREE_MB" -le 50 ] || [ "$FLASH_FREE_MB" -le 100 ]; then
-    printf "\033[1;31mInsufficient resources. At least 50MB RAM and 100MB flash required (per OpenWrt official guidance).\033[0m\n"
+  if [ "$MEM_FREE_MB" -lt 50 ]; then
+    printf "Error: Insufficient memory. At least 50MB RAM is required.\n"
+    exit 1
+  fi
+  if [ "$FLASH_FREE_MB" -lt 100 ]; then
+    printf "Error: Insufficient flash storage. At least 100MB free space is required.\n"
     exit 1
   fi
 
-  echo "Detected LAN interface: ${LAN}"
-  echo "Package manager : ${PACKAGE_MANAGER}"
-  echo "Memory: Total ${MEM_TOTAL_MB} MB, Used ${MEM_USED_MB} MB, Free ${MEM_FREE_MB} MB"
-  echo "Flash : Total ${FLASH_TOTAL_MB} MB, Used ${FLASH_USED_MB} MB, Free ${FLASH_FREE_MB} MB"
+  printf "Detected LAN interface: %s\n" "$LAN"
+  printf "Package manager: %s\n" "$PACKAGE_MANAGER"
 }
 
 install_prompt() {
