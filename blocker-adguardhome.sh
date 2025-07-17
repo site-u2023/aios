@@ -17,7 +17,7 @@ AGH=""
 PACKAGE_MANAGER=""
 
 check_system() {
-  if [ -x /etc/init.d/adguardhome ] || [ -x /etc/init.d/AdGuardHome ]; then
+  if [ -x /etc/init.d/adguardhome ] || [ -x /etc/init.d/AdGuardHome ] || [ -x /usr/bin/adguardhome ]; then
     printf "\033[1;33mAdGuard Home is already installed. Exiting.\033[0m\n"
     remove_adguardhome
   fi
