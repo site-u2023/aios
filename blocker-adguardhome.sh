@@ -184,10 +184,29 @@ install_official() {
 get_iface_addrs() {
 # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
 # For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
-  NET_ADDR=$(ip -o -4 addr list "$LAN" | awk 'NR==1{split($4,a,"/");print a[1];exit}')
-  NET_ADDR6=$(ip -o -6 addr list "$LAN" scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1];exit}')
-# NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
-# NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+  NET_ADDR=$(ip -o -4 addr list "$LAN" | awk 'NR==1{split($4,a,"/");print a;exit}')
+  NET_ADDR6_LIST=$(ip -o -6 addr list "$LAN" scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a}')
+  NET_ADDR6=$(echo "$NET_ADDR6_LIST" | head -n 1)
+}
+
+LAN="${LAN:-br-lan}"
+NET_ADDR=""
+NET_ADDR6=""
+
+get_iface_addrs() {
+  # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
+  # For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
+  NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
+  NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
+  NET_ADDR6=$(printf '%s\n' "$NET_ADDR6_LIST" | head -n1)
+}
+
+get_iface_addrs() {
+  # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
+  # For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
+  NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
+  NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
+  NET_ADDR6=$(printf '%s\n' "$NET_ADDR6_LIST" | head -n1)
 }
 
 common_config_firewall() {
@@ -202,12 +221,20 @@ common_config_firewall() {
     nft list chain ip6 nat prerouting > /dev/null 2>&1 || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
 
     for proto in udp tcp; do
-      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR}:53"; then
-        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53
+      if ! nft list chain ip nat prerouting 2>/dev/null \
+           | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR}:53"; then
+        nft add rule ip nat prerouting \
+          iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53
       fi
-      if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR6}:53"; then
-        nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR6}:53
-      fi
+
+      for ip6 in $NET_ADDR6_LIST; do
+        rule="iifname \"${LAN}\" ${proto} dport 53 dnat to ${ip6}:53"
+        if ! nft list chain ip6 nat prerouting 2>/dev/null \
+             | grep -qF "$rule"; then
+          nft add rule ip6 nat prerouting \
+            iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53
+        fi
+      done
     done
 
     nft list ruleset > /etc/nftables.conf
@@ -267,17 +294,13 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option='6,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='15',"lan"
 
-# To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
-# For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
-for OUTPUT in $(ip -o -6 addr list br-lan scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1]}'); do
-    printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
-    uci add_list dhcp.lan.dns="$OUTPUT"
-done
-# for OUTPUT in $(ip -o -6 addr list br-lan scope global | awk '$4 ~ /^fd|^fc|^2/ { split($4, ip_addr, "/"); print ip_addr[1] }'); do
-#     printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
-#     uci add_list dhcp.lan.dns="$OUTPUT"
-# done
-  
+  if [ -n "$NET_ADDR6_LIST" ]; then
+    for OUTPUT in $NET_ADDR6_LIST; do
+      printf "Adding %s to IPv6 DNS\n" "$OUTPUT"
+      uci add_list dhcp.lan.dns="$OUTPUT"
+    done
+  fi
+
   uci commit dhcp
   /etc/init.d/dnsmasq restart || {
     printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"
