@@ -243,13 +243,12 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option='6,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='15',"lan"
 
-  for OUTPUT in $(ubus call network.interface.lan status \
-      | jsonfilter -e '@.ipv6_address[*].address' \
-      | grep '^fd\|^fc'); do
-    echo "Adding $OUTPUT to IPV6 DNS"
-    uci add_list dhcp.lan.dns=$OUTPUT
+  for OUTPUT in $(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep -E '^(fd|fc|2)'); do
+      OUTPUT=${OUTPUT%%/*}
+      echo "Adding $OUTPUT to IPV6 DNS"
+      uci add_list dhcp.lan.dns="$OUTPUT"
   done
-
+  
   uci commit dhcp
   /etc/init.d/dnsmasq restart || {
     printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"
