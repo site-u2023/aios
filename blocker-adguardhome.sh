@@ -16,8 +16,14 @@ SERVICE_NAME=""
 INSTALL_MODE=""
 ARCH=""
 AGH=""
+PACKAGE_MANAGER=""
 
 check_system() {
+  if [ -x /etc/init.d/adguardhome ] || [ -x /etc/init.d/AdGuardHome ]; then
+    printf "\033[1;33mAdGuard Home is already installed. Exiting.\033[0m\n"
+    exit 0
+  fi
+
   printf "\033[1;34mChecking lan interface\033[0m\n"
   LAN="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@.l3_device')"
   if [ -z "$LAN" ]; then
@@ -25,6 +31,15 @@ check_system() {
     exit 1
   fi
 
+  printf "\033[1;34mChecking Package manager\033[0m\n"
+  if [ -x "$(command -v opkg)" ]; then
+    PACKAGE_MANAGER="opkg"
+  elif [ -x "$(command -v apk)" ]; then
+    PACKAGE_MANAGER="apk"
+  else
+    PACKAGE_MANAGER="unknown"
+  fi
+  
   printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
   MEM_FREE_KB=$(awk '/MemAvailable:/ { print $2 }' /proc/meminfo)
   MEM_FREE_MB=$(( MEM_FREE_KB / 1024 ))
@@ -32,14 +47,15 @@ check_system() {
   FLASH_FREE_KB=$(df -k / | awk 'NR==2 { print $4 }')
   FLASH_FREE_MB=$(( FLASH_FREE_KB / 1024 ))
 
-  echo "Detected LAN interface: ${LAN}"
-  echo "Available Memory: ${MEM_FREE_MB} MB"
-  echo "Available Flash : ${FLASH_FREE_MB} MB"
-
   if [ "$MEM_FREE_MB" -le 50 ] || [ "$FLASH_FREE_MB" -le 100 ]; then
     printf "\033[1;31mInsufficient resources. At least 50MB RAM and 100MB flash required (per OpenWrt official guidance).\033[0m\n"
     exit 1
   fi
+
+  echo "Detected LAN interface: ${LAN}"
+  echo "Package manager : ${PACKAGE_MANAGER}"
+  echo "Available Memory: ${MEM_FREE_MB} MB"
+  echo "Available Flash : ${FLASH_FREE_MB} MB"
 }
 
 install_prompt() {
@@ -68,39 +84,45 @@ while true; do
 }
 
 install_cacertificates() {
-  if command -v apk >/dev/null 2>&1; then
-    printf "\033[1;34mUpdating apk index…\033[0m\n"
-    apk update
-    printf "\033[1;34mInstalling ca-certificates…\033[0m\n"
-    apk add ca-certificates
-  elif command -v opkg >/dev/null 2>&1; then
-    printf "\033[1;34mUpdating opkg index\033[0m\n"
-    opkg update --verbosity=0
-    printf "\033[1;34mInstalling ca-bundle\033[0m\n"
-    opkg install --verbosity=0 ca-bundle
-  else
-    printf "\033[1;31mNo supported package manager (apk or opkg) found.\033[0m\n"
-    exit 1
-  fi
+  case "$PACKAGE_MANAGER" in
+    apk)
+      printf "\033[1;34mUpdating apk index…\033[0m\n"
+      apk update
+      printf "\033[1;34mInstalling ca-certificates…\033[0m\n"
+      apk add ca-certificates
+      ;;
+    opkg)
+      printf "\033[1;34mUpdating opkg index\033[0m\n"
+      opkg update --verbosity=0
+      printf "\033[1;34mInstalling ca-bundle\033[0m\n"
+      opkg install --verbosity=0 ca-bundle
+      ;;
+    *)
+      printf "\033[1;31mNo supported package manager (apk or opkg) found.\033[0m\n"
+      exit 1
+      ;;
+  esac
 }
 
 install_openwrt() {
   printf "\033[1;34mInstalling AdGuard Home (OpenWrt package)…\033[0m\n"
-
-  if command -v apk >/dev/null 2>&1; then
-    apk add adguardhome || {
-      printf "\033[1;31mapk add failed, falling back to official…\033[0m\n"
-      return
-    }
-  elif command -v opkg >/dev/null 2>&1; then
-    opkg install --verbosity=0 adguardhome || {
-      printf "\033[1;31mopkg install failed, falling back to official…\033[0m\n"
-      return
-    }
-  else
-    install_official
-  fi
-  
+  case "$PACKAGE_MANAGER" in
+    apk)
+      apk add adguardhome || {
+        printf "\033[1;31mapk add failed, falling back to official…\033[0m\n"
+        return
+      }
+      ;;
+    opkg)
+      opkg install --verbosity=0 adguardhome || {
+        printf "\033[1;31mopkg install failed, falling back to official…\033[0m\n"
+        return
+      }
+      ;;
+    *)
+      install_official
+      ;;
+  esac
   SERVICE_NAME="adguardhome"
 }
 
@@ -131,7 +153,6 @@ install_official() {
   tar -C /etc/ -xzf "/etc/AdGuardHome/${TAR}"
   rm "/etc/AdGuardHome/${TAR}"
   chmod +x /etc/AdGuardHome/AdGuardHome
-
   SERVICE_NAME="AdGuardHome"
 }
 
