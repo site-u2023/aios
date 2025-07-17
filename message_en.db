@@ -16,7 +16,8 @@ en|MENU_INTERNET_DSLITE_TRANS_WEST=Transix West Japan
 en|MENU_INTERNET_DSLITE_XPASS=Cross Pass
 en|MENU_INTERNET_DSLITE_V6OPTION=v6 Option
 en|MENU_BLOCKER=ad-blocking software
-en|MENU_BLOCKER_ADGUARDHOME=AdGuardHome
+en|MENU_BLOCKER_ADGUARDHOME=Install AdGuardHome
+en|MENU_BLOCKER_ADGUARDHOM_REMOVE=Remove AdGuardHome
 
 # internet-auto-config.sh
 en|MSG_AUTO_CONFIG_RESULT=Automatic detection result{:} {s} ({t})
