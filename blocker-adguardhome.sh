@@ -147,7 +147,10 @@ install_official() {
   TAR="AdGuardHome_linux_${ARCH}.tar.gz"
   URL="https://github.com/AdguardTeam/AdGuardHome/releases/download/${VER}/${TAR}"
   printf "\033[1;34mDownloading ${TAR}\033[0m\n"
-  wget -q --no-check-certificate -O "/etc/AdGuardHome/${TAR}" "$URL"
+  if ! wget -q --no-check-certificate -O "/etc/AdGuardHome/${TAR}" "$URL"; then
+    printf "\033[1;31mDownload failed. Please check network connection.\033[0m\n"
+    exit 1
+  fi
   tar -C /etc/ -xzf "/etc/AdGuardHome/${TAR}"
   rm "/etc/AdGuardHome/${TAR}"
   chmod +x /etc/AdGuardHome/AdGuardHome
