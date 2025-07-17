@@ -816,24 +816,28 @@ create_language_db_new() {
         debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
         exit_status=1
     else
-        # --- 以下の2行を削除します: 100行ごとの sleep ロジック ---
-        # local translated_line_counter=0
-        # awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-        #     translated_line_counter=$((translated_line_counter + 1))
-        #     if [ "$translated_line_counter" -ge 100 ]; then
-        #         sleep 1
-        #         translated_line_counter=0
-        #         debug_log "DEBUG" "create_language_db_new: Pausing for 1 second after 100 lines to reduce API load."
-        #     fi
-        # --- 削除ここまで ---
-
+        # 新しいカウンタを導入し、小数点以下のsleepをサポートしないBusyBox環境に対応
+        local sleep_line_counter=0 # <-- これを追加
+        
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- 新規追加: 各翻訳リクエスト（サブシェル起動）の直前にsleepで短い遅延を挿入 ---
-            # 50ミリ秒 (50000マイクロ秒) を初期値としてテストしてください。
-            # 必要に応じてこの値を調整し、最適な間隔を見つけます。
-            sleep 50000 
-            debug_log "DEBUG" "create_language_db_new: Sleeping 50ms before launching subshell for a line."
-            # --- sleep 挿入箇所ここまで ---
+            sleep_line_counter=$((sleep_line_counter + 1))
+            
+            # --- 修正箇所: 1行ごとに短いsleepを試みる ---
+            # 非常に短い時間 (例: 0.01秒 = 10ミリ秒) を試します。
+            # もし環境が小数点以下のsleepをサポートしない場合、
+            # このsleepは0秒とみなされるかエラーになるため、
+            # 後続のsleep_line_counterと組み合わせたより長いsleepも検討します。
+            sleep 0.01 
+            debug_log "DEBUG" "create_language_db_new: Sleeping 0.01s before launching subshell for line ${sleep_line_counter}."
+
+            # もし `sleep 0.01` が効かない（またはエラーになる）環境の場合、
+            # 以下をコメント解除して試してみてください。
+            # 例: 50行ごとに1秒スリープ (以前の100行1秒よりも頻繁に)
+            # if [ "$((sleep_line_counter % 50))" -eq 0 ]; then
+            #     sleep 1
+            #     debug_log "DEBUG" "create_language_db_new: Pausing for 1s after ${sleep_line_counter} lines (fallback sleep)."
+            # fi
+            # --- 修正箇所ここまで ---
 
             (
                 local current_line="$line_from_awk"
@@ -842,7 +846,7 @@ create_language_db_new() {
                 local outfile_base="$final_output_file"
 
                 local translated_line
-                translated_line=$(translate_single_line "$current_line" "$lang" "$func")
+                translated_line=$("$func" "$current_line" "$lang")
                 if [ -n "$translated_line" ]; then
                     local partial_suffix=""
                     mkdir -p "$TR_DIR" || { debug_log "ERROR [Subshell]" "Failed to create TR_DIR: $TR_DIR"; exit 1; }
