@@ -3,7 +3,7 @@
 # OpenWrt 19.07+ configuration
 # Reference: https://openwrt.org/docs/guide-user/services/dns/adguard-home
 #            https://qiita.com/site_u/items/8214286f8e8d5ee41e65#adguard-home
-# このスクリプトファイルは単独利用が可能です。
+# This script file can be used standalone.
 
 SCRIPT_VERSION="2025.07.17-00-00"
 
