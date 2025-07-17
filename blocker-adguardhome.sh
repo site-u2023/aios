@@ -160,8 +160,8 @@ install_official() {
 common_config_firewall() {
   printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
 
-  NET_ADDR=$(ubus call network.interface.lan status | jsonfilter -e '@.ipv4_address[0].address')
-  NET_ADDR6=$(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep '^fd\|^fc' | head -n1)
+  NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+  NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
   
   uci -q delete firewall.adguardhome_dns_53 || true
 
@@ -209,22 +209,25 @@ common_config() {
   cp /etc/config/network /etc/config/network.adguard.bak
   cp /etc/config/dhcp     /etc/config/dhcp.adguard.bak
   cp /etc/config/firewall /etc/config/firewall.adguard.bak
-
+  
   [ "$INSTALL_MODE" = "official" ] && {
     /etc/AdGuardHome/AdGuardHome -s install >/dev/null 2>&1 || {
       printf "\033[1;31mInitialization failed. Check AdGuardHome.yaml and port availability.\033[0m\n"
       exit 1
     }
   }
+
+  chmod 700 /etc/"$SERVICE_NAME"
+  
   /etc/init.d/"$SERVICE_NAME" enable
   /etc/init.d/"$SERVICE_NAME" start
-
-  NET_ADDR=$(ubus call network.interface.lan status | jsonfilter -e '@.ipv4_address[0].address')
-  NET_ADDR6=$(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep '^fd\|^fc' | head -n1)
-
+  
+  NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+  NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+  
   echo "Router IPv4 : ""${NET_ADDR}"
   echo "Router IPv6 : ""${NET_ADDR6}"
-
+  
   uci set dhcp.@dnsmasq[0].noresolv="1"
   uci set dhcp.@dnsmasq[0].cachesize="0"
   uci set dhcp.@dnsmasq[0].rebind_protection='0'
@@ -232,17 +235,14 @@ common_config() {
   uci set dhcp.@dnsmasq[0].domain="lan"
   uci set dhcp.@dnsmasq[0].local="/lan/"
   uci set dhcp.@dnsmasq[0].expandhosts="1"
-
   uci -q del dhcp.@dnsmasq[0].server || true
   uci add_list dhcp.@dnsmasq[0].server="${NET_ADDR}"
-
   uci -q del dhcp.lan.dhcp_option || true
   uci -q del dhcp.lan.dns || true
-
   uci add_list dhcp.lan.dhcp_option='3,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='6,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='15',"lan"
-
+  
   for OUTPUT in $(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep -E '^(fd|fc|2)'); do
       OUTPUT=${OUTPUT%%/*}
       echo "Adding $OUTPUT to IPV6 DNS"
