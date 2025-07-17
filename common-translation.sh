@@ -828,12 +828,12 @@ create_language_db_new() {
         # --- 削除ここまで ---
 
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            # --- 新規追加: 各翻訳リクエスト（サブシェル起動）の直前にusleepで短い遅延を挿入 ---
+            # --- 新規追加: 各翻訳リクエスト（サブシェル起動）の直前にsleepで短い遅延を挿入 ---
             # 50ミリ秒 (50000マイクロ秒) を初期値としてテストしてください。
             # 必要に応じてこの値を調整し、最適な間隔を見つけます。
-            usleep 50000 
+            sleep 50000 
             debug_log "DEBUG" "create_language_db_new: Sleeping 50ms before launching subshell for a line."
-            # --- usleep 挿入箇所ここまで ---
+            # --- sleep 挿入箇所ここまで ---
 
             (
                 local current_line="$line_from_awk"
