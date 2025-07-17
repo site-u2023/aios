@@ -39,10 +39,20 @@ check_system() {
   fi
   
   printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
+  MEM_TOTAL_KB=$(awk '/MemTotal:/ { print $2 }' /proc/meminfo)
   MEM_FREE_KB=$(awk '/MemAvailable:/ { print $2 }' /proc/meminfo)
+  MEM_USED_KB=$(( MEM_TOTAL_KB - MEM_FREE_KB ))
+
+  MEM_TOTAL_MB=$(( MEM_TOTAL_KB / 1024 ))
+  MEM_USED_MB=$(( MEM_USED_KB / 1024 ))
   MEM_FREE_MB=$(( MEM_FREE_KB / 1024 ))
 
+  FLASH_TOTAL_KB=$(df -k / | awk 'NR==2 { print $2 }')
+  FLASH_USED_KB=$(df -k / | awk 'NR==2 { print $3 }')
   FLASH_FREE_KB=$(df -k / | awk 'NR==2 { print $4 }')
+
+  FLASH_TOTAL_MB=$(( FLASH_TOTAL_KB / 1024 ))
+  FLASH_USED_MB=$(( FLASH_USED_KB / 1024 ))
   FLASH_FREE_MB=$(( FLASH_FREE_KB / 1024 ))
 
   if [ "$MEM_FREE_MB" -le 50 ] || [ "$FLASH_FREE_MB" -le 100 ]; then
@@ -52,8 +62,8 @@ check_system() {
 
   echo "Detected LAN interface: ${LAN}"
   echo "Package manager : ${PACKAGE_MANAGER}"
-  echo "Available Memory: ${MEM_FREE_MB} MB"
-  echo "Available Flash : ${FLASH_FREE_MB} MB"
+  echo "Memory: Total ${MEM_TOTAL_MB} MB, Used ${MEM_USED_MB} MB, Free ${MEM_FREE_MB} MB"
+  echo "Flash : Total ${FLASH_TOTAL_MB} MB, Used ${FLASH_USED_MB} MB, Free ${FLASH_FREE_MB} MB"
 }
 
 install_prompt() {
