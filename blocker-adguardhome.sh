@@ -201,18 +201,14 @@ common_config_firewall() {
     nft list chain ip6 nat prerouting > /dev/null 2>&1 || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
 
     for proto in udp tcp; do
-      if ! nft list chain ip nat prerouting 2>/dev/null \
-           | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR}:53"; then
-        nft add rule ip nat prerouting \
-          iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53
+      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR}:53"; then
+        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53
       fi
 
       for ip6 in $NET_ADDR6_LIST; do
         rule="iifname \"${LAN}\" ${proto} dport 53 dnat to ${ip6}:53"
-        if ! nft list chain ip6 nat prerouting 2>/dev/null \
-             | grep -qF "$rule"; then
-          nft add rule ip6 nat prerouting \
-            iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53
+        if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "$rule"; then
+          nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53
         fi
       done
     done
@@ -379,14 +375,10 @@ remove_adguardhome() {
     get_iface_addrs
 
     for proto in udp tcp; do
-      nft delete rule ip nat prerouting \
-        iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53 \
-        2>/dev/null || true
+      nft delete rule ip nat prerouting \iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53 2>/dev/null || true
 
       for ip6 in $NET_ADDR6_LIST; do
-        nft delete rule ip6 nat prerouting \
-          iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53 \
-          2>/dev/null || true
+        nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53 2>/dev/null || true
       done
     done
 
