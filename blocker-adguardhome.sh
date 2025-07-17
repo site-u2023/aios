@@ -385,10 +385,17 @@ remove_adguardhome() {
   if command -v nft >/dev/null 2>&1; then
 
     get_iface_addrs
-  
+
     for proto in udp tcp; do
-      nft delete rule ip  nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53 2>/dev/null || true
-      nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR6}:53 2>/dev/null || true
+      nft delete rule ip nat prerouting \
+        iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53 \
+        2>/dev/null || true
+
+      for ip6 in $NET_ADDR6_LIST; do
+        nft delete rule ip6 nat prerouting \
+          iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53 \
+          2>/dev/null || true
+      done
     done
 
     if ! nft list chain ip  nat prerouting 2>/dev/null | grep -q 'dport 53'; then
