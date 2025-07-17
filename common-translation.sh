@@ -816,14 +816,24 @@ create_language_db_new() {
         debug_log "DEBUG" "create_language_db_all: Failed to initialize output file $final_output_file"
         exit_status=1
     else
-        local translated_line_counter=0
+        # --- 以下の2行を削除します: 100行ごとの sleep ロジック ---
+        # local translated_line_counter=0
+        # awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
+        #     translated_line_counter=$((translated_line_counter + 1))
+        #     if [ "$translated_line_counter" -ge 100 ]; then
+        #         sleep 1
+        #         translated_line_counter=0
+        #         debug_log "DEBUG" "create_language_db_new: Pausing for 1 second after 100 lines to reduce API load."
+        #     fi
+        # --- 削除ここまで ---
+
         awk 'NR>1 && !/^#/ && !/^$/' "$base_db" | while IFS= read -r line_from_awk; do
-            translated_line_counter=$((translated_line_counter + 1))
-            if [ "$translated_line_counter" -ge 100 ]; then
-                sleep 1
-                translated_line_counter=0
-                debug_log "DEBUG" "create_language_db_new: Pausing for 1 second after 100 lines to reduce API load."
-            fi
+            # --- 新規追加: 各翻訳リクエスト（サブシェル起動）の直前にusleepで短い遅延を挿入 ---
+            # 50ミリ秒 (50000マイクロ秒) を初期値としてテストしてください。
+            # 必要に応じてこの値を調整し、最適な間隔を見つけます。
+            usleep 50000 
+            debug_log "DEBUG" "create_language_db_new: Sleeping 50ms before launching subshell for a line."
+            # --- usleep 挿入箇所ここまで ---
 
             (
                 local current_line="$line_from_awk"
