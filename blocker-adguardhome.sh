@@ -267,11 +267,16 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option='6,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='15',"lan"
 
-  # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
-  for OUTPUT in $(ip -o -6 addr list br-lan scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1]}'); do
-      printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
-      uci add_list dhcp.lan.dns="$OUTPUT"
-  done
+# To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
+# For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
+for OUTPUT in $(ip -o -6 addr list br-lan scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1]}'); do
+    printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
+    uci add_list dhcp.lan.dns="$OUTPUT"
+done
+# for OUTPUT in $(ip -o -6 addr list br-lan scope global | awk '$4 ~ /^fd|^fc|^2/ { split($4, ip_addr, "/"); print ip_addr[1] }'); do
+#     printf "Adding %s to IPV6 DNS\n" "$OUTPUT"
+#     uci add_list dhcp.lan.dns="$OUTPUT"
+# done
   
   uci commit dhcp
   /etc/init.d/dnsmasq restart || {
