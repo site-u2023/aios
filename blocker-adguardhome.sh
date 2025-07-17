@@ -179,17 +179,15 @@ install_official() {
 
 get_iface_addrs() {
 # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
+# For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
   NET_ADDR=$(ip -o -4 addr list "$LAN" | awk 'NR==1{split($4,a,"/");print a[1];exit}')
   NET_ADDR6=$(ip -o -6 addr list "$LAN" scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1];exit}')
-# For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
 # NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
 # NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
 }
 
 common_config_firewall() {
   printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
-
-  get_iface_addrs
   
   uci -q delete firewall.adguardhome_dns_53 || true
 
@@ -246,8 +244,6 @@ common_config() {
   
   /etc/init.d/"$SERVICE_NAME" enable
   /etc/init.d/"$SERVICE_NAME" start
-  
-  get_iface_addrs
   
   echo "Router IPv4 : ""${NET_ADDR}"
   echo "Router IPv6 : ""${NET_ADDR6}"
@@ -372,7 +368,6 @@ remove_adguardhome() {
     nft list ruleset > /etc/nftables.conf || true
   fi
 
-  uci -q delete firewall.adguardhome_dns_53 2>/dev/null || true
   uci commit firewall
 
   /etc/init.d/dnsmasq restart || {
@@ -400,6 +395,7 @@ adguardhome_main() {
   install_prompt "$@"
   install_cacertificates
   install_"$INSTALL_MODE"
+  get_iface_addrs
   common_config
   common_config_firewall
   printf "\033[1;34mAccess UI 👉    http://${NET_ADDR}:3000/\033[0m\n"
