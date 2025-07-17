@@ -4,6 +4,7 @@
 MENU_INTERNET selector MENU_INTERNET
 # MENU_SYSTEM selector MENU_SYSTEM
 MENU_PACKAGES selector MENU_PACKAGES
+MENU_BLOCKER selecter MENU_BLOCKER
 
 [MENU_INTERNET]
 MENU_INTERNET_AUTO download "internet-auto.sh" "chmod" "load"
@@ -34,3 +35,6 @@ MENU_SYSTEM printf "\n%s\n" "$(color yellow "Coming soon")"
 MENU_PACKAGES_AUTO_INSTALL export PACKAGE_INSTALL_MODE="auto"; download "package.sh" "chmod" "load"; package_main
 MENU_PACKAGES_MANUAL_INSTALL export PACKAGE_INSTALL_MODE="manual"; download "package.sh" "chmod" "load"; package_main
 MENU_PACKAGES_LIST download "package.sh" "chmod" "load"; check_install_list
+
+[MENU_BLOCKER]
+MENU_BLOCKER_ADGUARDHOME menu_yn && download "blocker-adguardhome.sh"
