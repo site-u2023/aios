@@ -182,8 +182,8 @@ install_official() {
 }
 
 get_iface_addrs() {
-  # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
-  # For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
+  # IPv4: pick the first LAN address
+  # IPv6: grab all global, non-temporary ULA/GUA addresses (strip “/prefix”)
   NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
   NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
   NET_ADDR6=$(printf '%s\n' "$NET_ADDR6_LIST" | head -n1)
