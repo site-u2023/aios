@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # OpenWrt 19.07+ configuration
-# Powered by https://ipv4.web.fc2.com/map-e.html
+# Reference: https://ipv4.web.fc2.com/map-e.html
 # このスクリプトファイルは単独利用が可能です。
 
 SCRIPT_VERSION="2025.06.21-00-00"
