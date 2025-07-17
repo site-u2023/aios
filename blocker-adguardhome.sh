@@ -70,7 +70,7 @@ install_prompt() {
     esac
   fi
 
-while true; do
+  while true; do
     printf "\033[1;34m  1) Install Official binary\033[0m\n"
     printf "\033[1;34m  2) Install OpenWrt package\033[0m\n"
     printf "Enter choice (1, 2): "
@@ -78,7 +78,7 @@ while true; do
     case "$choice" in
       1|official) INSTALL_MODE="official"; break ;;
       2|openwrt) INSTALL_MODE="openwrt"; break ;;
-      *) printf "\033[1;31mInvalid choice '$choice'. Please enter 1, 2, or 'r'.\033[0m\n" ;;
+      *) printf "\033[1;31mInvalid choice '$choice'. Please enter 1 or 2.\033[0m\n" ;;
     esac
   done
 }
