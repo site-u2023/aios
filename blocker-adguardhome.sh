@@ -177,11 +177,19 @@ install_official() {
   SERVICE_NAME="AdGuardHome"
 }
 
+get_iface_addrs() {
+# To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
+  NET_ADDR=$(ip -o -4 addr list "$LAN" | awk 'NR==1{split($4,a,"/");print a[1];exit}')
+  NET_ADDR6=$(ip -o -6 addr list "$LAN" scope global | awk 'match($4,/^(fd|fc|2)/){split($4,a,"/");print a[1];exit}')
+# For enhanced security, exclude link-local and temporary addresses by matching only ULA (fd|fc) and GUA (2000::/3) scopes.
+# NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+# NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+}
+
 common_config_firewall() {
   printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
 
-  NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
-  NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+  get_iface_addrs
   
   uci -q delete firewall.adguardhome_dns_53 || true
 
@@ -239,8 +247,7 @@ common_config() {
   /etc/init.d/"$SERVICE_NAME" enable
   /etc/init.d/"$SERVICE_NAME" start
   
-  NET_ADDR=$(/sbin/ip -o -4 addr list "$LAN" | awk 'NR==1{ split($4, ip_addr, "/"); print ip_addr[1]; exit }')
-  NET_ADDR6=$(/sbin/ip -o -6 addr list "$LAN" scope global | awk '$4 ~ /^fd|^fc/ { split($4, ip_addr, "/"); print ip_addr[1]; exit }')
+  get_iface_addrs
   
   echo "Router IPv4 : ""${NET_ADDR}"
   echo "Router IPv6 : ""${NET_ADDR6}"
@@ -259,7 +266,8 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option='3,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='6,'"${NET_ADDR}"
   uci add_list dhcp.lan.dhcp_option='15',"lan"
-  
+
+  # To support IPv6 tunnel environments such as MAP-E and DS-Lite, Global Unicast Addresses (2000::/3) are also included as DNS advertisement targets.
   for OUTPUT in $(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep -E '^(fd|fc|2)'); do
       OUTPUT=${OUTPUT%%/*}
       echo "Adding $OUTPUT to IPV6 DNS"
@@ -295,10 +303,10 @@ remove_adguardhome() {
   printf "Do you want to remove it? (y/N): "
   read -r confirm
   case "$confirm" in
-    [yY]*) ;; 
+    [yY]|[yY][eE][sS]) ;;
     *) echo "Cancelled"; return 0 ;;
   esac
-  
+
   /etc/init.d/"${AGH}" stop 2>/dev/null || true
   /etc/init.d/"${AGH}" disable 2>/dev/null || true
 
@@ -316,8 +324,12 @@ remove_adguardhome() {
     printf "Do you want to remove configuration directory /etc/${AGH}? (y/N): "
     read -r config_confirm
     case "$config_confirm" in
-        [yY]*) rm -rf "/etc/${AGH}" ;;
-        *) printf "\033[1;33mConfiguration directory preserved.\033[0m\n" ;;
+      [yY]|[yY][eE][sS])
+        rm -rf "/etc/${AGH}"
+        ;;
+      *)
+        printf "\033[1;33mConfiguration directory preserved.\033[0m\n"
+        ;;
     esac
   fi
 
@@ -341,9 +353,9 @@ remove_adguardhome() {
   uci -q delete firewall.adguardhome_dns_53 2>/dev/null || true
 
   if command -v nft >/dev/null 2>&1; then
-    NET_ADDR=$(ubus call network.interface.lan status | jsonfilter -e '@.ipv4_address[0].address')
-    NET_ADDR6=$(ubus call network.interface.lan status | jsonfilter -e '@.ipv6_address[*].address' | grep '^fd\|^fc' | head -n1)
 
+    get_iface_addrs
+  
     for proto in udp tcp; do
       nft delete rule ip  nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53 2>/dev/null || true
       nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR6}:53 2>/dev/null || true
