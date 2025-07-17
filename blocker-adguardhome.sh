@@ -187,8 +187,12 @@ common_config_firewall() {
 
   if command -v nft >/dev/null 2>&1; then
     for proto in udp tcp; do
-      nft delete rule ip  nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53    2>/dev/null || true
-      nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR6}:53 2>/dev/null || true
+      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR}:53"; then
+        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53
+      fi
+      if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR6}:53"; then
+        nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR6}:53
+      fi
     done
 
     nft list table ip  nat          > /dev/null 2>&1 || nft add table ip  nat
@@ -197,11 +201,6 @@ common_config_firewall() {
     nft list table ip6 nat          > /dev/null 2>&1 || nft add table ip6 nat
     nft list chain ip6 nat prerouting > /dev/null 2>&1 \
       || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
-
-    nft add rule ip  nat prerouting iifname "${LAN}" udp dport 53 dnat to ${NET_ADDR}:53
-    nft add rule ip  nat prerouting iifname "${LAN}" tcp dport 53 dnat to ${NET_ADDR}:53
-    nft add rule ip6 nat prerouting iifname "${LAN}" udp dport 53 dnat to ${NET_ADDR6}:53
-    nft add rule ip6 nat prerouting iifname "${LAN}" tcp dport 53 dnat to ${NET_ADDR6}:53
 
     nft list ruleset > /etc/nftables.conf
   else
