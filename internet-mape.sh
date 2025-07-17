@@ -2,7 +2,7 @@
 
 # OpenWrt 19.07+ configuration
 # Reference: https://ipv4.web.fc2.com/map-e.html
-# このスクリプトファイルは単独利用が可能です。
+# This script file can be used standalone.
 
 # set -ex
 
