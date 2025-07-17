@@ -1068,8 +1068,7 @@ create_language_db_parallel() {
         exit_status=$?
     else
         debug_log "DEBUG" "create_language_db_parallel: Routing to create_language_db_all for OS version '$osversion' with limit from global MAX_PARALLEL_TASKS ($MAX_PARALLEL_TASKS)"
-        # create_language_db_all "$@" "$MAX_PARALLEL_TASKS"
-        create_language_db_19 "$@" "$MAX_PARALLEL_TASKS"
+        create_language_db_new "$@" "$MAX_PARALLEL_TASKS"
         exit_status=$?
     fi
     debug_log "DEBUG" "create_language_db_parallel: Worker function finished with status: $exit_status"
