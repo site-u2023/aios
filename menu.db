@@ -37,4 +37,5 @@ MENU_PACKAGES_MANUAL_INSTALL export PACKAGE_INSTALL_MODE="manual"; download "pac
 MENU_PACKAGES_LIST download "package.sh" "chmod" "load"; check_install_list
 
 [MENU_BLOCKER]
-MENU_BLOCKER_ADGUARDHOME menu_yn && download "blocker-adguardhome.sh"
+MENU_BLOCKER_ADGUARDHOME menu_yn && download "blocker-adguardhome.sh" "chmod" "load" && adguardhome_main
+MENU_BLOCKER_ADGUARDHOM_REMOVE menu_yn && download "blocker-adguardhome.sh" "chmod" "load" && remove_adguardhome
