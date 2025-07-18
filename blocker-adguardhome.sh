@@ -185,7 +185,7 @@ install_official() {
 get_iface_addrs() {
   # IPv4: pick the first LAN address
   NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
-  # IPv6: non-temporary ULA/GUAのみ
+  # IPv6: non-temporary ULA/GUA only
   NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
 
   if [ -z "$NET_ADDR6_LIST" ]; then
