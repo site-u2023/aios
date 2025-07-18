@@ -5,7 +5,7 @@
 #            https://github.com/AdguardTeam/AdGuardHome
 # This script file can be used standalone.
 
-SCRIPT_VERSION="2025.07.17-00-00"
+SCRIPT_VERSION="2025.07.19-00-00"
 
 # set -ex
 
@@ -184,10 +184,16 @@ install_official() {
 
 get_iface_addrs() {
   # IPv4: pick the first LAN address
-  # IPv6: grab all global, non-temporary ULA/GUA addresses (strip “/prefix”)
   NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
+  # IPv6: non-temporary ULA/GUAのみ
   NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
-  NET_ADDR6=$(printf '%s\n' "$NET_ADDR6_LIST" | head -n1)
+
+  if [ -z "$NET_ADDR6_LIST" ]; then
+    printf "\033[1;33mWarning: No suitable IPv6 addresses found. Proceeding with IPv4 only.\033[0m\n"
+    NET_ADDR6=""
+  else
+    NET_ADDR6=$(printf '%s\n' "$NET_ADDR6_LIST" | head -n1)
+  fi
 }
 
 common_config_firewall() {
@@ -269,6 +275,7 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option='15',"lan"
 
   if [ -n "$NET_ADDR6_LIST" ]; then
+    printf "\033[1;34mRegistering multiple IPv6 addresses to DHCP:\033[0m\n"
     for OUTPUT in $NET_ADDR6_LIST; do
       printf "Adding %s to IPv6 DNS\n" "$OUTPUT"
       uci add_list dhcp.lan.dns="$OUTPUT"
