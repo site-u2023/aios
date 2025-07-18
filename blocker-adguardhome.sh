@@ -12,6 +12,7 @@ SCRIPT_VERSION="2025.07.17-00-00"
 REQUIRED_MEM="50" # unit: MB
 REQUIRED_FLASH="100" # unit: MB
 LAN="${LAN:-br-lan}"
+DNS_PORT="${DNS_PORT:-53}"
 NET_ADDR=""
 NET_ADDR6=""
 SERVICE_NAME=""
@@ -201,14 +202,14 @@ common_config_firewall() {
     nft list chain ip6 nat prerouting > /dev/null 2>&1 || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
 
     for proto in udp tcp; do
-      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport 53 dnat to ${NET_ADDR}:53"; then
-        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53
+      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
+        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}
       fi
 
       for ip6 in $NET_ADDR6_LIST; do
-        rule="iifname \"${LAN}\" ${proto} dport 53 dnat to ${ip6}:53"
+        rule="iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}"
         if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "$rule"; then
-          nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53
+          nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}
         fi
       done
     done
@@ -220,10 +221,10 @@ common_config_firewall() {
     uci set firewall.adguardhome_dns_53.src='lan'
     uci add_list firewall.adguardhome_dns_53.proto='tcp'
     uci add_list firewall.adguardhome_dns_53.proto='udp'
-    uci set firewall.adguardhome_dns_53.src_dport='53'
+    uci set firewall.adguardhome_dns_53.src_dport="${DNS_PORT}"
     uci set firewall.adguardhome_dns_53.dest='lan'
     uci set firewall.adguardhome_dns_53.dest_ip="${NET_ADDR}"
-    uci set firewall.adguardhome_dns_53.dest_port='53'
+    uci set firewall.adguardhome_dns_53.dest_port="${DNS_PORT}"
     uci set firewall.adguardhome_dns_53.target='DNAT'
     uci commit firewall
   fi
@@ -361,9 +362,9 @@ remove_adguardhome() {
   done
 
   if uci -q get dhcp.@dnsmasq[0].port >/dev/null 2>&1; then
-    if [ "$(uci -q get dhcp.@dnsmasq[0].port)" != "53" ]; then
-      printf "\033[1;34mRestoring dnsmasq port to 53\033[0m\n"
-      uci set dhcp.@dnsmasq[0].port='53'
+    if [ "$(uci -q get dhcp.@dnsmasq[0].port)" != "${DNS_PORT}" ]; then
+      printf "\033[1;34mRestoring dnsmasq port to ${DNS_PORT}\033[0m\n"
+      uci set dhcp.@dnsmasq[0].port="${DNS_PORT}"
       uci commit dhcp
     fi
   fi
@@ -375,18 +376,18 @@ remove_adguardhome() {
     get_iface_addrs
 
     for proto in udp tcp; do
-      nft delete rule ip nat prerouting \iifname "${LAN}" ${proto} dport 53 dnat to ${NET_ADDR}:53 2>/dev/null || true
+      nft delete rule ip nat prerouting \iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT} 2>/dev/null || true
 
       for ip6 in $NET_ADDR6_LIST; do
-        nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport 53 dnat to ${ip6}:53 2>/dev/null || true
+        nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT} 2>/dev/null || true
       done
     done
 
-    if ! nft list chain ip  nat prerouting 2>/dev/null | grep -q 'dport 53'; then
+    if ! nft list chain ip  nat prerouting 2>/dev/null | grep -q "dport ${DNS_PORT}"; then
       nft delete chain ip  nat prerouting 2>/dev/null || true
       nft delete table ip  nat 2>/dev/null || true
     fi
-    if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -q 'dport 53'; then
+    if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -q "dport ${DNS_PORT}"; then
       nft delete chain ip6 nat prerouting 2>/dev/null || true
       nft delete table ip6 nat 2>/dev/null || true
     fi
