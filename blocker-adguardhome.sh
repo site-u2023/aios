@@ -264,6 +264,11 @@ common_config() {
   uci set dhcp.@dnsmasq[0].noresolv="1"
   uci set dhcp.@dnsmasq[0].cachesize="0"
   uci set dhcp.@dnsmasq[0].rebind_protection='0'
+  
+  # uci set dhcp.@dnsmasq[0].rebind_protection='1'  # 有効のまま
+  # uci set dhcp.@dnsmasq[0].rebind_localhost='1'   # localhost保護
+  # uci add_list dhcp.@dnsmasq[0].rebind_domain='lan'  # 内部ドメインは許可
+  
   uci set dhcp.@dnsmasq[0].port="54"
   uci set dhcp.@dnsmasq[0].domain="lan"
   uci set dhcp.@dnsmasq[0].local="/lan/"
