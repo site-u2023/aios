@@ -150,11 +150,12 @@ install_openwrt() {
 }
 
 install_official() {
-
-  VER=$(wget -q --no-check-certificate -O - https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | jsonfilter -e '@.tag_name') 
+  CA="--no-check-certificate"
+  URL="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
+  VER=$( { wget -q -O - "$URL" || wget -q "$CA" -O - "$URL"; } | jsonfilter -e '@.tag_name' )
   [ -n "$VER" ] || { printf "\033[1;31mError: Failed to get AdGuard Home version from GitHub API.\033[0m\n"; exit 1; }
-  printf "\033[1;33mInstall Version: $VER\033[0m\n"
-
+  printf "\033[1;33mInstall Version: %s\033[0m\n" "$VER"
+  
   mkdir -p /etc/AdGuardHome
 
   case "$(uname -m)" in
@@ -170,10 +171,11 @@ install_official() {
   esac
 
   TAR="AdGuardHome_linux_${ARCH}.tar.gz"
-  URL="https://github.com/AdguardTeam/AdGuardHome/releases/download/${VER}/${TAR}"
-  printf "\033[1;34mDownloading ${TAR}\033[0m\n"
-  if ! wget -q --no-check-certificate -O "/etc/AdGuardHome/${TAR}" "$URL"; then
-    printf "\033[1;31mDownload failed. Please check network connection.\033[0m\n"
+  URL2="https://github.com/AdguardTeam/AdGuardHome/releases/download/${VER}/${TAR}"
+  DEST="/etc/AdGuardHome/${TAR}"
+  printf '\033[1;34mDownloading %s\033[0m\n' "$TAR"
+  if ! { wget -q -O "$DEST" "$URL2" || wget -q "$CA" -O "$DEST" "$URL2" }; then
+    printf '\033[1;31mDownload failed. Please check network connection.\033[0m\n'
     exit 1
   fi
   tar -C /etc/ -xzf "/etc/AdGuardHome/${TAR}"
