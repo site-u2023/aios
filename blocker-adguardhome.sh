@@ -217,7 +217,7 @@ install_official() {
 
 get_iface_addrs() {
   local flag=0
-
+  
   if ip -4 -o addr show dev "$LAN" scope global | grep -q 'inet '; then
     NET_ADDR=$(ip -4 -o addr show dev "$LAN" scope global | awk 'NR==1{sub(/\/.*/,"",$4); print $4}')
     flag=$((flag | 1))
@@ -226,7 +226,7 @@ get_iface_addrs() {
   fi
 
   if ip -6 -o addr show dev "$LAN" scope global | grep -q 'inet6 '; then
-    NET_ADDR6=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){sub(/\/.*/,"",$4); print $4; exit}')
+    NET_ADDR6=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){sub(/\/.*/,"",$4); print $4;}')
     flag=$((flag | 2))
   else
     printf "\033[1;33mWarning: No IPv6 address on %s\033[0m\n" "$LAN"
@@ -440,7 +440,12 @@ adguardhome_main() {
   get_iface_addrs
   common_config
   common_config_firewall
-  printf "\033[1;34mAccess UI 👉    http://${NET_ADDR}:3000/\033[0m\n"
+
+  printf "\033[1;34mAccess UI v4 address 👉    http://${NET_ADDR}:3000/\033[0m\n"
+  if [ -n "$NET_ADDR6" ]; then
+    set -- $NET_ADDR6
+    printf "\033[1;34mAccess UI v6 address 👉    http://%s:3000/\033[0m\n" "$1"  
+  fi
 }
 
 # adguardhome_main "$@"
