@@ -272,19 +272,20 @@ common_config() {
     exit 1
   }
 
-  printf "\033[1;32mRouter IPv4  : %s\n" "${NET_ADDR}"
+  printf "\033[1;32mRouter IPv4: %s\033[0m\n" "$NET_ADDR"
+  
   if [ -z "$NET_ADDR6_LIST" ]; then
-    printf "\033[1;33mRouter IPv6  : none found\033[0m\n"
+    printf "\033[1;33mRouter IPv6: none found\033[0m\n"
   else
-    COUNT=$(printf '%s\n' "$NET_ADDR6_LIST" | wc -l)
-    if [ "$COUNT" -eq 1 ]; then
-      printf "\033[1;32mRouter IPv6  : %s\n" "$NET_ADDR6"
-    else
-      printf "\033[1;32mRouter IPv6 addresses (%d):\n" "$COUNT"
-      for ip in $NET_ADDR6_LIST; do
-        printf "  - %s\n" "$ip"
-      done
-    fi
+    first_ip=true
+    for ip in $NET_ADDR6_LIST; do
+      if $first_ip; then
+        printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
+        first_ip=false
+      else
+        printf "         \033[1;32m%s\033[0m\n" "$ip"
+      fi
+    done
   fi
 }
 
