@@ -202,8 +202,7 @@ get_iface_addrs() {
   # IPv4: pick the first LAN address
   NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
   # IPv6: non-temporary ULA/GUA only
-  NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
-
+  NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v 'temporary' | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
   if [ -z "$NET_ADDR6_LIST" ]; then
     printf "\033[1;33mWarning: No suitable IPv6 addresses found. Proceeding with IPv4 only.\033[0m\n"
     NET_ADDR6=""
@@ -214,10 +213,10 @@ get_iface_addrs() {
 
 common_config() {
   printf "\033[1;34mBacking up configuration files\033[0m\n"
-  cp /etc/config/network /etc/config/network.adguard.bak
+  cp /etc/config/network  /etc/config/network.adguard.bak
   cp /etc/config/dhcp     /etc/config/dhcp.adguard.bak
   cp /etc/config/firewall /etc/config/firewall.adguard.bak
-  
+
   [ "$INSTALL_MODE" = "official" ] && {
     /etc/AdGuardHome/AdGuardHome -s install >/dev/null 2>&1 || {
       printf "\033[1;31mInitialization failed. Check AdGuardHome.yaml and port availability.\033[0m\n"
@@ -226,35 +225,32 @@ common_config() {
   }
 
   chmod 700 /etc/"$SERVICE_NAME"
-  
   /etc/init.d/"$SERVICE_NAME" enable
   /etc/init.d/"$SERVICE_NAME" start
-  
+
   uci set dhcp.@dnsmasq[0].noresolv="1"
   uci set dhcp.@dnsmasq[0].cachesize="0"
   uci set dhcp.@dnsmasq[0].rebind_protection='0'
-  
-  # uci set dhcp.@dnsmasq[0].rebind_protection='1'  # 有効のまま
-  # uci set dhcp.@dnsmasq[0].rebind_localhost='1'   # localhost保護
-  # uci add_list dhcp.@dnsmasq[0].rebind_domain='lan'  # 内部ドメインは許可
-  
+
+  # uci set dhcp.@dnsmasq[0].rebind_protection='1'  # keep enabled
+  # uci set dhcp.@dnsmasq[0].rebind_localhost='1'   # protect localhost
+  # uci add_list dhcp.@dnsmasq[0].rebind_domain='lan'  # allow internal domain
+
   uci set dhcp.@dnsmasq[0].port="54"
   uci set dhcp.@dnsmasq[0].domain="lan"
   uci set dhcp.@dnsmasq[0].local="/lan/"
   uci set dhcp.@dnsmasq[0].expandhosts="1"
+
   uci -q del dhcp.@dnsmasq[0].server || true
   uci add_list dhcp.@dnsmasq[0].server="${NET_ADDR}"
-  uci -q del dhcp.lan.dhcp_option || true
-  uci -q del dhcp.lan.dns || true
-  uci add_list dhcp.lan.dhcp_option='3,'"${NET_ADDR}"
-  uci add_list dhcp.lan.dhcp_option='6,'"${NET_ADDR}"
-  uci add_list dhcp.lan.dhcp_option='15',"lan"
 
+  uci set dhcp.@dnsmasq[0].dns="::"
+  uci -q del dhcp.lan.dhcp_option6 || true
   if [ -n "$NET_ADDR6_LIST" ]; then
-    printf "\033[1;34mRegistering multiple IPv6 addresses to DHCP:\033[0m\n"
+    printf "\033[1;34mRegistering multiple IPv6 addresses to DHCPv6:\033[0m\n"
     for OUTPUT in $NET_ADDR6_LIST; do
-      printf "Adding %s to IPv6 DNS\n" "$OUTPUT"
-      uci add_list dhcp.lan.dns="$OUTPUT"
+      printf "Adding %s to DHCPv6 options\n" "$OUTPUT"
+      uci add_list dhcp.lan.dhcp_option6="option6:dns=[${OUTPUT}]"
     done
   fi
 
@@ -294,24 +290,22 @@ common_config() {
 
 common_config_firewall() {
   printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
-  
   uci -q delete firewall.adguardhome_dns_53 || true
 
   if command -v nft >/dev/null 2>&1; then
-    nft list table ip nat > /dev/null 2>&1 || nft add table ip nat
-    nft list chain ip nat prerouting > /dev/null 2>&1 || nft add chain ip nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
-    nft list table ip6 nat > /dev/null 2>&1 || nft add table ip6 nat
-    nft list chain ip6 nat prerouting > /dev/null 2>&1 || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
+    # create dedicated chains to avoid touching other NAT rules
+    nft list chain ip nat AGH   > /dev/null 2>&1 || nft add chain ip nat AGH   '{ type nat hook prerouting priority -100; policy accept; }'
+    nft list chain ip6 nat AGH6 > /dev/null 2>&1 || nft add chain ip6 nat AGH6 '{ type nat hook prerouting priority -100; policy accept; }'
 
     for proto in udp tcp; do
-      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
-        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}
+      if ! nft list chain ip nat AGH 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
+        nft add rule ip nat AGH iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}
       fi
 
       for ip6 in $NET_ADDR6_LIST; do
         rule="iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}"
-        if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "$rule"; then
-          nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}
+        if ! nft list chain ip6 nat AGH6 2>/dev/null | grep -qF "$rule"; then
+          nft add rule ip6 nat AGH6 iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}
         fi
       done
     done
@@ -335,7 +329,7 @@ common_config_firewall() {
     printf "\033[1;31mFailed to restart firewall\033[0m\n"
     printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
     sleep 10
-    remove_adguardhome "auto"  
+    remove_adguardhome "auto"
     reboot
     exit 1
   }
@@ -343,7 +337,7 @@ common_config_firewall() {
 
 remove_adguardhome() {
   local auto_confirm="$1"
-  
+
   printf "\033[1;34mRemoving AdGuard Home\033[0m\n"
 
   if [ -x /etc/AdGuardHome/AdGuardHome ]; then
@@ -358,13 +352,13 @@ remove_adguardhome() {
   fi
 
   printf "Found AdGuard Home (%s version)\n" "$INSTALL_TYPE"
-  
+
   if [ "$auto_confirm" != "auto" ]; then
     printf "Do you want to remove it? (y/N): "
     read -r confirm
     case "$confirm" in
       [yY]|[yY][eE][sS]) ;;
-      *)  
+      *)
         printf "\033[1;33mCancelled\033[0m\n"
         return 0
         ;;
@@ -373,8 +367,8 @@ remove_adguardhome() {
     printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
   fi
 
-  /etc/init.d/"${AGH}" stop 2>/dev/null || true
-  /etc/init.d/"${AGH}" disable 2>/dev/null || true
+  /etc/init.d/"${AGH}" stop     2>/dev/null || true
+  /etc/init.d/"${AGH}" disable  2>/dev/null || true
 
   if [ "$INSTALL_TYPE" = "official" ]; then
     "/etc/${AGH}/${AGH}" -s uninstall 2>/dev/null || true
@@ -388,15 +382,11 @@ remove_adguardhome() {
 
   if [ -d "/etc/${AGH}" ]; then
     if [ "$auto_confirm" != "auto" ]; then
-      printf "Do you want to remove configuration directory /etc/${AGH}? (y/N): "
+      printf "Do you want to remove configuration directory /etc/%s? (y/N): " "$AGH"
       read -r config_confirm
       case "$config_confirm" in
-        [yY]|[yY][eE][sS])
-          rm -rf "/etc/${AGH}"
-          ;;
-        *)
-          printf "\033[1;33mConfiguration directory preserved.\033[0m\n"
-          ;;
+        [yY]|[yY][eE][sS]) rm -rf "/etc/${AGH}" ;;
+        *) printf "\033[1;33mConfiguration directory preserved.\033[0m\n" ;;
       esac
     else
       printf "\033[1;33mAuto-removing configuration directory\033[0m\n"
@@ -407,7 +397,7 @@ remove_adguardhome() {
   for config_file in network dhcp firewall; do
     backup_file="/etc/config/${config_file}.adguard.bak"
     if [ -f "$backup_file" ]; then
-      printf "\033[1;34mRestoring ${config_file} configuration\033[0m\n"
+      printf "\033[1;34mRestoring %s configuration\033[0m\n" "$config_file"
       cp "$backup_file" "/etc/config/${config_file}"
       rm "$backup_file"
     fi
@@ -415,7 +405,7 @@ remove_adguardhome() {
 
   if uci -q get dhcp.@dnsmasq[0].port >/dev/null 2>&1; then
     if [ "$(uci -q get dhcp.@dnsmasq[0].port)" != "${DNS_PORT}" ]; then
-      printf "\033[1;34mRestoring dnsmasq port to ${DNS_PORT}\033[0m\n"
+      printf "\033[1;34mRestoring dnsmasq port to %s\033[0m\n" "${DNS_PORT}"
       uci set dhcp.@dnsmasq[0].port="${DNS_PORT}"
       uci commit dhcp
     fi
@@ -424,26 +414,9 @@ remove_adguardhome() {
   uci -q delete firewall.adguardhome_dns_53 2>/dev/null || true
 
   if command -v nft >/dev/null 2>&1; then
-
-    get_iface_addrs
-
-    for proto in udp tcp; do
-      nft delete rule ip nat prerouting \iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT} 2>/dev/null || true
-
-      for ip6 in $NET_ADDR6_LIST; do
-        nft delete rule ip6 nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT} 2>/dev/null || true
-      done
-    done
-
-    if ! nft list chain ip  nat prerouting 2>/dev/null | grep -q "dport ${DNS_PORT}"; then
-      nft delete chain ip  nat prerouting 2>/dev/null || true
-      nft delete table ip  nat 2>/dev/null || true
-    fi
-    if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -q "dport ${DNS_PORT}"; then
-      nft delete chain ip6 nat prerouting 2>/dev/null || true
-      nft delete table ip6 nat 2>/dev/null || true
-    fi
-    nft list ruleset > /etc/nftables.conf || true
+    nft delete chain ip nat AGH   2>/dev/null || true
+    nft delete chain ip6 nat AGH6 2>/dev/null || true
+    nft list ruleset > /etc/nftables.conf 2>/dev/null || true
   fi
 
   uci commit firewall
@@ -462,16 +435,16 @@ remove_adguardhome() {
   }
 
   printf "\033[1;32mAdGuard Home has been removed successfully.\033[0m\n"
-  
+
   if [ "$auto_confirm" != "auto" ]; then
     printf "\033[33mPress any key to reboot your device.\033[0m\n"
     read -r -n1 -s
     reboot
   else
-    printf "\033[1;33mAuto-rebooting...\033[0m\n"
+    printf "\033[1;33mAuto-rebooting\033[0m\n"
     reboot
   fi
-  
+
   exit 0
 }
 
