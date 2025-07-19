@@ -261,10 +261,18 @@ common_config() {
   uci commit dhcp
   /etc/init.d/dnsmasq restart || {
     printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"
+    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
+    sleep 10
+    remove_adguardhome "auto"
+    reboot
     exit 1
   }
   /etc/init.d/odhcpd restart || {
     printf "\033[1;31mFailed to restart odhcpd\033[0m\n"
+    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
+    sleep 10
+    remove_adguardhome "auto"
+    reboot
     exit 1
   }
 
@@ -325,11 +333,17 @@ common_config_firewall() {
 
   /etc/init.d/firewall restart || {
     printf "\033[1;31mFailed to restart firewall\033[0m\n"
+    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
+    sleep 10
+    remove_adguardhome "auto"  
+    reboot
     exit 1
   }
 }
 
 remove_adguardhome() {
+  local auto_confirm="$1"
+  
   printf "\033[1;34mRemoving AdGuard Home\033[0m\n"
 
   if [ -x /etc/AdGuardHome/AdGuardHome ]; then
@@ -344,15 +358,20 @@ remove_adguardhome() {
   fi
 
   printf "Found AdGuard Home (%s version)\n" "$INSTALL_TYPE"
-  printf "Do you want to remove it? (y/N): "
-  read -r confirm
-  case "$confirm" in
-    [yY]|[yY][eE][sS]) ;;
-    *)  
-      printf "\033[1;33mCancelled\033[0m\n"
-      return 0
-      ;;
-  esac
+  
+  if [ "$auto_confirm" != "auto" ]; then
+    printf "Do you want to remove it? (y/N): "
+    read -r confirm
+    case "$confirm" in
+      [yY]|[yY][eE][sS]) ;;
+      *)  
+        printf "\033[1;33mCancelled\033[0m\n"
+        return 0
+        ;;
+    esac
+  else
+    printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
+  fi
 
   /etc/init.d/"${AGH}" stop 2>/dev/null || true
   /etc/init.d/"${AGH}" disable 2>/dev/null || true
@@ -368,16 +387,21 @@ remove_adguardhome() {
   fi
 
   if [ -d "/etc/${AGH}" ]; then
-    printf "Do you want to remove configuration directory /etc/${AGH}? (y/N): "
-    read -r config_confirm
-    case "$config_confirm" in
-      [yY]|[yY][eE][sS])
-        rm -rf "/etc/${AGH}"
-        ;;
-      *)
-        printf "\033[1;33mConfiguration directory preserved.\033[0m\n"
-        ;;
-    esac
+    if [ "$auto_confirm" != "auto" ]; then
+      printf "Do you want to remove configuration directory /etc/${AGH}? (y/N): "
+      read -r config_confirm
+      case "$config_confirm" in
+        [yY]|[yY][eE][sS])
+          rm -rf "/etc/${AGH}"
+          ;;
+        *)
+          printf "\033[1;33mConfiguration directory preserved.\033[0m\n"
+          ;;
+      esac
+    else
+      printf "\033[1;33mAuto-removing configuration directory\033[0m\n"
+      rm -rf "/etc/${AGH}"
+    fi
   fi
 
   for config_file in network dhcp firewall; do
@@ -438,9 +462,16 @@ remove_adguardhome() {
   }
 
   printf "\033[1;32mAdGuard Home has been removed successfully.\033[0m\n"
-  printf "\033[33mPress any key to reboot your device.\033[0m\n"
-  read -r -n1 -s
-  reboot
+  
+  if [ "$auto_confirm" != "auto" ]; then
+    printf "\033[33mPress any key to reboot your device.\033[0m\n"
+    read -r -n1 -s
+    reboot
+  else
+    printf "\033[1;33mAuto-rebooting...\033[0m\n"
+    reboot
+  fi
+  
   exit 0
 }
 
