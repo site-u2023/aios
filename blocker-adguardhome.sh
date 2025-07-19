@@ -15,7 +15,7 @@ LAN="${LAN:-br-lan}"
 DNS_PORT="${DNS_PORT:-53}"
 
 NET_ADDR=""
-NET_ADDR6=""
+NET_ADDR6_LIST=""
 SERVICE_NAME=""
 INSTALL_MODE=""
 ARCH=""
@@ -226,7 +226,7 @@ get_iface_addrs() {
   fi
 
   if ip -6 -o addr show dev "$LAN" scope global | grep -q 'inet6 '; then
-    NET_ADDR6=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){sub(/\/.*/,"",$4); print $4;}')
+    NET_ADDR6_LIST=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){sub(/\/.*/,"",$4); print $4;}')
     flag=$((flag | 2))
   else
     printf "\033[1;33mWarning: No IPv6 address on %s\033[0m\n" "$LAN"
@@ -278,8 +278,8 @@ common_config() {
   uci add_list dhcp.lan.dhcp_option="6,${NET_ADDR}"
 
   uci -q del dhcp.lan.dhcp_option6 || true
-  if [ -n "$NET_ADDR6" ]; then
-    for ip in $NET_ADDR6; do
+  if [ -n "$NET_ADDR6_LIST" ]; then
+    for ip in $NET_ADDR6_LIST; do
       uci add_list dhcp.lan.dhcp_option6="option6:dns=[${ip}]"
     done
   fi
@@ -304,11 +304,11 @@ common_config() {
 
   printf "\033[1;32mRouter IPv4: %s\033[0m\n" "$NET_ADDR"
   
-  if [ -z "$NET_ADDR6" ]; then
+  if [ -z "$NET_ADDR6_LIST" ]; then
     printf "\033[1;33mRouter IPv6: none found\033[0m\n"
   else
     first_ip=true
-    for ip in $NET_ADDR6; do
+    for ip in $NET_ADDR6_LIST; do
       if $first_ip; then
         printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
         first_ip=false
@@ -442,8 +442,8 @@ adguardhome_main() {
   common_config_firewall
 
   printf "\033[1;34mAccess UI v4 address 👉    http://${NET_ADDR}:3000/\033[0m\n"
-  if [ -n "$NET_ADDR6" ]; then
-    set -- $NET_ADDR6
+  if [ -n "$NET_ADDR6_LIST" ]; then
+    set -- $NET_ADDR6_LIST
     printf "\033[1;34mAccess UI v6 address 👉    http://%s:3000/\033[0m\n" "$1"  
   fi
 }
