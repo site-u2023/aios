@@ -13,6 +13,7 @@ REQUIRED_MEM="50" # unit: MB
 REQUIRED_FLASH="100" # unit: MB
 LAN="${LAN:-br-lan}"
 DNS_PORT="${DNS_PORT:-53}"
+
 NET_ADDR=""
 NET_ADDR6=""
 SERVICE_NAME=""
@@ -242,11 +243,12 @@ common_config() {
   uci set dhcp.@dnsmasq[0].expandhosts="1"
 
   uci -q del dhcp.@dnsmasq[0].server || true
-  # uci add_list dhcp.@dnsmasq[0].server="${NET_ADDR}"
   uci add_list dhcp.@dnsmasq[0].server='127.0.0.1#53'
   uci add_list dhcp.@dnsmasq[0].server='::1#53'
+
+  uci -q del dhcp.lan.dhcp_option || true
   uci add_list dhcp.lan.dhcp_option="6,${NET_ADDR}"
-  
+
   uci set dhcp.@dnsmasq[0].dns="::"
   uci -q del dhcp.lan.dhcp_option6 || true
   if [ -n "$NET_ADDR6_LIST" ]; then
