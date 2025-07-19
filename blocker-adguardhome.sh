@@ -5,7 +5,7 @@
 #            https://github.com/AdguardTeam/AdGuardHome
 # This script file can be used standalone.
 
-SCRIPT_VERSION="2025.07.19-00-00"
+SCRIPT_VERSION="2025.07.20-00-00"
 
 # set -ex
 
