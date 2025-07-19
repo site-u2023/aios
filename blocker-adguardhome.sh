@@ -458,7 +458,7 @@ adguardhome_main() {
   get_iface_addrs
   common_config
   common_config_firewall
-  printf "\033[1;34mAccess UI 痩    http://${NET_ADDR}:3000/\033[0m\n"
+  printf "\033[1;34mAccess UI 👉    http://${NET_ADDR}:3000/\033[0m\n"
 }
 
 # adguardhome_main "$@"
