@@ -42,7 +42,9 @@ check_system() {
   elif command -v apk >/dev/null 2>&1; then
     PACKAGE_MANAGER="apk"
   else
-    PACKAGE_MANAGER="unknown"
+    printf "\033[1;31mNo supported package manager (apk or opkg) found.\033[0m\n"
+    printf "\033[1;31mThis script is designed for OpenWrt systems only.\033[0m\n"
+    exit 1
   fi
 
   printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
@@ -88,7 +90,8 @@ install_prompt() {
     case "$1" in
       official) INSTALL_MODE="official"; return ;;
       openwrt) INSTALL_MODE="openwrt"; return ;;
-      remove) remove_adguardhome; exit 0 ;;
+      remove) remove_adguardhome ;;
+      exit) exit 0 ;;
       *) printf "\033[1;31mWarning: Unrecognized argument '$1'. Proceeding with interactive prompt.\033[0m\n" ;;
     esac
   fi
@@ -96,12 +99,17 @@ install_prompt() {
   while true; do
     printf "\033[1;34m  1) Install Official binary\033[0m\n"
     printf "\033[1;34m  2) Install OpenWrt package\033[0m\n"
-    printf "Enter choice (1, 2): "
+    printf "\033[1;33m  0) Exit\033[0m\n"
+    printf "Enter choice (1, 2 or 0): "
     read -r choice
     case "$choice" in
       1|official) INSTALL_MODE="official"; break ;;
       2|openwrt) INSTALL_MODE="openwrt"; break ;;
-      *) printf "\033[1;31mInvalid choice '$choice'. Please enter 1 or 2.\033[0m\n" ;;
+      0|exit) 
+        printf "\033[1;33mInstallation cancelled.\033[0m\n"
+        exit 0 
+        ;;
+      *) printf "\033[1;31mInvalid choice '$choice'. Please enter 1, 2, or 0.\033[0m\n" ;;
     esac
   done
 }
@@ -120,32 +128,37 @@ install_cacertificates() {
       printf "\033[1;34mInstalling ca-bundle\033[0m\n"
       opkg install --verbosity=0 ca-bundle
       ;;
-    *)
-      printf "\033[1;31mNo supported package manager (apk or opkg) found.\033[0m\n"
-      exit 1
-      ;;
   esac
 }
 
 install_openwrt() {
   printf "\033[1;34mInstalling AdGuard Home (OpenWrt package)\033[0m\n"
+  
   case "$PACKAGE_MANAGER" in
     apk)
-      apk add adguardhome || {
-        printf "\033[1;31mapk add failed, falling back to official…\033[0m\n"
-        return
-      }
+      if apk search adguardhome | grep -q "^adguardhome-"; then
+        apk add adguardhome || {
+          printf "\033[1;31mNetwork error during apk add. Aborting.\033[0m\n"
+          exit 1
+        }
+      else
+        printf "\033[1;31mPackage 'adguardhome' not found in apk repository, falling back to official…\033[0m\n"
+        install_official
+      fi
       ;;
     opkg)
-      opkg install --verbosity=0 adguardhome || {
-        printf "\033[1;31mopkg install failed, falling back to official…\033[0m\n"
-        return
-      }
-      ;;
-    *)
-      install_official
+      if opkg list | grep -q "^adguardhome "; then
+        opkg install --verbosity=0 adguardhome || {
+          printf "\033[1;31mNetwork error during opkg install. Aborting.\033[0m\n"
+          exit 1
+        }
+      else
+        printf "\033[1;31mPackage 'adguardhome' not found in opkg repository, falling back to official…\033[0m\n"
+        install_official
+      fi
       ;;
   esac
+  
   SERVICE_NAME="adguardhome"
 }
 
@@ -181,6 +194,7 @@ install_official() {
   tar -C /etc/ -xzf "/etc/AdGuardHome/${TAR}"
   rm "/etc/AdGuardHome/${TAR}"
   chmod +x /etc/AdGuardHome/AdGuardHome
+  
   SERVICE_NAME="AdGuardHome"
 }
 
