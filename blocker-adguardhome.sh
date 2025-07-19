@@ -212,51 +212,6 @@ get_iface_addrs() {
   fi
 }
 
-common_config_firewall() {
-  printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
-  
-  uci -q delete firewall.adguardhome_dns_53 || true
-
-  if command -v nft >/dev/null 2>&1; then
-    nft list table ip nat > /dev/null 2>&1 || nft add table ip nat
-    nft list chain ip nat prerouting > /dev/null 2>&1 || nft add chain ip nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
-    nft list table ip6 nat > /dev/null 2>&1 || nft add table ip6 nat
-    nft list chain ip6 nat prerouting > /dev/null 2>&1 || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
-
-    for proto in udp tcp; do
-      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
-        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}
-      fi
-
-      for ip6 in $NET_ADDR6_LIST; do
-        rule="iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}"
-        if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "$rule"; then
-          nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}
-        fi
-      done
-    done
-
-    nft list ruleset > /etc/nftables.conf
-  else
-    uci set firewall.adguardhome_dns_53=redirect
-    uci set firewall.adguardhome_dns_53.name='AdGuardHome DNS 53'
-    uci set firewall.adguardhome_dns_53.src='lan'
-    uci add_list firewall.adguardhome_dns_53.proto='tcp'
-    uci add_list firewall.adguardhome_dns_53.proto='udp'
-    uci set firewall.adguardhome_dns_53.src_dport="${DNS_PORT}"
-    uci set firewall.adguardhome_dns_53.dest='lan'
-    uci set firewall.adguardhome_dns_53.dest_ip="${NET_ADDR}"
-    uci set firewall.adguardhome_dns_53.dest_port="${DNS_PORT}"
-    uci set firewall.adguardhome_dns_53.target='DNAT'
-    uci commit firewall
-  fi
-
-  /etc/init.d/firewall restart || {
-    printf "\033[1;31mFailed to restart firewall\033[0m\n"
-    exit 1
-  }
-}
-
 common_config() {
   printf "\033[1;34mBacking up configuration files\033[0m\n"
   cp /etc/config/network /etc/config/network.adguard.bak
@@ -327,6 +282,51 @@ common_config() {
       done
     fi
   fi
+}
+
+common_config_firewall() {
+  printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
+  
+  uci -q delete firewall.adguardhome_dns_53 || true
+
+  if command -v nft >/dev/null 2>&1; then
+    nft list table ip nat > /dev/null 2>&1 || nft add table ip nat
+    nft list chain ip nat prerouting > /dev/null 2>&1 || nft add chain ip nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
+    nft list table ip6 nat > /dev/null 2>&1 || nft add table ip6 nat
+    nft list chain ip6 nat prerouting > /dev/null 2>&1 || nft add chain ip6 nat prerouting '{ type nat hook prerouting priority -100; policy accept; }'
+
+    for proto in udp tcp; do
+      if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
+        nft add rule ip nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}
+      fi
+
+      for ip6 in $NET_ADDR6_LIST; do
+        rule="iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}"
+        if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -qF "$rule"; then
+          nft add rule ip6 nat prerouting iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}
+        fi
+      done
+    done
+
+    nft list ruleset > /etc/nftables.conf
+  else
+    uci set firewall.adguardhome_dns_53=redirect
+    uci set firewall.adguardhome_dns_53.name='AdGuardHome DNS 53'
+    uci set firewall.adguardhome_dns_53.src='lan'
+    uci add_list firewall.adguardhome_dns_53.proto='tcp'
+    uci add_list firewall.adguardhome_dns_53.proto='udp'
+    uci set firewall.adguardhome_dns_53.src_dport="${DNS_PORT}"
+    uci set firewall.adguardhome_dns_53.dest='lan'
+    uci set firewall.adguardhome_dns_53.dest_ip="${NET_ADDR}"
+    uci set firewall.adguardhome_dns_53.dest_port="${DNS_PORT}"
+    uci set firewall.adguardhome_dns_53.target='DNAT'
+    uci commit firewall
+  fi
+
+  /etc/init.d/firewall restart || {
+    printf "\033[1;31mFailed to restart firewall\033[0m\n"
+    exit 1
+  }
 }
 
 remove_adguardhome() {
