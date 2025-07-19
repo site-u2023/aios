@@ -5,7 +5,7 @@
 #            https://github.com/AdguardTeam/AdGuardHome
 # This script file can be used standalone.
 
-SCRIPT_VERSION="2025.07.20-00-00"
+SCRIPT_VERSION="2025.07.19-00-00"
 
 # set -ex
 
@@ -21,6 +21,7 @@ INSTALL_MODE=""
 ARCH=""
 AGH=""
 PACKAGE_MANAGER=""
+FAMILY_TYPE=""
 
 check_system() {
   printf "\033[1;34mChecking existing AdGuard Home installation\033[0m\n"
@@ -215,11 +216,28 @@ install_official() {
 }
 
 get_iface_addrs() {
-  NET_ADDR=$(ip -4 -o addr show dev "$LAN" scope global | awk 'NR==1 { sub(/\/.*/, "", $4); print $4; exit }')
-  NET_ADDR6=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){ sub(/\/.*/, "", $4); print $4 }')
+  local flag=0
 
-  [ -z "$NET_ADDR" ]  && printf "\033[1;33mWarning: No IPv4 address on %s\033[0m\n" "$LAN"
-  [ -z "$NET_ADDR6" ] && printf "\033[1;33mWarning: No IPv6 address on %s\033[0m\n" "$LAN"
+  if ip -4 -o addr show dev "$LAN" scope global | grep -q 'inet '; then
+    NET_ADDR=$(ip -4 -o addr show dev "$LAN" scope global | awk 'NR==1{sub(/\/.*/,"",$4); print $4}')
+    flag=$((flag | 1))
+  else
+    printf "\033[1;33mWarning: No IPv4 address on %s\033[0m\n" "$LAN"
+  fi
+
+  if ip -6 -o addr show dev "$LAN" scope global | grep -q 'inet6 '; then
+    NET_ADDR6=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){sub(/\/.*/,"",$4); print $4; exit}')
+    flag=$((flag | 2))
+  else
+    printf "\033[1;33mWarning: No IPv6 address on %s\033[0m\n" "$LAN"
+  fi
+
+  case $flag in
+    3) FAMILY_TYPE=any  ;;
+    1) FAMILY_TYPE=ipv4 ;;
+    2) FAMILY_TYPE=ipv6 ;;
+    *) FAMILY_TYPE=""   ;;
+  esac
 }
 
 common_config() {
@@ -304,33 +322,24 @@ common_config() {
 common_config_firewall() {
   printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
 
-  uci -q delete firewall.adguardhome_dns_53_ipv4 || true
-  uci -q delete firewall.adguardhome_dns_53_ipv6 || true
+  rule_name="adguardhome_dns_${DNS_PORT}"
+  uci -q delete firewall."$rule_name" || true
 
-  FIRST_GUA=$(set -- $NET_ADDR6; echo $1)
+  if [ -z "$FAMILY_TYPE" ]; then
+    printf "\033[1;31mNo valid IP address family detected. Skipping firewall rule setup.\033[0m\n"
+    return
+  fi
 
-  for family in ipv4 ipv6; do
-    case "$family" in
-      ipv4)
-        rule_name="adguardhome_dns_53_ipv4"
-        ;;
-      ipv6)
-        rule_name="adguardhome_dns_53_ipv6"
-        [ -z "$FIRST_GUA" ] && continue
-        ;;
-    esac
-
-    uci set firewall."$rule_name"=redirect
-    uci set firewall."$rule_name".name="AdGuardHome DNS Redirect $family"
-    uci set firewall."$rule_name".family="$family"
-    uci set firewall."$rule_name".src='lan'
-    uci set firewall."$rule_name".dest='lan'
-    uci add_list firewall."$rule_name".proto='tcp'
-    uci add_list firewall."$rule_name".proto='udp'
-    uci set firewall."$rule_name".src_dport="$DNS_PORT"
-    uci set firewall."$rule_name".dest_port="$DNS_PORT"
-    uci set firewall."$rule_name".target='DNAT'
-  done
+  uci set firewall."$rule_name"=redirect
+  uci set firewall."$rule_name".name="AdGuardHome DNS Redirect (${FAMILY_TYPE})"
+  uci set firewall."$rule_name".family="$FAMILY_TYPE"
+  uci set firewall."$rule_name".src="lan"
+  uci set firewall."$rule_name".dest="lan"
+  uci add_list firewall."$rule_name".proto="tcp"
+  uci add_list firewall."$rule_name".proto="udp"
+  uci set firewall."$rule_name".src_dport="$DNS_PORT"
+  uci set firewall."$rule_name".dest_port="$DNS_PORT"
+  uci set firewall."$rule_name".target="DNAT"
 
   uci commit firewall
   /etc/init.d/firewall restart || {
