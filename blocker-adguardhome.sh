@@ -5,7 +5,7 @@
 #            https://github.com/AdguardTeam/AdGuardHome
 # This script file can be used standalone.
 
-SCRIPT_VERSION="2025.07.19-00-00"
+SCRIPT_VERSION="2025.07.20-00-00"
 
 # set -ex
 
@@ -49,7 +49,6 @@ check_system() {
   fi
 
   printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
-  
   MEM_TOTAL_KB=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
   MEM_FREE_KB=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
   BUFFERS_KB=$(awk '/^Buffers:/ {print $2}' /proc/meminfo)
@@ -68,20 +67,35 @@ check_system() {
   FLASH_FREE_MB=$((FLASH_FREE_KB / 1024))
   FLASH_TOTAL_MB=$((FLASH_TOTAL_KB / 1024))
 
-  printf "Memory: \033[1mFree %s MB\033[0m / Total %s MB\n" "$MEM_FREE_MB" "$MEM_TOTAL_MB"
-  printf "Flash:  \033[1mFree %s MB\033[0m / Total %s MB\n" "$FLASH_FREE_MB" "$FLASH_TOTAL_MB"
+  if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
+    mem_col=31
+  else
+    mem_col=32
+  fi
+  if [ "$FLASH_FREE_MB" -lt "$REQUIRED_FLASH" ]; then
+    flash_col=31
+  else
+    flash_col=32
+  fi
+
+  printf "Memory: Free \033[%sm%s MB\033[0m / Total %s MB\n" \
+    "$mem_col" "$MEM_FREE_MB" "$MEM_TOTAL_MB"
+  printf "Flash:  Free \033[%sm%s MB\033[0m / Total %s MB\n" \
+    "$flash_col" "$FLASH_FREE_MB" "$FLASH_TOTAL_MB"
 
   if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
-    printf "Error: Insufficient memory. At least %sMB RAM is required.\n" "$REQUIRED_MEM"
+    printf "\033[1;31mError: Insufficient memory. At least %sMB RAM is required.\033[0m\n" \
+      "$REQUIRED_MEM"
     exit 1
   fi
   if [ "$FLASH_FREE_MB" -lt "$REQUIRED_FLASH" ]; then
-    printf "Error: Insufficient flash storage. At least %sMB free space is required.\n" "$REQUIRED_FLASH"
+    printf "\033[1;31mError: Insufficient flash storage. At least %sMB free space is required.\033[0m\n" \
+      "$REQUIRED_FLASH"
     exit 1
   fi
 
-  printf "Detected LAN interface: %s\n" "$LAN"
-  printf "Package manager: %s\n" "$PACKAGE_MANAGER"
+  printf "\033[1;34mDetected LAN interface:\033[0m %s\n" "$LAN"
+  printf "\033[1;34mPackage manager:\033[0m %s\n" "$PACKAGE_MANAGER"
 }
 
 install_prompt() {
@@ -98,11 +112,12 @@ install_prompt() {
   fi
 
   while true; do
-    printf "\033[1;34m  1) Install Official binary\033[0m\n"
-    printf "\033[1;34m  2) Install OpenWrt package\033[0m\n"
-    printf "\033[1;33m  0) Exit\033[0m\n"
-    printf "Enter choice (1, 2 or 0): "
+    printf "[1] Install Official binary\n"
+    printf "[2] Install OpenWrt package\n"
+    printf "[0] Exit\n"
+    printf "Please select (1, 2 or 0): "
     read -r choice
+    
     case "$choice" in
       1|official) INSTALL_MODE="official"; break ;;
       2|openwrt) INSTALL_MODE="openwrt"; break ;;
@@ -200,16 +215,11 @@ install_official() {
 }
 
 get_iface_addrs() {
-  # IPv4: pick the first LAN address
-  NET_ADDR=$(ip -o -4 addr show dev "$LAN" | awk 'NR==1 { split($4,a,"/"); print a[1]; exit }')
-  # IPv6: non-temporary ULA/GUA only
-  NET_ADDR6_LIST=$(ip -o -6 addr show dev "$LAN" scope global | grep -v 'temporary' | awk 'match($4,/^(fd|fc|2)/) { split($4,a,"/"); print a[1] }')
-  if [ -z "$NET_ADDR6_LIST" ]; then
-    printf "\033[1;33mWarning: No suitable IPv6 addresses found. Proceeding with IPv4 only.\033[0m\n"
-    NET_ADDR6=""
-  else
-    NET_ADDR6=$(printf '%s\n' "$NET_ADDR6_LIST" | head -n1)
-  fi
+  NET_ADDR=$(ip -4 -o addr show dev "$LAN" scope global | awk 'NR==1 { sub(/\/.*/, "", $4); print $4; exit }')
+  NET_ADDR6=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){ sub(/\/.*/, "", $4); print $4 }')
+
+  [ -z "$NET_ADDR" ]  && printf "\033[1;33mWarning: No IPv4 address on %s\033[0m\n" "$LAN"
+  [ -z "$NET_ADDR6" ] && printf "\033[1;33mWarning: No IPv6 address on %s\033[0m\n" "$LAN"
 }
 
 common_config() {
@@ -243,17 +253,16 @@ common_config() {
   uci set dhcp.@dnsmasq[0].expandhosts="1"
 
   uci -q del dhcp.@dnsmasq[0].server || true
-  uci add_list dhcp.@dnsmasq[0].server='127.0.0.1#53'
-  uci add_list dhcp.@dnsmasq[0].server='::1#53'
+  uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#${DNS_PORT}"
+  uci add_list dhcp.@dnsmasq[0].server="::1#${DNS_PORT}"
 
   uci -q del dhcp.lan.dhcp_option || true
   uci add_list dhcp.lan.dhcp_option="6,${NET_ADDR}"
 
-  uci set dhcp.@dnsmasq[0].dns="::"
   uci -q del dhcp.lan.dhcp_option6 || true
-  if [ -n "$NET_ADDR6_LIST" ]; then
-    for OUTPUT in $NET_ADDR6_LIST; do
-      uci add_list dhcp.lan.dhcp_option6="option6:dns=[${OUTPUT}]"
+  if [ -n "$NET_ADDR6" ]; then
+    for ip in $NET_ADDR6; do
+      uci add_list dhcp.lan.dhcp_option6="option6:dns=[${ip}]"
     done
   fi
 
@@ -277,11 +286,11 @@ common_config() {
 
   printf "\033[1;32mRouter IPv4: %s\033[0m\n" "$NET_ADDR"
   
-  if [ -z "$NET_ADDR6_LIST" ]; then
+  if [ -z "$NET_ADDR6" ]; then
     printf "\033[1;33mRouter IPv6: none found\033[0m\n"
   else
     first_ip=true
-    for ip in $NET_ADDR6_LIST; do
+    for ip in $NET_ADDR6; do
       if $first_ip; then
         printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
         first_ip=false
@@ -294,43 +303,36 @@ common_config() {
 
 common_config_firewall() {
   printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
-  uci -q delete firewall.adguardhome_dns_53 || true
 
-  if command -v nft >/dev/null 2>&1; then
-    nft list table ip nat > /dev/null 2>&1 || nft add table ip nat
-    nft list table ip6 nat > /dev/null 2>&1 || nft add table ip6 nat
+  uci -q delete firewall.adguardhome_dns_53_ipv4 || true
+  uci -q delete firewall.adguardhome_dns_53_ipv6 || true
 
-    nft list chain ip nat AGH    > /dev/null 2>&1 || nft add chain ip nat AGH    '{ type nat hook prerouting priority -100; policy accept; }'
-    nft list chain ip6 nat AGH6 > /dev/null 2>&1 || nft add chain ip6 nat AGH6 '{ type nat hook prerouting priority -100; policy accept; }'
+  FIRST_GUA=$(set -- $NET_ADDR6; echo $1)
 
-    for proto in udp tcp; do
-      if ! nft list chain ip nat AGH 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
-        nft add rule ip nat AGH iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}
-      fi
+  for family in ipv4 ipv6; do
+    case "$family" in
+      ipv4)
+        rule_name="adguardhome_dns_53_ipv4"
+        ;;
+      ipv6)
+        rule_name="adguardhome_dns_53_ipv6"
+        [ -z "$FIRST_GUA" ] && continue
+        ;;
+    esac
 
-      for ip6 in $NET_ADDR6_LIST; do
-        rule="iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}"
-        if ! nft list chain ip6 nat AGH6 2>/dev/null | grep -qF "$rule"; then
-          nft add rule ip6 nat AGH6 iifname "${LAN}" ${proto} dport ${DNS_PORT} dnat to ${ip6}:${DNS_PORT}
-        fi
-      done
-    done
+    uci set firewall."$rule_name"=redirect
+    uci set firewall."$rule_name".name="AdGuardHome DNS Redirect $family"
+    uci set firewall."$rule_name".family="$family"
+    uci set firewall."$rule_name".src='lan'
+    uci set firewall."$rule_name".dest='lan'
+    uci add_list firewall."$rule_name".proto='tcp'
+    uci add_list firewall."$rule_name".proto='udp'
+    uci set firewall."$rule_name".src_dport="$DNS_PORT"
+    uci set firewall."$rule_name".dest_port="$DNS_PORT"
+    uci set firewall."$rule_name".target='DNAT'
+  done
 
-    nft list ruleset > /etc/nftables.conf
-  else
-    uci set firewall.adguardhome_dns_53=redirect
-    uci set firewall.adguardhome_dns_53.name='AdGuardHome DNS 53'
-    uci set firewall.adguardhome_dns_53.src='lan'
-    uci add_list firewall.adguardhome_dns_53.proto='tcp'
-    uci add_list firewall.adguardhome_dns_53.proto='udp'
-    uci set firewall.adguardhome_dns_53.src_dport="${DNS_PORT}"
-    uci set firewall.adguardhome_dns_53.dest='lan'
-    uci set firewall.adguardhome_dns_53.dest_ip="${NET_ADDR}"
-    uci set firewall.adguardhome_dns_53.dest_port="${DNS_PORT}"
-    uci set firewall.adguardhome_dns_53.target='DNAT'
-    uci commit firewall
-  fi
-
+  uci commit firewall
   /etc/init.d/firewall restart || {
     printf "\033[1;31mFailed to restart firewall\033[0m\n"
     printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
@@ -347,11 +349,9 @@ remove_adguardhome() {
   printf "\033[1;34mRemoving AdGuard Home\033[0m\n"
 
   if [ -x /etc/AdGuardHome/AdGuardHome ]; then
-    INSTALL_TYPE="official"
-    AGH="AdGuardHome"
+    INSTALL_TYPE="official"; AGH="AdGuardHome"
   elif [ -x /usr/bin/adguardhome ]; then
-    INSTALL_TYPE="openwrt"
-    AGH="adguardhome"
+    INSTALL_TYPE="openwrt";    AGH="adguardhome"
   else
     printf "\033[1;31mAdGuard Home not found\033[0m\n"
     return 1
@@ -364,86 +364,55 @@ remove_adguardhome() {
     read -r confirm
     case "$confirm" in
       [yY]|[yY][eE][sS]) ;;
-      *)
-        printf "\033[1;33mCancelled\033[0m\n"
-        return 0
-        ;;
+      *) printf "\033[1;33mCancelled\033[0m\n"; return 0 ;;
     esac
   else
     printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
   fi
 
-  /etc/init.d/"${AGH}" stop     2>/dev/null || true
-  /etc/init.d/"${AGH}" disable  2>/dev/null || true
+  /etc/init.d/"${AGH}" stop    2>/dev/null || true
+  /etc/init.d/"${AGH}" disable 2>/dev/null || true
 
   if [ "$INSTALL_TYPE" = "official" ]; then
     "/etc/${AGH}/${AGH}" -s uninstall 2>/dev/null || true
   else
     if command -v apk >/dev/null 2>&1; then
       apk del "$AGH" 2>/dev/null || true
-    elif command -v opkg >/dev/null 2>&1; then
+    else
       opkg remove --verbosity=0 "$AGH" 2>/dev/null || true
     fi
   fi
 
   if [ -d "/etc/${AGH}" ]; then
     if [ "$auto_confirm" != "auto" ]; then
-      printf "Do you want to remove configuration directory /etc/%s? (y/N): " "$AGH"
-      read -r config_confirm
-      case "$config_confirm" in
-        [yY]|[yY][eE][sS]) rm -rf "/etc/${AGH}" ;;
-        *) printf "\033[1;33mConfiguration directory preserved.\033[0m\n" ;;
-      esac
+      printf "Remove /etc/%s directory? (y/N): " "$AGH"
+      read -r cfg; case "$cfg" in [yY]*) rm -rf "/etc/${AGH}" ;; esac
     else
-      printf "\033[1;33mAuto-removing configuration directory\033[0m\n"
       rm -rf "/etc/${AGH}"
     fi
   fi
 
-  for config_file in network dhcp firewall; do
-    backup_file="/etc/config/${config_file}.adguard.bak"
-    if [ -f "$backup_file" ]; then
-      printf "\033[1;34mRestoring %s configuration\033[0m\n" "$config_file"
-      cp "$backup_file" "/etc/config/${config_file}"
-      rm "$backup_file"
+  for cfg in network dhcp firewall; do
+    bak="/etc/config/${cfg}.adguard.bak"
+    if [ -f "$bak" ]; then
+      printf "\033[1;34mRestoring %s configuration\033[0m\n" "$cfg"
+      cp "$bak" "/etc/config/${cfg}"
+      rm -f "$bak"
     fi
   done
 
-  if uci -q get dhcp.@dnsmasq[0].port >/dev/null 2>&1; then
-    if [ "$(uci -q get dhcp.@dnsmasq[0].port)" != "${DNS_PORT}" ]; then
-      printf "\033[1;34mRestoring dnsmasq port to %s\033[0m\n" "${DNS_PORT}"
-      uci set dhcp.@dnsmasq[0].port="${DNS_PORT}"
-      uci commit dhcp
-    fi
-  fi
-
-  uci -q delete firewall.adguardhome_dns_53 2>/dev/null || true
-
-  if command -v nft >/dev/null 2>&1; then
-    nft delete chain ip nat AGH   2>/dev/null || true
-    nft delete chain ip6 nat AGH6 2>/dev/null || true
-    nft list ruleset > /etc/nftables.conf 2>/dev/null || true
-  fi
-
+  uci commit network
+  uci commit dhcp
   uci commit firewall
 
-  /etc/init.d/dnsmasq restart || {
-    printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"
-    exit 1
-  }
-  /etc/init.d/odhcpd restart || {
-    printf "\033[1;31mFailed to restart odhcpd\033[0m\n"
-    exit 1
-  }
-  /etc/init.d/firewall restart || {
-    printf "\033[1;31mFailed to restart firewall\033[0m\n"
-    exit 1
-  }
+  /etc/init.d/dnsmasq restart  || { printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"; exit 1; }
+  /etc/init.d/odhcpd restart   || { printf "\033[1;31mFailed to restart odhcpd\033[0m\n"; exit 1; }
+  /etc/init.d/firewall restart || { printf "\033[1;31mFailed to restart firewall\033[0m\n"; exit 1; }
 
   printf "\033[1;32mAdGuard Home has been removed successfully.\033[0m\n"
 
   if [ "$auto_confirm" != "auto" ]; then
-    printf "\033[33mPress any key to reboot your device.\033[0m\n"
+    printf "\033[33mPress any key to reboot.\033[0m\n"
     read -r -n1 -s
     reboot
   else
