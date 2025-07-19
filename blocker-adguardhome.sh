@@ -187,7 +187,7 @@ install_official() {
   URL2="https://github.com/AdguardTeam/AdGuardHome/releases/download/${VER}/${TAR}"
   DEST="/etc/AdGuardHome/${TAR}"
   printf '\033[1;34mDownloading %s\033[0m\n' "$TAR"
-            if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
+  if ! { wget -q -O "$DEST" "$URL2" || wget -q "$CA" -O "$DEST" "$URL2"; }; then
     printf '\033[1;31mDownload failed. Please check network connection.\033[0m\n'
     exit 1
   fi
