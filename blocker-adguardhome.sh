@@ -284,7 +284,7 @@ common_config() {
         printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
         first_ip=false
       else
-        printf "         \033[1;32m%s\033[0m\n" "$ip"
+        printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
       fi
     done
   fi
