@@ -293,8 +293,10 @@ common_config_firewall() {
   uci -q delete firewall.adguardhome_dns_53 || true
 
   if command -v nft >/dev/null 2>&1; then
-    # create dedicated chains to avoid touching other NAT rules
-    nft list chain ip nat AGH   > /dev/null 2>&1 || nft add chain ip nat AGH   '{ type nat hook prerouting priority -100; policy accept; }'
+    nft list table ip nat > /dev/null 2>&1 || nft add table ip nat
+    nft list table ip6 nat > /dev/null 2>&1 || nft add table ip6 nat
+
+    nft list chain ip nat AGH    > /dev/null 2>&1 || nft add chain ip nat AGH    '{ type nat hook prerouting priority -100; policy accept; }'
     nft list chain ip6 nat AGH6 > /dev/null 2>&1 || nft add chain ip6 nat AGH6 '{ type nat hook prerouting priority -100; policy accept; }'
 
     for proto in udp tcp; do
