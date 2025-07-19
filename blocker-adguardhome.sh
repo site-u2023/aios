@@ -247,9 +247,7 @@ common_config() {
   uci set dhcp.@dnsmasq[0].dns="::"
   uci -q del dhcp.lan.dhcp_option6 || true
   if [ -n "$NET_ADDR6_LIST" ]; then
-    printf "\033[1;34mRegistering multiple IPv6 addresses to DHCPv6:\033[0m\n"
     for OUTPUT in $NET_ADDR6_LIST; do
-      printf "Adding %s to DHCPv6 options\n" "$OUTPUT"
       uci add_list dhcp.lan.dhcp_option6="option6:dns=[${OUTPUT}]"
     done
   fi
