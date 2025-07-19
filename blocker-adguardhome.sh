@@ -117,9 +117,9 @@ install_prompt() {
 install_cacertificates() {
   case "$PACKAGE_MANAGER" in
     apk)
-      printf "\033[1;34mUpdating apk index…\033[0m\n"
+      printf "\033[1;34mUpdating apk index窶ｦ\033[0m\n"
       apk update
-      printf "\033[1;34mInstalling ca-certificates…\033[0m\n"
+      printf "\033[1;34mInstalling ca-certificates窶ｦ\033[0m\n"
       apk add ca-certificates
       ;;
     opkg)
@@ -142,7 +142,7 @@ install_openwrt() {
           exit 1
         }
       else
-        printf "\033[1;31mPackage 'adguardhome' not found in apk repository, falling back to official…\033[0m\n"
+        printf "\033[1;31mPackage 'adguardhome' not found in apk repository, falling back to official窶ｦ\033[0m\n"
         install_official
       fi
       ;;
@@ -153,7 +153,7 @@ install_openwrt() {
           exit 1
         }
       else
-        printf "\033[1;31mPackage 'adguardhome' not found in opkg repository, falling back to official…\033[0m\n"
+        printf "\033[1;31mPackage 'adguardhome' not found in opkg repository, falling back to official窶ｦ\033[0m\n"
         install_official
       fi
       ;;
@@ -187,7 +187,7 @@ install_official() {
   URL2="https://github.com/AdguardTeam/AdGuardHome/releases/download/${VER}/${TAR}"
   DEST="/etc/AdGuardHome/${TAR}"
   printf '\033[1;34mDownloading %s\033[0m\n' "$TAR"
-  if ! { wget -q -O "$DEST" "$URL2" || wget -q "$CA" -O "$DEST" "$URL2" }; then
+            if ! nft list chain ip nat prerouting 2>/dev/null | grep -qF "iifname \"${LAN}\" ${proto} dport ${DNS_PORT} dnat to ${NET_ADDR}:${DNS_PORT}"; then
     printf '\033[1;31mDownload failed. Please check network connection.\033[0m\n'
     exit 1
   fi
@@ -456,7 +456,7 @@ adguardhome_main() {
   get_iface_addrs
   common_config
   common_config_firewall
-  printf "\033[1;34mAccess UI 👉    http://${NET_ADDR}:3000/\033[0m\n"
+  printf "\033[1;34mAccess UI 痩    http://${NET_ADDR}:3000/\033[0m\n"
 }
 
 # adguardhome_main "$@"
