@@ -32,14 +32,12 @@ check_system() {
   
   printf "\033[1;34mChecking system requirements\033[0m\n"
   
-  # LAN interface check
   LAN="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@.l3_device')"
   if [ -z "$LAN" ]; then
     printf "\033[1;31mLAN interface not found. Aborting.\033[0m\n"
     exit 1
   fi
   
-  # Package manager check
   if command -v opkg >/dev/null 2>&1; then
     PACKAGE_MANAGER="opkg"
   elif command -v apk >/dev/null 2>&1; then
@@ -50,7 +48,6 @@ check_system() {
     exit 1
   fi
   
-  # Memory and storage check
   MEM_TOTAL_KB=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
   MEM_FREE_KB=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
   BUFFERS_KB=$(awk '/^Buffers:/ {print $2}' /proc/meminfo)
@@ -67,7 +64,6 @@ check_system() {
   FLASH_FREE_MB=$((FLASH_FREE_KB / 1024))
   FLASH_TOTAL_MB=$((FLASH_TOTAL_KB / 1024))
   
-  # Color coding for memory/flash
   if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
     mem_col="1;31"
   else
@@ -79,7 +75,6 @@ check_system() {
     flash_col="1;32"
   fi
   
-  # Display results in unified format
   printf "Memory: Free \033[%sm%s MB\033[0m / Total %s MB\n" \
     "$mem_col" "$MEM_FREE_MB" "$MEM_TOTAL_MB"
   printf "Flash: Free \033[%sm%s MB\033[0m / Total %s MB\n" \
@@ -87,7 +82,6 @@ check_system() {
   printf "LAN interface: %s\n" "$LAN"
   printf "Package manager: %s\n" "$PACKAGE_MANAGER"
   
-  # Error checks
   if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
     printf "\033[1;31mError: Insufficient memory. At least %sMB RAM is required.\033[0m\n" \
       "$REQUIRED_MEM"
