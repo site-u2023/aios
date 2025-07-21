@@ -25,12 +25,12 @@ FAMILY_TYPE=""
 
 check_system() {
   printf "\033[1;34mChecking existing AdGuard Home installation\033[0m\n"
-  if [ -x /etc/init.d/adguardhome ] || [ -x /etc/init.d/AdGuardHome ] || [ -x /usr/bin/adguardhome ]; then
+  if /etc/AdGuardHome/AdGuardHome -v >/dev/null 2>&1 || opkg list-installed adguardhome >/dev/null 2>&1; then
     printf "\033[1;33mAdGuard Home is already installed. Exiting.\033[0m\n"
     remove_adguardhome
     exit 0
   fi
-
+  
   printf "\033[1;34mChecking LAN interface\033[0m\n"
   LAN="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@.l3_device')"
   if [ -z "$LAN" ]; then
@@ -357,10 +357,10 @@ remove_adguardhome() {
 
   printf "\033[1;34mRemoving AdGuard Home\033[0m\n"
 
-  if [ -x /etc/AdGuardHome/AdGuardHome ]; then
+  if /etc/AdGuardHome/AdGuardHome -v >/dev/null 2>&1; then
     INSTALL_TYPE="official"; AGH="AdGuardHome"
-  elif [ -x /usr/bin/adguardhome ]; then
-    INSTALL_TYPE="openwrt";    AGH="adguardhome"
+  elif opkg list-installed adguardhome >/dev/null 2>&1; then
+    INSTALL_TYPE="openwrt"; AGH="adguardhome"
   else
     printf "\033[1;31mAdGuard Home not found\033[0m\n"
     return 1
