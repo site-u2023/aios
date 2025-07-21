@@ -13,6 +13,7 @@ REQUIRED_MEM="50" # unit: MB
 REQUIRED_FLASH="100" # unit: MB
 LAN="${LAN:-br-lan}"
 DNS_PORT="${DNS_PORT:-53}"
+DNS_BACKUP_PORT="${DNS_BACKUP_PORT:-54}"
 
 NET_ADDR=""
 NET_ADDR6_LIST=""
@@ -250,7 +251,7 @@ common_config() {
   # uci set dhcp.@dnsmasq[0].rebind_protection='1'  # keep enabled
   # uci set dhcp.@dnsmasq[0].rebind_localhost='1'   # protect localhost
   # uci add_list dhcp.@dnsmasq[0].rebind_domain='lan'  # allow internal domain
-  uci set dhcp.@dnsmasq[0].port="54"
+  uci set dhcp.@dnsmasq[0].port="${DNS_BACKUP_PORT}"
   uci set dhcp.@dnsmasq[0].domain="lan"
   uci set dhcp.@dnsmasq[0].local="/lan/"
   uci set dhcp.@dnsmasq[0].expandhosts="1"
