@@ -295,15 +295,7 @@ common_config() {
   if [ -z "$NET_ADDR6_LIST" ]; then
     printf "\033[1;33mRouter IPv6: none found\033[0m\n"
   else
-    first_ip=true
-    for ip in $NET_ADDR6_LIST; do
-      if $first_ip; then
-        printf "Router IPv6: %s\n" "$ip"
-        first_ip=false
-      else
-        printf "Router IPv6: %s\n" "$ip"
-      fi
-    done
+    printf "Router IPv6: %s\n" "$NET_ADDR6_LIST"
   fi
   
   printf "\033[1;32mSystem configuration completed\033[0m\n"
