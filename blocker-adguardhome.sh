@@ -274,18 +274,14 @@ common_config() {
   uci commit dhcp
   /etc/init.d/dnsmasq restart || {
     printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"
-    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
-    sleep 10
-    remove_adguardhome "auto"
-    reboot
+    printf "\033[1;31mTo remove AdGuard Home, run:\033[0m\n"
+    printf "\033[1;31msh %s/standalone-blocker-adguardhome.sh remove_adguardhome auto\033[0m\n" "$TMP"
     exit 1
   }
   /etc/init.d/odhcpd restart || {
     printf "\033[1;31mFailed to restart odhcpd\033[0m\n"
-    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
-    sleep 10
-    remove_adguardhome "auto"
-    reboot
+    printf "\033[1;31mTo remove AdGuard Home, run:\033[0m\n"
+    printf "\033[1;31msh %s/standalone-blocker-adguardhome.sh remove_adguardhome auto\033[0m\n" "$TMP"
     exit 1
   }
   /etc/init.d/"$SERVICE_NAME" enable
@@ -321,10 +317,8 @@ common_config_firewall() {
   uci commit firewall
   /etc/init.d/firewall restart || {
     printf "\033[1;31mFailed to restart firewall\033[0m\n"
-    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
-    sleep 10
-    remove_adguardhome "auto"
-    reboot
+    printf "\033[1;31mTo remove AdGuard Home, run:\033[0m\n"
+    printf "\033[1;31msh %s/standalone-blocker-adguardhome.sh remove_adguardhome auto\033[0m\n" "$TMP"
     exit 1
   }
   
