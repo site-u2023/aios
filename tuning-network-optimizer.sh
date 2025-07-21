@@ -5,6 +5,8 @@ cat > "$TMP/dynamic-network-optimizer.sh" << 'SCRIPT_END'
 #!/bin/sh
 set -e
 
+SCRIPT_VERSION="2025.07.21-00-00"
+
 CONFIG_FILE="/etc/sysctl.d/99-network-optimization-auto.conf"
 
 RED='\033[0;31m'
