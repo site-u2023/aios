@@ -1,529 +1,451 @@
 #!/bin/sh
-set -e
 
-CONFIG_FILE="/etc/sysctl.d/99-network-optimization-auto.conf"
+# OpenWrt 19.07+ configuration
+# Reference: https://openwrt.org/docs/guide-user/services/dns/adguard-home
+#            https://github.com/AdguardTeam/AdGuardHome
+# This script file can be used standalone.
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m'
+SCRIPT_VERSION="2025.07.20-00-00"
 
-log_info() { printf "${BLUE}[INFO]${NC} %s\n" "$1"; }
-log_success() { printf "${GREEN}[OK]${NC} %s\n" "$1"; }
-log_warning() { printf "${YELLOW}[WARN]${NC} %s\n" "$1"; }
-log_error() { printf "${RED}[ERROR]${NC} %s\n" "$1"; }
-log_highlight() { printf "${CYAN}[HIGHLIGHT]${NC} %s\n" "$1"; }
+# set -ex
 
-detect_memory() {
-    local mem_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-    printf '%s\n' "$((mem_kb / 1024))"
-}
+REQUIRED_MEM="50" # unit: MB
+REQUIRED_FLASH="100" # unit: MB
+LAN="${LAN:-br-lan}"
+DNS_PORT="${DNS_PORT:-53}"
 
-detect_cpu_cores() {
-    grep -c ^processor /proc/cpuinfo
-}
+NET_ADDR=""
+NET_ADDR6_LIST=""
+SERVICE_NAME=""
+INSTALL_MODE=""
+ARCH=""
+AGH=""
+PACKAGE_MANAGER=""
+FAMILY_TYPE=""
 
-get_current_connections() {
-    if [ -f /proc/sys/net/netfilter/nf_conntrack_count ]; then
-        cat /proc/sys/net/netfilter/nf_conntrack_count
-    else
-        printf '%s\n' "0"
-    fi
-}
-
-get_best_congestion_control() {
-    local available
-    available=$(cat /proc/sys/net/ipv4/tcp_available_congestion_control)
-    for algo in bbr cubic reno; do
-        if printf '%s\n' "$available" | grep -q "$algo"; then
-            printf '%s\n' "$algo"
-            return
-        fi
-    done
-    printf '%s\n' "$(printf '%s\n' "$available" | awk '{print $1}')"
-}
-
-# Get current value dynamically - this is the key fix
-get_current_value() {
-    local setting="$1"
-    case "$setting" in
-        "rmem_max")
-            cat /proc/sys/net/core/rmem_max 2>/dev/null || printf "%s" "unknown"
-            ;;
-        "wmem_max")
-            cat /proc/sys/net/core/wmem_max 2>/dev/null || printf "%s" "unknown"
-            ;;
-        "tcp_rmem")
-            cat /proc/sys/net/ipv4/tcp_rmem 2>/dev/null | tr -s '\t' ' ' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' || printf "%s" "unknown"
-            ;;
-        "tcp_wmem")
-            cat /proc/sys/net/ipv4/tcp_wmem 2>/dev/null | tr -s '\t' ' ' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' || printf "%s" "unknown"
-            ;;
-        "tcp_congestion_control")
-            cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || printf "%s" "unknown"
-            ;;
-        "nf_conntrack_max")
-            cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || printf "%s" "unknown"
-            ;;
-        "netdev_max_backlog")
-            cat /proc/sys/net/core/netdev_max_backlog 2>/dev/null || printf "%s" "unknown"
-            ;;
-        "somaxconn")
-            cat /proc/sys/net/core/somaxconn 2>/dev/null || printf "%s" "unknown"
-            ;;
-        "active_connections")
-            get_current_connections
-            ;;
-        *)
-            printf "%s" "unknown"
-            ;;
-    esac
-}
-
-calculate_buffer_sizes() {
-    local mem_mb=$1
-    local cores=$2
-    
-    if [ "$mem_mb" -ge 3072 ]; then
-        rmem_max=16777216; wmem_max=16777216
-        tcp_rmem="4096 262144 16777216"; tcp_wmem="4096 262144 16777216"
-        conntrack_max=262144; netdev_backlog=5000; somaxconn=16384
-    elif [ "$mem_mb" -ge 1536 ]; then
-        rmem_max=8388608; wmem_max=8388608
-        tcp_rmem="4096 131072 8388608"; tcp_wmem="4096 131072 8388608"
-        conntrack_max=131072; netdev_backlog=2500; somaxconn=8192
-    elif [ "$mem_mb" -ge 512 ]; then
-        rmem_max=4194304; wmem_max=4194304
-        tcp_rmem="4096 65536 4194304"; tcp_wmem="4096 65536 4194304"
-        conntrack_max=65536; netdev_backlog=1000; somaxconn=4096
-    else
-        rmem_max=1048576; wmem_max=1048576
-        tcp_rmem="4096 32768 1048576"; tcp_wmem="4096 32768 1048576"
-        conntrack_max=32768; netdev_backlog=500; somaxconn=2048
-    fi
-    
-    if [ "$cores" -gt 4 ]; then
-        netdev_backlog=$((netdev_backlog * 2))
-        somaxconn=$((somaxconn * 2))
-    elif [ "$cores" -gt 2 ]; then
-        netdev_backlog=$((netdev_backlog + netdev_backlog / 2))
-        somaxconn=$((somaxconn + somaxconn / 2))
-    fi
-}
-
-format_bytes() {
-    local bytes=$1
-    if [ "$bytes" = "unknown" ]; then
-        printf '%s' "unknown"
-        return
-    fi
-    if [ "$bytes" -ge 1048576 ]; then
-        printf '%s' "$((bytes / 1048576))MB"
-    elif [ "$bytes" -ge 1024 ]; then
-        printf '%s' "$((bytes / 1024))KB"
-    else
-        printf '%s' "${bytes}B"
-    fi
-}
-
-values_equal() {
-    local current="$1"
-    local new="$2"
-    
-    if [ "$current" = "unknown" ] || [ "$new" = "unknown" ]; then
-        return 1
-    fi
-    
-    local norm_current=$(printf '%s\n' "$current" | tr -s ' \t' ' ' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-    local norm_new=$(printf '%s\n' "$new" | tr -s ' \t' ' ' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-    
-    [ "$norm_current" = "$norm_new" ]
-}
-
-show_comparison() {
-    printf '\n'
-    printf "BEFORE vs AFTER COMPARISON\n"
-    printf '\n'
-
-    local max_setting=7
-    local max_value=6
-    local status_width=11
-
-    local single_settings="rmem_max wmem_max tcp_congestion_control nf_conntrack_max netdev_max_backlog somaxconn"
-
-    for setting in $single_settings; do
-        [ ${#setting} -gt $max_setting ] && max_setting=${#setting}
-    done
-
-    local tcp_items="tcp_rmem (min) tcp_rmem (default) tcp_rmem (max) tcp_wmem (min) tcp_wmem (default) tcp_wmem (max)"
-    for item in $tcp_items; do
-        [ ${#item} -gt $max_setting ] && max_setting=${#item}
-    done
-
-    for setting in $single_settings; do
-        local current_value=$(get_current_value "$setting")
-        local new_value
-        case "$setting" in
-            "rmem_max") new_value="$rmem_max" ;;
-            "wmem_max") new_value="$wmem_max" ;;
-            "tcp_congestion_control") new_value="$best_congestion" ;;
-            "nf_conntrack_max") new_value="$conntrack_max" ;;
-            "netdev_max_backlog") new_value="$netdev_backlog" ;;
-            "somaxconn") new_value="$somaxconn" ;;
-        esac
-        local display_current display_new
-        case "$setting" in
-            "rmem_max"|"wmem_max")
-                display_current="$(format_bytes "$current_value")"
-                display_new="$(format_bytes "$new_value")"
-                ;;
-            *)
-                display_current="$current_value"
-                display_new="$new_value"
-                ;;
-        esac
-        [ ${#display_current} -gt $max_value ] && max_value=${#display_current}
-        [ ${#display_new}     -gt $max_value ] && max_value=${#display_new}
-    done
-
-    for proto in rmem tcp_wmem; do
-        local cur=$(get_current_value "${proto/tcp_/tcp_}")
-        local new=$(eval echo "\$tcp_${proto/tcp_}")
-        if [ "$cur" != "unknown" ]; then
-            for val in $(echo "$cur") $(echo "$new"); do
-                [ ${#val} -gt $max_value ] && max_value=${#val}
-            done
-        fi
-    done
-
-    max_setting=$((max_setting + 1))
-    max_value=$((max_value + 1))
-
-    local sep_setting sep_value sep_status
-    sep_setting=$(printf '%*s' "$max_setting" '' | tr ' ' '-')
-    sep_value=$(printf '%*s' "$max_value" '' | tr ' ' '-')
-    sep_status=$(printf '%*s' "$status_width" '' | tr ' ' '-')
-
-    printf "%-${max_setting}s| %-${max_value}s| %-${max_value}s| %-${status_width}s\n" "Setting" "Before" "After" "Status"
-
-    printf "%s+-%s+-%s+-%s\n" "$sep_setting" "$sep_value" "$sep_value" "$sep_status"
-
-    print_row() {
-        local setting="$1" current_val="$2" new_val="$3" status="$4"
-        printf "%-${max_setting}s| %-${max_value}s| %-${max_value}s| %s\n" "$setting" "$current_val" "$new_val" "$status"
-    }
-
-    for setting in $single_settings; do
-        local current_value=$(get_current_value "$setting")
-        local new_value status
-        case "$setting" in
-            "rmem_max") new_value="$rmem_max" ;;
-            "wmem_max") new_value="$wmem_max" ;;
-            "tcp_congestion_control") new_value="$best_congestion" ;;
-            "nf_conntrack_max") new_value="$conntrack_max" ;;
-            "netdev_max_backlog") new_value="$netdev_backlog" ;;
-            "somaxconn") new_value="$somaxconn" ;;
-        esac
-        local display_current display_new
-        case "$setting" in
-            "rmem_max"|"wmem_max")
-                display_current="$(format_bytes "$current_value")"
-                display_new="$(format_bytes "$new_value")"
-                ;;
-            *)
-                display_current="$current_value"
-                display_new="$new_value"
-                ;;
-        esac
-        if values_equal "$current_value" "$new_value"; then
-            status="Same"
-        else
-            status="Changed"
-            if [ "$current_value" != "unknown" ] && [ "$new_value" != "unknown" ]; then
-                case "$setting" in
-                    "rmem_max"|"wmem_max"|"netdev_max_backlog"|"somaxconn"|"nf_conntrack_max")
-                        if [ "$new_value" -gt "$current_value" ] 2>/dev/null; then
-                            status="↑ Increased"
-                        elif [ "$new_value" -lt "$current_value" ] 2>/dev/null; then
-                            status="↓ Optimized"
-                        fi
-                        ;;
-                esac
-            fi
-        fi
-        print_row "$setting" "$display_current" "$display_new" "$status"
-    done
-
-    print_tcp_rows() {
-        local name="$1" cur="$2" new="$3"
-        if [ "$cur" = "unknown" ]; then
-            print_row "${name} (min)"     "unknown" "$(echo "$new" | awk '{print $1}')" "Unknown"
-            print_row "${name} (default)" "unknown" "$(echo "$new" | awk '{print $2}')" "Unknown"
-            print_row "${name} (max)"     "unknown" "$(echo "$new" | awk '{print $3}')" "Unknown"
-            return
-        fi
-        local c1 c2 c3 n1 n2 n3 s1 s2 s3
-        c1=$(echo "$cur" | awk '{print $1}');   n1=$(echo "$new" | awk '{print $1}')
-        c2=$(echo "$cur" | awk '{print $2}');   n2=$(echo "$new" | awk '{print $2}')
-        c3=$(echo "$cur" | awk '{print $3}');   n3=$(echo "$new" | awk '{print $3}')
-        s1="Same"; s2="Same"; s3="Same"
-        [ "$c1" != "$n1" ] && s1="Changed"
-        [ "$c2" != "$n2" ] && s2="Changed"
-        [ "$c3" != "$n3" ] && s3="Changed"
-        [ "$n1" -gt "$c1" ] 2>/dev/null && s1="↑ Increased"
-        [ "$n1" -lt "$c1" ] 2>/dev/null && s1="↓ Decreased"
-        [ "$n2" -gt "$c2" ] 2>/dev/null && s2="↑ Increased"
-        [ "$n2" -lt "$c2" ] 2>/dev/null && s2="↓ Decreased"
-        [ "$n3" -gt "$c3" ] 2>/dev/null && s3="↑ Increased"
-        [ "$n3" -lt "$c3" ] 2>/dev/null && s3="↓ Decreased"
-        print_row "${name} (min)"     "$c1" "$n1" "$s1"
-        print_row "${name} (default)" "$c2" "$n2" "$s2"
-        print_row "${name} (max)"     "$c3" "$n3" "$s3"
-    }
-
-    print_tcp_rows "tcp_rmem" "$(get_current_value tcp_rmem)" "$tcp_rmem"
-    print_tcp_rows "tcp_wmem" "$(get_current_value tcp_wmem)" "$tcp_wmem"
-
-    printf "%s+-%s+-%s+-%s\n" "$sep_setting" "$sep_value" "$sep_value" "$sep_status"
-    print_row "active_connections" "$(get_current_connections)" "$(get_current_connections)" "Same"
-
-    printf '\n'
-    printf "Legend:\n"
-    printf "  Same        - No change needed\n"
-    printf "  ↑ Increased - Value will be increased for better performance\n"
-    printf "  ↓ Optimized - Value will be reduced for memory optimization\n"
-    printf "  Changed     - Value will be modified\n"
-    printf '\n'
-}
-
-verify_applied_settings() {
-    printf '\n'
-    log_info "=== Post-Application Verification ==="
-    
-    local verification_failed=0
-    
-    verify_setting() {
-        local setting_name="$1"
-        local expected_value="$2"
-        local actual_value="$3"
-        local display_name="$4"
-        
-        if values_equal "$actual_value" "$expected_value"; then
-            log_success "$display_name: $(format_bytes "$actual_value" 2>/dev/null || printf "%s" "$actual_value")"
-        else
-            log_warning "$display_name: $actual_value (expected: $expected_value)"
-            verification_failed=1
-        fi
-    }
-    
-    # Verify each setting using the same dynamic fetch method
-    verify_setting "rmem_max" "$rmem_max" "$(get_current_value "rmem_max")" "rmem_max"
-    verify_setting "wmem_max" "$wmem_max" "$(get_current_value "wmem_max")" "wmem_max"
-    verify_setting "netdev_max_backlog" "$netdev_backlog" "$(get_current_value "netdev_max_backlog")" "netdev_max_backlog"
-    verify_setting "somaxconn" "$somaxconn" "$(get_current_value "somaxconn")" "somaxconn"
-    verify_setting "tcp_rmem" "$tcp_rmem" "$(get_current_value "tcp_rmem")" "tcp_rmem"
-    verify_setting "tcp_wmem" "$tcp_wmem" "$(get_current_value "tcp_wmem")" "tcp_wmem"
-    
-    # Overall result
-    if [ "$verification_failed" -eq 0 ]; then
-        log_success "All settings verified successfully!"
-    else
-        log_warning "Some settings may not have been applied correctly"
-        printf '\n'
-        log_info "This may be due to:"
-        printf "  - Kernel module not loaded (e.g., nf_conntrack)\n"
-        printf "  - Insufficient permissions\n"
-        printf "  - Kernel version compatibility\n"
-        printf "  - Hardware limitations\n"
-        printf '\n'
-        log_info "Running 'dmesg | tail' might provide more information"
-    fi
-}
-
-show_performance_impact() {
-    printf "Performance Impact Summary\n"
-    printf '\n'
-
-    mem_mb=$(detect_memory)
-    cores=$(detect_cpu_cores)
-
-    printf "System Profile: %dMB RAM, %d CPU cores\n" "$mem_mb" "$cores"
-    printf '\n'
-
-    changes_found=0
-    improvements=""
-
-    # Check for actual improvements by comparing current vs new values
-    current_rmem=$(get_current_value rmem_max)
-    current_wmem=$(get_current_value wmem_max)
-    current_backlog=$(get_current_value netdev_max_backlog)
-    current_somaxconn=$(get_current_value somaxconn)
-
-    if ! values_equal "$current_rmem" "$rmem_max" && [ "$current_rmem" != unknown ] && [ "$current_rmem" -gt 0 ] 2>/dev/null; then
-        rmem_impr=$(( (rmem_max - current_rmem) * 100 / current_rmem ))
-        if [ "$rmem_impr" -gt 0 ]; then
-            improvements="${improvements}Receive buffer: +${rmem_impr}% increase -> Better download performance\n"
-            changes_found=1
-        elif [ "$rmem_impr" -lt 0 ]; then
-            improvements="${improvements}Receive buffer: ${rmem_impr}% decrease -> Memory optimized\n"
-            changes_found=1
-        fi
-    fi
-
-    if ! values_equal "$current_wmem" "$wmem_max" && [ "$current_wmem" != unknown ] && [ "$current_wmem" -gt 0 ] 2>/dev/null; then
-        wmem_impr=$(( (wmem_max - current_wmem) * 100 / current_wmem ))
-        if [ "$wmem_impr" -gt 0 ]; then
-            improvements="${improvements}Send buffer: +${wmem_impr}% increase -> Better upload performance\n"
-            changes_found=1
-        elif [ "$wmem_impr" -lt 0 ]; then
-            improvements="${improvements}Send buffer: ${wmem_impr}% decrease -> Memory optimized\n"
-            changes_found=1
-        fi
-    fi
-
-    if ! values_equal "$current_backlog" "$netdev_backlog" && [ "$current_backlog" != unknown ] && [ "$current_backlog" -gt 0 ] 2>/dev/null; then
-        backlog_impr=$(( (netdev_backlog - current_backlog) * 100 / current_backlog ))
-        if [ "$backlog_impr" -gt 0 ]; then
-            improvements="${improvements}Network backlog: +${backlog_impr}% increase -> Better packet processing\n"
-            changes_found=1
-        fi
-    fi
-
-    if ! values_equal "$current_somaxconn" "$somaxconn" && [ "$current_somaxconn" != unknown ] && [ "$current_somaxconn" -gt 0 ] 2>/dev/null; then
-        connq_impr=$(( (somaxconn - current_somaxconn) * 100 / current_somaxconn ))
-        if [ "$connq_impr" -gt 0 ]; then
-            improvements="${improvements}Connection queue: +${connq_impr}% increase -> More concurrent connections\n"
-            changes_found=1
-        fi
-    fi
-
-    if [ "$changes_found" -eq 1 ]; then
-        printf "Performance Improvements:\n"
-        printf "%b" "$improvements"
-    else
-        printf "System is already optimally configured for your hardware\n"
-        printf "No significant changes needed\n"
-    fi
-
-    printf '\n'
-    printf "Expected Benefits:\n"
-    printf "  - Reduced packet drops under high load\n"
-    printf "  - Better throughput for large file transfers\n"
-    printf "  - Improved responsiveness for multiple connections\n"
-    printf "  - Optimized memory usage for your hardware\n"
-    printf '\n'
-}
-
-remove_optimizer() {
-    printf "Network Optimizer Removal Tool\n"
-    printf "==============================\n"
-    
-    if [ ! -f "$CONFIG_FILE" ]; then
-        log_info "No optimization config found"
-        return 0
-    fi
-
-    printf "Do you want to remove the existing optimization config? (y/N): "
-    read -r confirm_remove
-    if [ "$confirm_remove" != "y" ] && [ "$confirm_remove" != "Y" ]; then
-        log_info "Removal cancelled by user"
-        return 0
-    fi
-
-    local backup_file=""
-    for backup in "${CONFIG_FILE}.backup."*; do
-        [ -f "$backup" ] && { backup_file="$backup"; break; }
-    done
-
-    if [ -n "$backup_file" ]; then
-        log_info "Restoring from backup: $backup_file"
-        cp "$backup_file" "$CONFIG_FILE"
-        sysctl -p "$CONFIG_FILE" >/dev/null 2>&1
-        log_success "Original settings restored"
-    else
-        log_info "No backup found – removing config file"
-        rm "$CONFIG_FILE"
-        log_success "Config file removed"
-        log_highlight "Reboot required to return to system defaults"
-    fi
-}
-
-optimizer_main() {
-    printf "Dynamic Network Performance Optimizer\n"
-    printf "=====================================\n"
+check_system() {
+  printf "\033[1;34mChecking existing AdGuard Home installation\033[0m\n"
+  if [ -x /etc/AdGuardHome/AdGuardHome ] || opkg list-installed adguardhome >/dev/null 2>&1; then
+    printf "\033[1;33mAdGuard Home is already installed. Exiting.\033[0m\n"
+    remove_adguardhome
+    exit 0
+  fi
   
-    if [ -f "$CONFIG_FILE" ]; then
-        log_warning "Existing config detected: $CONFIG_FILE"
-        remove_optimizer
-        exit 0
-    fi
-    
-    printf '\n'
-    log_info "=== System Analysis ==="
-    local mem_mb=$(detect_memory)
-    local cores=$(detect_cpu_cores)
-    local best_congestion=$(get_best_congestion_control)
-    
-    log_info "Detected RAM: ${mem_mb}MB"
-    log_info "Detected CPU cores: $cores"
-    log_info "Best congestion control: $best_congestion"
-    
-    calculate_buffer_sizes "$mem_mb" "$cores"
-    
-    show_comparison
-    
-    show_performance_impact
-    
-    printf "Do you want to apply these changes? (y/N): "
-    read -r confirm
-    
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-        log_info "Operation cancelled by user"
-        exit 0
-    fi
-    
-    if [ -f "$CONFIG_FILE" ]; then
-        local backup_file="${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
-        cp "$CONFIG_FILE" "$backup_file"
-        log_info "Backed up existing config to: $backup_file"
-    fi
-    
-    log_info "Creating configuration: $CONFIG_FILE"
-    cat > "$CONFIG_FILE" << CONFIG_EOF
-net.core.rmem_max = $rmem_max
-net.core.wmem_max = $wmem_max
-net.ipv4.tcp_rmem = $tcp_rmem
-net.ipv4.tcp_wmem = $tcp_wmem
-net.ipv4.tcp_congestion_control = $best_congestion
-net.ipv4.tcp_fastopen = 3
-net.ipv4.tcp_keepalive_probes = 3
-net.netfilter.nf_conntrack_max = $conntrack_max
-net.core.netdev_max_backlog = $netdev_backlog
-net.core.somaxconn = $somaxconn
-CONFIG_EOF
+  printf "\033[1;34mChecking LAN interface\033[0m\n"
+  LAN="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@.l3_device')"
+  if [ -z "$LAN" ]; then
+    printf "\033[1;31mLAN interface not found. Aborting.\033[0m\n"
+    exit 1
+  fi
 
-    printf '\n'
-    log_info "Applying configuration"
-    if sysctl -p "$CONFIG_FILE" >/dev/null 2>&1; then
-        log_success "Configuration applied successfully"
-    else
-        log_warning "Some settings may have failed (check kernel support)"
-    fi
-    
-    verify_applied_settings
-    
-    printf '\n'
-    log_success "Network optimization completed!"
-    log_highlight "Reboot recommended for full effect and persistent changes"
-    
-    printf '\n'
-    log_info "Current memory usage:"
-    free -h
+  printf "\033[1;34mChecking package manager\033[0m\n"
+  if command -v opkg >/dev/null 2>&1; then
+    PACKAGE_MANAGER="opkg"
+  elif command -v apk >/dev/null 2>&1; then
+    PACKAGE_MANAGER="apk"
+  else
+    printf "\033[1;31mNo supported package manager (apk or opkg) found.\033[0m\n"
+    printf "\033[1;31mThis script is designed for OpenWrt systems only.\033[0m\n"
+    exit 1
+  fi
+
+  printf "\033[1;34mChecking system memory and flash storage\033[0m\n"
+  MEM_TOTAL_KB=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+  MEM_FREE_KB=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+  BUFFERS_KB=$(awk '/^Buffers:/ {print $2}' /proc/meminfo)
+  CACHED_KB=$(awk '/^Cached:/ {print $2}' /proc/meminfo)
+
+  if [ -n "$MEM_FREE_KB" ]; then
+    MEM_FREE_MB=$((MEM_FREE_KB / 1024))
+  else
+    MEM_FREE_MB=$(((BUFFERS_KB + CACHED_KB) / 1024))
+  fi
+  MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
+
+  DF_OUT=$(df -k / | awk 'NR==2 {print $2, $4}')
+  FLASH_TOTAL_KB=$(printf '%s\n' "$DF_OUT" | awk '{print $1}')
+  FLASH_FREE_KB=$(printf '%s\n' "$DF_OUT" | awk '{print $2}')
+  FLASH_FREE_MB=$((FLASH_FREE_KB / 1024))
+  FLASH_TOTAL_MB=$((FLASH_TOTAL_KB / 1024))
+
+  if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
+    mem_col=31
+  else
+    mem_col=32
+  fi
+  if [ "$FLASH_FREE_MB" -lt "$REQUIRED_FLASH" ]; then
+    flash_col=31
+  else
+    flash_col=32
+  fi
+
+  printf "Memory: Free \033[%sm%s MB\033[0m / Total %s MB\n" \
+    "$mem_col" "$MEM_FREE_MB" "$MEM_TOTAL_MB"
+  printf "Flash:  Free \033[%sm%s MB\033[0m / Total %s MB\n" \
+    "$flash_col" "$FLASH_FREE_MB" "$FLASH_TOTAL_MB"
+
+  if [ "$MEM_FREE_MB" -lt "$REQUIRED_MEM" ]; then
+    printf "\033[1;31mError: Insufficient memory. At least %sMB RAM is required.\033[0m\n" \
+      "$REQUIRED_MEM"
+    exit 1
+  fi
+  if [ "$FLASH_FREE_MB" -lt "$REQUIRED_FLASH" ]; then
+    printf "\033[1;31mError: Insufficient flash storage. At least %sMB free space is required.\033[0m\n" \
+      "$REQUIRED_FLASH"
+    exit 1
+  fi
+
+  printf "\033[1;34mDetected LAN interface:\033[0m %s\n" "$LAN"
+  printf "\033[1;34mPackage manager:\033[0m %s\n" "$PACKAGE_MANAGER"
 }
 
-if [ "$0" = "${0#*/}" ] || [ "${0##*/}" = "$(basename "$0")" ]; then
-    optimizer_main "$@"
-fi
+install_prompt() {
+  printf "\033[1;32mSystem resources are sufficient for AdGuard Home installation. Proceeding with setup.\033[0m\n"
+
+  if [ -n "$1" ]; then
+    case "$1" in
+      official) INSTALL_MODE="official"; return ;;
+      openwrt) INSTALL_MODE="openwrt"; return ;;
+      remove) remove_adguardhome ;;
+      exit) exit 0 ;;
+      *) printf "\033[1;31mWarning: Unrecognized argument '$1'. Proceeding with interactive prompt.\033[0m\n" ;;
+    esac
+  fi
+
+  while true; do
+    printf "[1] Install Official binary\n"
+    printf "[2] Install OpenWrt package\n"
+    printf "[0] Exit\n"
+    printf "Please select (1, 2 or 0): "
+    read -r choice
+    
+    case "$choice" in
+      1|official) INSTALL_MODE="official"; break ;;
+      2|openwrt) INSTALL_MODE="openwrt"; break ;;
+      0|exit) 
+        printf "\033[1;33mInstallation cancelled.\033[0m\n"
+        exit 0 
+        ;;
+      *) printf "\033[1;31mInvalid choice '$choice'. Please enter 1, 2, or 0.\033[0m\n" ;;
+    esac
+  done
+}
+
+install_cacertificates() {
+  case "$PACKAGE_MANAGER" in
+    apk)
+      printf "\033[1;34mUpdating apk index窶ｦ\033[0m\n"
+      apk update
+      printf "\033[1;34mInstalling ca-certificates窶ｦ\033[0m\n"
+      apk add ca-certificates
+      ;;
+    opkg)
+      printf "\033[1;34mUpdating opkg index\033[0m\n"
+      opkg update --verbosity=0
+      printf "\033[1;34mInstalling ca-bundle\033[0m\n"
+      opkg install --verbosity=0 ca-bundle
+      ;;
+  esac
+}
+
+install_openwrt() {
+  printf "\033[1;34mInstalling AdGuard Home (OpenWrt package)\033[0m\n"
+  
+  case "$PACKAGE_MANAGER" in
+    apk)
+      if apk search adguardhome | grep -q "^adguardhome-"; then
+        apk add adguardhome || {
+          printf "\033[1;31mNetwork error during apk add. Aborting.\033[0m\n"
+          exit 1
+        }
+      else
+        printf "\033[1;31mPackage 'adguardhome' not found in apk repository, falling back to official窶ｦ\033[0m\n"
+        install_official
+      fi
+      ;;
+    opkg)
+      if opkg list | grep -q "^adguardhome "; then
+        opkg install --verbosity=0 adguardhome || {
+          printf "\033[1;31mNetwork error during opkg install. Aborting.\033[0m\n"
+          exit 1
+        }
+      else
+        printf "\033[1;31mPackage 'adguardhome' not found in opkg repository, falling back to official窶ｦ\033[0m\n"
+        install_official
+      fi
+      ;;
+  esac
+  
+  SERVICE_NAME="adguardhome"
+}
+
+install_official() {
+  CA="--no-check-certificate"
+  URL="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
+  VER=$( { wget -q -O - "$URL" || wget -q "$CA" -O - "$URL"; } | jsonfilter -e '@.tag_name' )
+  [ -n "$VER" ] || { printf "\033[1;31mError: Failed to get AdGuard Home version from GitHub API.\033[0m\n"; exit 1; }
+  printf "\033[1;33mInstall Version: %s\033[0m\n" "$VER"
+  
+  mkdir -p /etc/AdGuardHome
+
+  case "$(uname -m)" in
+    aarch64|arm64) ARCH=arm64 ;;
+    armv7l)        ARCH=armv7 ;;
+    armv6l)        ARCH=armv6 ;;
+    armv5l)        ARCH=armv5 ;;
+    x86_64|amd64)  ARCH=amd64 ;;
+    i386|i686)     ARCH=386 ;;
+    mips)          ARCH=mipsle ;;
+    mips64)        ARCH=mips64le ;;
+    *) printf "Unsupported arch: %s\n" "$(uname -m)"; exit 1 ;;
+  esac
+
+  TAR="AdGuardHome_linux_${ARCH}.tar.gz"
+  URL2="https://github.com/AdguardTeam/AdGuardHome/releases/download/${VER}/${TAR}"
+  DEST="/etc/AdGuardHome/${TAR}"
+  printf '\033[1;34mDownloading %s\033[0m\n' "$TAR"
+  if ! { wget -q -O "$DEST" "$URL2" || wget -q "$CA" -O "$DEST" "$URL2"; }; then
+    printf '\033[1;31mDownload failed. Please check network connection.\033[0m\n'
+    exit 1
+  fi
+  tar -C /etc/ -xzf "/etc/AdGuardHome/${TAR}"
+  rm "/etc/AdGuardHome/${TAR}"
+  chmod +x /etc/AdGuardHome/AdGuardHome
+  
+  SERVICE_NAME="AdGuardHome"
+}
+
+get_iface_addrs() {
+  local flag=0
+  
+  if ip -4 -o addr show dev "$LAN" scope global | grep -q 'inet '; then
+    NET_ADDR=$(ip -4 -o addr show dev "$LAN" scope global | awk 'NR==1{sub(/\/.*/,"",$4); print $4}')
+    flag=$((flag | 1))
+  else
+    printf "\033[1;33mWarning: No IPv4 address on %s\033[0m\n" "$LAN"
+  fi
+
+  if ip -6 -o addr show dev "$LAN" scope global | grep -q 'inet6 '; then
+    NET_ADDR6_LIST=$(ip -6 -o addr show dev "$LAN" scope global | grep -v temporary | awk 'match($4,/^(2|fd|fc)/){sub(/\/.*/,"",$4); print $4;}')
+    flag=$((flag | 2))
+  else
+    printf "\033[1;33mWarning: No IPv6 address on %s\033[0m\n" "$LAN"
+  fi
+
+  case $flag in
+    3) FAMILY_TYPE=any  ;;
+    1) FAMILY_TYPE=ipv4 ;;
+    2) FAMILY_TYPE=ipv6 ;;
+    *) FAMILY_TYPE=""   ;;
+  esac
+}
+
+common_config() {
+  printf "\033[1;34mBacking up configuration files\033[0m\n"
+  cp /etc/config/network  /etc/config/network.adguard.bak
+  cp /etc/config/dhcp     /etc/config/dhcp.adguard.bak
+  cp /etc/config/firewall /etc/config/firewall.adguard.bak
+
+  [ "$INSTALL_MODE" = "official" ] && {
+    /etc/AdGuardHome/AdGuardHome -s install >/dev/null 2>&1 || {
+      printf "\033[1;31mInitialization failed. Check AdGuardHome.yaml and port availability.\033[0m\n"
+      exit 1
+    }
+  }
+
+  chmod 700 /etc/"$SERVICE_NAME"
+  /etc/init.d/"$SERVICE_NAME" enable
+  /etc/init.d/"$SERVICE_NAME" start
+
+  uci set dhcp.@dnsmasq[0].noresolv="1"
+  uci set dhcp.@dnsmasq[0].cachesize="0"
+  uci set dhcp.@dnsmasq[0].rebind_protection='0'
+
+  # uci set dhcp.@dnsmasq[0].rebind_protection='1'  # keep enabled
+  # uci set dhcp.@dnsmasq[0].rebind_localhost='1'   # protect localhost
+  # uci add_list dhcp.@dnsmasq[0].rebind_domain='lan'  # allow internal domain
+
+  uci set dhcp.@dnsmasq[0].port="54"
+  uci set dhcp.@dnsmasq[0].domain="lan"
+  uci set dhcp.@dnsmasq[0].local="/lan/"
+  uci set dhcp.@dnsmasq[0].expandhosts="1"
+
+  uci -q del dhcp.@dnsmasq[0].server || true
+  uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#${DNS_PORT}"
+  uci add_list dhcp.@dnsmasq[0].server="::1#${DNS_PORT}"
+
+  uci -q del dhcp.lan.dhcp_option || true
+  uci add_list dhcp.lan.dhcp_option="6,${NET_ADDR}"
+
+  uci -q del dhcp.lan.dhcp_option6 || true
+  if [ -n "$NET_ADDR6_LIST" ]; then
+    for ip in $NET_ADDR6_LIST; do
+      uci add_list dhcp.lan.dhcp_option6="option6:dns=[${ip}]"
+    done
+  fi
+
+  uci commit dhcp
+  /etc/init.d/dnsmasq restart || {
+    printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"
+    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
+    sleep 10
+    remove_adguardhome "auto"
+    reboot
+    exit 1
+  }
+  /etc/init.d/odhcpd restart || {
+    printf "\033[1;31mFailed to restart odhcpd\033[0m\n"
+    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
+    sleep 10
+    remove_adguardhome "auto"
+    reboot
+    exit 1
+  }
+
+  printf "\033[1;32mRouter IPv4: %s\033[0m\n" "$NET_ADDR"
+  
+  if [ -z "$NET_ADDR6_LIST" ]; then
+    printf "\033[1;33mRouter IPv6: none found\033[0m\n"
+  else
+    first_ip=true
+    for ip in $NET_ADDR6_LIST; do
+      if $first_ip; then
+        printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
+        first_ip=false
+      else
+        printf "\033[1;32mRouter IPv6: %s\033[0m\n" "$ip"
+      fi
+    done
+  fi
+}
+
+common_config_firewall() {
+  printf "\033[1;34mConfiguring firewall rules for AdGuard Home\033[0m\n"
+
+  rule_name="adguardhome_dns_${DNS_PORT}"
+  uci -q delete firewall."$rule_name" || true
+
+  if [ -z "$FAMILY_TYPE" ]; then
+    printf "\033[1;31mNo valid IP address family detected. Skipping firewall rule setup.\033[0m\n"
+    return
+  fi
+
+  uci set firewall."$rule_name"=redirect
+  uci set firewall."$rule_name".name="AdGuardHome DNS Redirect (${FAMILY_TYPE})"
+  uci set firewall."$rule_name".family="$FAMILY_TYPE"
+  uci set firewall."$rule_name".src="lan"
+  uci set firewall."$rule_name".dest="lan"
+  uci add_list firewall."$rule_name".proto="tcp"
+  uci add_list firewall."$rule_name".proto="udp"
+  uci set firewall."$rule_name".src_dport="$DNS_PORT"
+  uci set firewall."$rule_name".dest_port="$DNS_PORT"
+  uci set firewall."$rule_name".target="DNAT"
+
+  uci commit firewall
+  /etc/init.d/firewall restart || {
+    printf "\033[1;31mFailed to restart firewall\033[0m\n"
+    printf "\033[1;31mCritical error: Auto-removing AdGuard Home and rebooting in 10 seconds (Ctrl+C to cancel)\033[0m\n"
+    sleep 10
+    remove_adguardhome "auto"
+    reboot
+    exit 1
+  }
+}
+
+remove_adguardhome() {
+  local auto_confirm="$1"
+
+  printf "\033[1;34mRemoving AdGuard Home\033[0m\n"
+
+  if [ -x /etc/AdGuardHome/AdGuardHome ]; then
+    INSTALL_TYPE="official"; AGH="AdGuardHome"
+  elif opkg list-installed adguardhome >/dev/null 2>&1; then
+    INSTALL_TYPE="openwrt"; AGH="adguardhome"
+  else
+    printf "\033[1;31mAdGuard Home not found\033[0m\n"
+    return 1
+  fi
+
+  printf "Found AdGuard Home (%s version)\n" "$INSTALL_TYPE"
+
+  if [ "$auto_confirm" != "auto" ]; then
+    printf "Do you want to remove it? (y/N): "
+    read -r confirm
+    case "$confirm" in
+      [yY]|[yY][eE][sS]) ;;
+      *) printf "\033[1;33mCancelled\033[0m\n"; return 0 ;;
+    esac
+  else
+    printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
+  fi
+
+  /etc/init.d/"${AGH}" stop    2>/dev/null || true
+  /etc/init.d/"${AGH}" disable 2>/dev/null || true
+
+  if [ "$INSTALL_TYPE" = "official" ]; then
+    "/etc/${AGH}/${AGH}" -s uninstall 2>/dev/null || true
+  else
+    if command -v apk >/dev/null 2>&1; then
+      apk del "$AGH" 2>/dev/null || true
+    else
+      opkg remove --verbosity=0 "$AGH" 2>/dev/null || true
+    fi
+  fi
+
+  if [ -d "/etc/${AGH}" ]; then
+    if [ "$auto_confirm" != "auto" ]; then
+      printf "Remove /etc/%s directory? (y/N): " "$AGH"
+      read -r cfg; case "$cfg" in [yY]*) rm -rf "/etc/${AGH}" ;; esac
+    else
+      rm -rf "/etc/${AGH}"
+    fi
+  fi
+
+  for cfg in network dhcp firewall; do
+    bak="/etc/config/${cfg}.adguard.bak"
+    if [ -f "$bak" ]; then
+      printf "\033[1;34mRestoring %s configuration\033[0m\n" "$cfg"
+      cp "$bak" "/etc/config/${cfg}"
+      rm -f "$bak"
+    fi
+  done
+
+  uci commit network
+  uci commit dhcp
+  uci commit firewall
+
+  /etc/init.d/dnsmasq restart  || { printf "\033[1;31mFailed to restart dnsmasq\033[0m\n"; exit 1; }
+  /etc/init.d/odhcpd restart   || { printf "\033[1;31mFailed to restart odhcpd\033[0m\n"; exit 1; }
+  /etc/init.d/firewall restart || { printf "\033[1;31mFailed to restart firewall\033[0m\n"; exit 1; }
+
+  printf "\033[1;32mAdGuard Home has been removed successfully.\033[0m\n"
+
+  if [ "$auto_confirm" != "auto" ]; then
+    printf "\033[33mPress any key to reboot.\033[0m\n"
+    read -r -n1 -s
+    reboot
+  else
+    printf "\033[1;33mAuto-rebooting\033[0m\n"
+    reboot
+  fi
+
+  exit 0
+}
+
+adguardhome_main() {
+  check_system
+  install_prompt "$@"
+  install_cacertificates
+  install_"$INSTALL_MODE"
+  get_iface_addrs
+  common_config
+  common_config_firewall
+
+  printf "\033[1;34mAccess UI v4 address 👉    http://${NET_ADDR}:3000/\033[0m\n"
+  if [ -n "$NET_ADDR6_LIST" ]; then
+    set -- $NET_ADDR6_LIST
+    printf "\033[1;34mAccess UI v6 address 👉    http://%s:3000/\033[0m\n" "$1"  
+  fi
+}
+
+# adguardhome_main "$@"
