@@ -464,6 +464,7 @@ adguardhome_main() {
   get_iface_addrs
   common_config
   common_config_firewall
+  printf "\n\033[1;32mAdGuard Home installation and configuration completed successfully.\033[0m\n\n"
   get_access
 }
 
