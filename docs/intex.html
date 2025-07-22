@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>AIOS Launcher</title>
+  <link rel="stylesheet" href="https://site-u2023.github.io/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="inner">
+      <h1 class="site-title">AIOS Launcher</h1>
+      <p class="site-desc">Click once to download & run All-In-One script</p>
+    </div>
+  </header>
+
+  <main class="inner">
+    <section>
+      <h2>▶ ワンクリック実行</h2>
+      <p>以下のボタンをクリックすると、ブラウザ経由で <code>aios.sh</code> をダウンロードし、自動的にシェルで実行します。</p>
+      <button id="run" class="button">▶ Run AIOS</button>
+      <p class="note">※ Linux/macOS/WSL で動作します。</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="inner">
+      <p>&copy; 2023 site-u2023</p>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('run').addEventListener('click', async () => {
+      try {
+        // スクリプトを取得
+        const res = await fetch('https://raw.githubusercontent.com/site-u2023/aios/main/aios.sh');
+        const txt = await res.text();
+
+        // Blob を生成してダウンロード
+        const blob = new Blob([txt], { type: 'text/x-sh' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'aios.sh';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        // ダウンロード完了後にターミナル用コマンドをクリップボードへコピー
+        const cmd = `mkdir -p /tmp/aios && mv ~/Downloads/aios.sh /tmp/aios/ && chmod +x /tmp/aios/aios.sh && /tmp/aios/aios.sh`;
+        await navigator.clipboard.writeText(cmd);
+
+        alert('スクリプトをダウンロードしました。\nターミナルに貼り付けて実行してください：\n' + cmd);
+      } catch (e) {
+        alert('ダウンロードに失敗しました: ' + e);
+      }
+    });
+  </script>
+</body>
+</html>
