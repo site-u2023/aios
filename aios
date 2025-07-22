@@ -1,0 +1,67 @@
+#!/bin/sh
+
+# Base directory and script file settings
+BASE_DIR="/tmp/aios"
+BASE_FILE="aios.sh"
+BASE_PATH="$BASE_DIR/$BASE_FILE"
+BASE_URL="https://raw.githubusercontent.com/site-u2023/aios/main/$BASE_FILE"
+
+# --- Ensure base directory exists ---
+# Check if the directory does not exist
+if [ ! -d "$BASE_DIR" ]; then
+    # Attempt to create the directory recursively
+    mkdir -p "$BASE_DIR"
+    # Check if mkdir failed
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to create base directory $BASE_DIR" >&2
+        exit 1
+    fi
+fi
+
+# --- Download the main script using wget ---
+# Check if wget command is available in PATH
+if command -v wget >/dev/null 2>&1; then
+    # Get current Unix timestamp for cache busting
+    cache_buster=$(date +%s)
+    # Construct the full download URL
+    download_url="$BASE_URL?cache_bust=$cache_buster"
+
+    # Attempt to download the file
+    # -q: quiet mode
+    # -O: output to specified file
+    wget -q -O "$BASE_PATH" "$download_url"
+    download_status=$?
+
+    # Check if wget command failed
+    if [ $download_status -ne 0 ]; then
+        echo "Error: Failed to download $BASE_FILE (wget exit code: $download_status)" >&2
+        # Remove potentially incomplete file
+        rm -f "$BASE_PATH"
+        exit 2
+    fi
+else
+    # wget command was not found
+    echo "Error: wget command not found. Cannot download $BASE_FILE." >&2
+    exit 3
+fi
+
+# --- Make the downloaded script executable ---
+chmod +x "$BASE_PATH"
+# Check if chmod failed
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to make $BASE_PATH executable" >&2
+    # Clean up downloaded file if chmod fails
+    rm -f "$BASE_PATH"
+    exit 4
+fi
+
+# --- Execute the downloaded script ---
+# Replace the current shell process with the downloaded script,
+# passing all original arguments ("$@") correctly.
+exec "$BASE_PATH" "$@"
+
+# If exec fails (e.g., script is corrupted or not executable despite chmod),
+# the following lines will be executed.
+exec_failed_status=$?
+echo "Error: Failed to execute $BASE_PATH (exit code: $exec_failed_status)" >&2
+exit $exec_failed_status
