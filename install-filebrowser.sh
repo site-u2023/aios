@@ -134,20 +134,16 @@ start_service() {
   local user=$(uci get filebrowser.config.username 2>/dev/null)
   local pass=$(uci get filebrowser.config.password 2>/dev/null)
 
-  # 必要なディレクトリを作成
   if [ -n "$db_path" ]; then
     mkdir -p "$(dirname "$db_path")"
   fi
 
-  # データベースが存在しない場合のみ初期化とユーザー作成
   if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
     echo "Initializing filebrowser database..."
     "$PROG" config init --database "$db_path"
     
-    # パスワード長制限を緩和
     "$PROG" config set --minimum-password-length=4 --database "$db_path"
     
-    # ユーザーを追加
     if [ -n "$user" ] && [ -n "$pass" ]; then
       if "$PROG" users add "$user" "$pass" --database "$db_path"; then
         echo "User $user added successfully"
