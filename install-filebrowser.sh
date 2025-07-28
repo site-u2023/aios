@@ -242,7 +242,7 @@ remove_filebrowser() {
   
   printf "\033[1;32mFilebrowser removed successfully\033[0m\n"
 
-  cd "$HOME"
+  cd
   exit 0
 }
 
