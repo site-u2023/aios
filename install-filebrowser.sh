@@ -9,7 +9,7 @@ DEFAULT_PORT="${DEFAULT_PORT:-8080}"
 DEFAULT_ROOT="${DEFAULT_ROOT:-/srv}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
-PASSWORD=${PASSWORD:-admin}
+PASSWORD=${PASSWORD:-password}
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
@@ -133,11 +133,10 @@ start_service() {
   local user=$(uci get filebrowser.config.username 2>/dev/null)
   local pass=$(uci get filebrowser.config.password 2>/dev/null)
 
-  # データベースファイルが存在しない場合のみ初期化とユーザー追加を行う
   if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
     mkdir -p "$(dirname "$db_path")"
-    "$PROG" config init --database "$db_path"
-    "$PROG" users add "$user" "$pass" --database "$db_path"
+    "$PROG" config init --database "$db_path" >/dev/null 2>&1
+    "$PROG" users add "$user" "$pass" --database "$db_path" >/dev/null 2>&1
   fi
 
   procd_open_instance
@@ -145,7 +144,7 @@ start_service() {
     -r "$(uci get filebrowser.config.root)" \
     -p "$(uci get filebrowser.config.port)" \
     -a "$(uci get filebrowser.config.address)" \
-    --database "$db_path" # ここでデータベースパスを明示的に指定
+    --database "$db_path"
   procd_set_param respawn
   procd_close_instance
 }
