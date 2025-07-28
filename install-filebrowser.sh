@@ -30,7 +30,7 @@ detect_architecture() {
     x86_64|amd64)  ARCH="amd64" ;;
     i386|i686)     ARCH="386" ;;
     riscv64)       ARCH="riscv64" ;;
-    *) 
+    *)  
       printf "\033[1;31mUnsupported architecture: %s\033[0m\n" "$(uname -m)"
       printf "\033[1;31mSupported: aarch64, armv7l, armv6l, armv5l, x86_64, i386, riscv64\033[0m\n"
       printf "\033[1;31mFor other architectures, please download manually from:\033[0m\n"
@@ -126,22 +126,23 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
-  PROG=/usr/bin/filebrowser
-  DB=$(uci get filebrowser.config.database)
-  USER=$(uci get filebrowser.config.username)
-  PASS=$(uci get filebrowser.config.password)
+  local db_path=$(uci get filebrowser.config.database 2>/dev/null)
+  local user=$(uci get filebrowser.config.username 2>/dev/null)
+  local pass=$(uci get filebrowser.config.password 2>/dev/null)
 
-  if [ ! -f "$DB" ]; then
-    mkdir -p "$(dirname "$DB")"
-    filebrowser config init --database "$DB"
-    filebrowser users add "$USER" "$PASS" --database "$DB"
+  # データベースファイルが存在しない場合のみ初期化とユーザー追加を行う
+  if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
+    mkdir -p "$(dirname "$db_path")"
+    "$PROG" config init --database "$db_path"
+    "$PROG" users add "$user" "$pass" --database "$db_path"
   fi
 
   procd_open_instance
   procd_set_param command "$PROG" \
     -r "$(uci get filebrowser.config.root)" \
     -p "$(uci get filebrowser.config.port)" \
-    -a "$(uci get filebrowser.config.address)"
+    -a "$(uci get filebrowser.config.address)" \
+    --database "$db_path" # ここでデータベースパスを明示的に指定
   procd_set_param respawn
   procd_close_instance
 }
