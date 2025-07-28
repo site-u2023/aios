@@ -141,8 +141,9 @@ start_service() {
   if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
     echo "Initializing filebrowser database..."
     "$PROG" config init --database "$db_path"
-    
-    "$PROG" config set --minimum-password-length 1 --database "$db_path"
+
+    "$PROG" config set --database "$db_path" --minimum-password-length 1 >/dev/null 2>&1
+    # "$PROG" config set --minimum-password-length 0 --database "$db_path"
     # "$PROG" config set --auth.method=noauth --database "$db_path"
     # "$PROG" config set --minimum-password-length 1 --minimum-password-score 0 --database "$db_path"
     
