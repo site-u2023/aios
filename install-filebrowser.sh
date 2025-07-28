@@ -118,7 +118,7 @@ create_config() {
 
 create_init_script() {
   printf "\033[1;34mCreating init script\033[0m\n"
-  
+
   cat > "/etc/init.d/$SERVICE_NAME" << 'EOF'
 #!/bin/sh /etc/rc.common
 
@@ -133,7 +133,9 @@ start_service() {
   procd_set_param command "$PROG" \
     -r "$(uci get filebrowser.config.root)" \
     -p "$(uci get filebrowser.config.port)" \
-    -a "$(uci get filebrowser.config.address)"
+    -a "$(uci get filebrowser.config.address)" \
+    -d "$(uci get filebrowser.config.database)" \
+    -l "$(uci get filebrowser.config.log)"
   procd_set_param respawn
   procd_close_instance
 }
