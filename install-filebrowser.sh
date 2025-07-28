@@ -149,7 +149,7 @@ start_service() {
     else
       if ! "$PROG" users ls --database "$db_path" | grep -q "$user"; then
         echo "Adding missing user $user..."
-        "$PROG" users add "$user" "$pass" --database "$db_path"
+        # "$PROG" users add "$user" "$pass" --database "$db_path"
       fi
     fi
   fi
