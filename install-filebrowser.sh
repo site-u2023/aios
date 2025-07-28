@@ -145,10 +145,6 @@ start_service() {
     echo "Initializing filebrowser database"
     "$PROG" config init --database "$db_path" >/dev/null 2>&1
 
-    # "$PROG" config set --database "$db_path" --minimum-password-length 1 >/dev/null 2>&1
-    # "$PROG" config set --minimum-password-length 0 --database "$db_path"
-    # "$PROG" config set --auth.method=noauth --database "$db_path"
-    # "$PROG" config set --minimum-password-length 1 --minimum-password-score 0 --database "$db_path"
     "$PROG" config set --database "$db_path" --minimum-password-length 0 --locale "$default_lang" >/dev/null 2>&1
     
     if [ -n "$user" ] && [ -n "$pass" ]; then
@@ -222,15 +218,15 @@ get_access_info() {
   if [ -n "$ROUTER_IP" ]; then
     printf "\n\033[1;32m=== Filebrowser Access Information ===\033[0m\n"
     printf "\033[1;32mWeb Interface: http://%s:%s/\033[0m\n" \
-      "$ROUTER_IP" "$PORT"
-    printf "\033[1;32mDefault Login: %s / %s\033[0m\n" \
-      "$USER" "$PASS"
+      "$ROUTER_IP" "$DEFAULT_PORT"
+    printf "\033[1;32mUsername: %s\033[0m\n" "$USER"
+    printf "\033[1;32mPassword: %s\033[0m\n" "$PASS"
     printf "\033[1;33mIMPORTANT: Change default password after first login!\033[0m\n"
   else
     printf "\033[1;33mWarning: Could not determine router IP address\033[0m\n"
-    printf "Access via: http://[ROUTER_IP]:%s/\n" "$PORT"
-    printf "\033[1;32mDefault Login: %s / %s\033[0m\n" \
-      "$USER" "$PASS"
+    printf "Access via: http://[ROUTER_IP]:%s/\n" "$DEFAULT_PORT"
+    printf "\033[1;32mUsername: %s\033[0m\n" "$USER"
+    printf "\033[1;32mPassword: %s\033[0m\n" "$PASS"
   fi
 }
 
