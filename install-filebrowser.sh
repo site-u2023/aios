@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SCRIPT_VERSION="2025.07.28-00-00"
+SCRIPT_VERSION="2025.07.28-01-00"
 
 SERVICE_NAME="filebrowser"
 INSTALL_DIR="/usr/bin"
@@ -9,7 +9,7 @@ DEFAULT_PORT="${DEFAULT_PORT:-8080}"
 DEFAULT_ROOT="${DEFAULT_ROOT:-/}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
-PASSWORD=${PASSWORD:-Admin12345678}
+PASSWORD=${PASSWORD:-admin}
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
@@ -46,6 +46,7 @@ install_filebrowser() {
   
   CA="--no-check-certificate"
   URL="https://api.github.com/repos/filebrowser/filebrowser/releases/latest"
+  
   VER=$( { wget -q -O - "$URL" || wget -q "$CA" -O - "$URL"; } | jsonfilter -e '@.tag_name' )
   
   if [ -z "$VER" ]; then
@@ -70,7 +71,7 @@ install_filebrowser() {
   
   printf "\033[1;32mFilebrowser v%s downloaded successfully\033[0m\n" "$VER"
   
-  cd /tmp
+  cd /tmp || exit 1
   tar -xzf "$TAR" || {
     printf "\033[1;31mFailed to extract filebrowser\033[0m\n"
     exit 1
@@ -87,7 +88,7 @@ install_filebrowser() {
   trap - EXIT
   
   printf "\033[1;32mFilebrowser installed to %s/filebrowser\033[0m\n" "$INSTALL_DIR"
-  cd
+  cd "$HOME" || cd /
 }
 
 create_config() {
@@ -133,23 +134,26 @@ start_service() {
   local user=$(uci get filebrowser.config.username 2>/dev/null)
   local pass=$(uci get filebrowser.config.password 2>/dev/null)
 
+  # 必要なディレクトリを作成
   if [ -n "$db_path" ]; then
     mkdir -p "$(dirname "$db_path")"
+  fi
+
+  # データベースが存在しない場合のみ初期化とユーザー作成
+  if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
+    echo "Initializing filebrowser database..."
+    "$PROG" config init --database "$db_path"
     
-    if [ ! -f "$db_path" ]; then
-      echo "Initializing filebrowser database..."
-      "$PROG" config init --database "$db_path"
-      
+    # パスワード長制限を緩和
+    "$PROG" config set --minimum-password-length=4 --database "$db_path"
+    
+    # ユーザーを追加
+    if [ -n "$user" ] && [ -n "$pass" ]; then
       if "$PROG" users add "$user" "$pass" --database "$db_path"; then
         echo "User $user added successfully"
       else
         echo "Failed to add user $user"
         return 1
-      fi
-    else
-      if ! "$PROG" users ls --database "$db_path" | grep -q "$user"; then
-        echo "Adding missing user $user..."
-        # "$PROG" users add "$user" "$pass" --database "$db_path"
       fi
     fi
   fi
@@ -204,23 +208,24 @@ get_access_info() {
   [ -z "$LAN_IFACE" ] && LAN_IFACE="br-lan"
 
   ROUTER_IP=$(
-    ip -4 addr show "$LAN_IFACE" \
+    ip -4 addr show "$LAN_IFACE" 2>/dev/null \
       | awk '/inet / { sub(/\/.*/, "", $2); print $2; exit }'
   )
 
   USER=$(uci get filebrowser.config.username 2>/dev/null || echo "${USERNAME}")
   PASS=$(uci get filebrowser.config.password 2>/dev/null || echo "${PASSWORD}")
+  PORT=$(uci get filebrowser.config.port 2>/dev/null || echo "${DEFAULT_PORT}")
 
   if [ -n "$ROUTER_IP" ]; then
     printf "\n\033[1;32m=== Filebrowser Access Information ===\033[0m\n"
     printf "\033[1;32mWeb Interface: http://%s:%s/\033[0m\n" \
-      "$ROUTER_IP" "$DEFAULT_PORT"
+      "$ROUTER_IP" "$PORT"
     printf "\033[1;32mDefault Login: %s / %s\033[0m\n" \
       "$USER" "$PASS"
     printf "\033[1;33mIMPORTANT: Change default password after first login!\033[0m\n"
   else
     printf "\033[1;33mWarning: Could not determine router IP address\033[0m\n"
-    printf "Access via: http://[ROUTER_IP]:%s/\n" "$DEFAULT_PORT"
+    printf "Access via: http://[ROUTER_IP]:%s/\n" "$PORT"
     printf "\033[1;32mDefault Login: %s / %s\033[0m\n" \
       "$USER" "$PASS"
   fi
