@@ -152,10 +152,10 @@ start_service() {
     "$PROG" config set --database "$db_path" --minimum-password-length 0 --locale "$default_lang" >/dev/null 2>&1
     
     if [ -n "$user" ] && [ -n "$pass" ]; then
-      if "$PROG" users add "$user" "$pass" --database "$db_path"; then
+      if "$PROG" users add "$user" "$pass" --database "$db_path" >/dev/null 2>&1; then
         echo "User $user added successfully"
       else
-        echo "Failed to add user $user"
+        echo "Failed to add user $user" >&2
         return 1
       fi
     fi
