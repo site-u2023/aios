@@ -129,22 +129,11 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
-  local db_path=$(uci get filebrowser.config.database 2>/dev/null)
-  local user=$(uci get filebrowser.config.username 2>/dev/null)
-  local pass=$(uci get filebrowser.config.password 2>/dev/null)
-
-  if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
-    mkdir -p "$(dirname "$db_path")"
-    "$PROG" config init --database "$db_path" >/dev/null 2>&1
-    "$PROG" users add "$user" "$pass" --database "$db_path" >/dev/null 2>&1
-  fi
-
   procd_open_instance
   procd_set_param command "$PROG" \
     -r "$(uci get filebrowser.config.root)" \
     -p "$(uci get filebrowser.config.port)" \
-    -a "$(uci get filebrowser.config.address)" \
-    --database "$db_path"
+    -a "$(uci get filebrowser.config.address)"
   procd_set_param respawn
   procd_close_instance
 }
