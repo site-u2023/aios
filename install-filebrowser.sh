@@ -5,8 +5,8 @@ SCRIPT_VERSION="2025.07.28-00-00"
 SERVICE_NAME="filebrowser"
 INSTALL_DIR="/usr/bin"
 CONFIG_DIR="/etc/filebrowser"
-DEFAULT_PORT="8080"
-DEFAULT_ROOT="/"
+DEFAULT_PORT="${DEFAULT_PORT:-8080}"
+DEFAULT_ROOT="${DEFAULT_ROOT:-/srv}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
 PASSWORD=${PASSWORD:-admin}
@@ -91,10 +91,11 @@ install_filebrowser() {
 }
 
 create_config() {
-  mkdir -p "$CONFIG_DIR"
+  [ ! -d /etc/config ] && mkdir -p /etc/config
+  [ ! -f /etc/config/filebrowser ] && touch /etc/config/filebrowser
 
   if ! uci -q get filebrowser.config.enabled >/dev/null 2>&1; then
-    SEC=$(uci -q add filebrowser filebrowser)
+    SEC=$(uci -q add filebrowser filebrowser) || return 1
     uci -q rename filebrowser."$SEC"=config
   fi
 
@@ -107,10 +108,12 @@ create_config() {
   uci -q set filebrowser.config.username="$USERNAME"
   uci -q set filebrowser.config.password="$PASSWORD"
 
-  uci -q commit filebrowser
-
-  printf "\033[1;32mUCI configuration written and committed\033[0m\n"
-  printf "→ 確認: cat /etc/config/filebrowser\n"
+  if uci commit filebrowser; then
+    printf "\033[1;32mUCI configuration written and committed\033[0m\n"
+  else
+    printf "\033[1;31mFailed to commit UCI configuration\033[0m\n" >&2
+    return 1
+  fi
 }
 
 create_init_script() {
