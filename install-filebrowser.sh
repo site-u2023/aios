@@ -1,9 +1,6 @@
 #!/bin/sh
 
-# OpenWrt Filebrowser Auto Install Script
-# Supports multiple architectures with automatic detection
-
-SCRIPT_VERSION="2025.07.28-01-00"
+SCRIPT_VERSION="2025.07.28-00-00"
 
 SERVICE_NAME="filebrowser"
 INSTALL_DIR="/usr/bin"
@@ -11,6 +8,8 @@ CONFIG_DIR="/etc/filebrowser"
 DEFAULT_PORT="8080"
 DEFAULT_ROOT="/"
 ARCH=""
+USERNAME=${USERNAME:-admin}
+PASSWORD=${PASSWORD:-admin}
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
@@ -45,7 +44,6 @@ detect_architecture() {
 install_filebrowser() {
   printf "\033[1;34mDownloading filebrowser\033[0m\n"
   
-  # Get latest version (same method as AdGuardHome script)
   CA="--no-check-certificate"
   URL="https://api.github.com/repos/filebrowser/filebrowser/releases/latest"
   VER=$( { wget -q -O - "$URL" || wget -q "$CA" -O - "$URL"; } | jsonfilter -e '@.tag_name' )
@@ -56,17 +54,15 @@ install_filebrowser() {
     VER="v2.27.0"
   fi
   
-  # Remove 'v' prefix if present
-  VER=$(echo "$VER" | sed 's/^v//')
+  VER=${VER#v}
   
-  # Construct download URL
   TAR="linux-${ARCH}-filebrowser.tar.gz"
   URL2="https://github.com/filebrowser/filebrowser/releases/download/v${VER}/${TAR}"
   DEST="/tmp/${TAR}"
+  trap 'rm -f "$DEST"' EXIT
   
   printf "Downloading filebrowser v%s for %s\n" "$VER" "$ARCH"
   
-  # Download with fallback
   if ! { wget -q -O "$DEST" "$URL2" || wget -q "$CA" -O "$DEST" "$URL2"; }; then
     printf '\033[1;31mDownload failed. Please check network connection.\033[0m\n'
     exit 1
@@ -74,7 +70,6 @@ install_filebrowser() {
   
   printf "\033[1;32mFilebrowser v%s downloaded successfully\033[0m\n" "$VER"
   
-  # Extract and install
   cd /tmp
   tar -xzf "$TAR" || {
     printf "\033[1;31mFailed to extract filebrowser\033[0m\n"
@@ -88,26 +83,30 @@ install_filebrowser() {
   
   chmod +x "$INSTALL_DIR/filebrowser"
   rm -f "/tmp/${TAR}" /tmp/filebrowser /tmp/README.md /tmp/LICENSE /tmp/CHANGELOG.md
+
+  trap - EXIT
   
   printf "\033[1;32mFilebrowser installed to %s/filebrowser\033[0m\n" "$INSTALL_DIR"
 }
 
 create_config() {
-  printf "\033[1;34mCreating UCI configuration\033[0m\n"
-  
-  # Create UCI config file with default values
-  cat > "/etc/config/$SERVICE_NAME" << 'EOF'
-config filebrowser 'config'
-	option enabled '1'
-	option port '8080'
-	option address '0.0.0.0'
-	option root '/'
-	option database '/etc/filebrowser/filebrowser.db'
-	option log '/var/log/filebrowser.log'
-EOF
+  mkdir -p "$CONFIG_DIR"
+  UCI_FILE="/etc/config/${SERVICE_NAME}"
+  [ ! -f "$UCI_FILE" ] && touch "$UCI_FILE"
 
-  printf "\033[1;32mUCI configuration created: /etc/config/%s\033[0m\n" "$SERVICE_NAME"
-  printf "Edit with: uci set filebrowser.config.port=9090 && uci commit filebrowser\n"
+  uci -q set filebrowser.config.enabled='1'
+  uci -q set filebrowser.config.port="$DEFAULT_PORT"
+  uci -q set filebrowser.config.root="$DEFAULT_ROOT"
+  uci -q set filebrowser.config.address='0.0.0.0'
+  uci -q set filebrowser.config.database='/etc/filebrowser/filebrowser.db'
+  uci -q set filebrowser.config.log='/var/log/filebrowser.log'
+  uci -q set filebrowser.config.username="$USERNAME"
+  uci -q set filebrowser.config.password="$PASSWORD"
+
+  uci commit filebrowser -q
+
+  printf "\033[1;32mUCI configuration created and committed\033[0m\n"
+  printf "→ 確認: uci get filebrowser.config.{port,username,password}\n"
 }
 
 create_init_script() {
@@ -123,10 +122,23 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
-    procd_open_instance
-    procd_set_param command $PROG -r / -p 8080 -a 0.0.0.0
-    procd_set_param respawn
-    procd_close_instance
+  PROG=/usr/bin/filebrowser
+  DB=$(uci get filebrowser.config.database)
+  USER=$(uci get filebrowser.config.username)
+  PASS=$(uci get filebrowser.config.password)
+
+  if [ ! -f "$DB" ]; then
+    mkdir -p "$(dirname "$DB")"
+    filebrowser users add "$USER" "$PASS" --database "$DB"
+  fi
+
+  procd_open_instance
+  procd_set_param command "$PROG" \
+    -r "$(uci get filebrowser.config.root)" \
+    -p "$(uci get filebrowser.config.port)" \
+    -a "$(uci get filebrowser.config.address)"
+  procd_set_param respawn
+  procd_close_instance
 }
 
 stop_service() {
@@ -151,10 +163,8 @@ start_service() {
     exit 1
   }
   
-  # Wait a moment for service to start
   sleep 2
   
-  # Check if service is running
   if pgrep filebrowser >/dev/null; then
     printf "\033[1;32mFilebrowser service started successfully\033[0m\n"
   else
@@ -164,22 +174,32 @@ start_service() {
 }
 
 get_access_info() {
-  # Get router IP
-  LAN_IFACE=$(ubus call network.interface.lan status 2>/dev/null | sed -n 's/.*"l3_device":"\([^"]*\)".*/\1/p')
-  if [ -z "$LAN_IFACE" ]; then
-    LAN_IFACE="br-lan"
-  fi
-  
-  ROUTER_IP=$(ip -4 addr show "$LAN_IFACE" | awk '/inet / {sub(/\/.*/, "", $2); print $2; exit}')
-  
+  LAN_IFACE=$(
+    ubus call network.interface.lan status 2>/dev/null \
+      | sed -n 's/.*"l3_device":"\([^"]*\)".*/\1/p'
+  )
+  [ -z "$LAN_IFACE" ] && LAN_IFACE="br-lan"
+
+  ROUTER_IP=$(
+    ip -4 addr show "$LAN_IFACE" \
+      | awk '/inet / { sub(/\/.*/, "", $2); print $2; exit }'
+  )
+
+  USER=$(uci get filebrowser.config.username 2>/dev/null || echo "${USERNAME}")
+  PASS=$(uci get filebrowser.config.password 2>/dev/null || echo "${PASSWORD}")
+
   if [ -n "$ROUTER_IP" ]; then
     printf "\n\033[1;32m=== Filebrowser Access Information ===\033[0m\n"
-    printf "\033[1;32mWeb Interface: http://%s:%s/\033[0m\n" "$ROUTER_IP" "$DEFAULT_PORT"
-    printf "\033[1;32mDefault Login: admin / admin\033[0m\n"
+    printf "\033[1;32mWeb Interface: http://%s:%s/\033[0m\n" \
+      "$ROUTER_IP" "$DEFAULT_PORT"
+    printf "\033[1;32mDefault Login: %s / %s\033[0m\n" \
+      "$USER" "$PASS"
     printf "\033[1;33mIMPORTANT: Change default password after first login!\033[0m\n"
   else
     printf "\033[1;33mWarning: Could not determine router IP address\033[0m\n"
     printf "Access via: http://[ROUTER_IP]:%s/\n" "$DEFAULT_PORT"
+    printf "\033[1;32mDefault Login: %s / %s\033[0m\n" \
+      "$USER" "$PASS"
   fi
 }
 
@@ -206,11 +226,9 @@ remove_filebrowser() {
     printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
   fi
   
-  # Stop and disable service
   "/etc/init.d/$SERVICE_NAME" stop 2>/dev/null || true
   "/etc/init.d/$SERVICE_NAME" disable 2>/dev/null || true
   
-  # Remove files
   rm -f "$INSTALL_DIR/filebrowser"
   rm -f "/etc/init.d/$SERVICE_NAME"
   rm -f "/etc/config/$SERVICE_NAME"
@@ -266,7 +284,6 @@ filebrowser_main() {
       show_status
       ;;
     "")
-      # Interactive mode
       check_system
       printf "\033[1;34mFilebrowser Auto Installer for OpenWrt\033[0m\n"
       printf "This will install filebrowser web interface.\n"
