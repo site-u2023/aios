@@ -9,7 +9,7 @@ DEFAULT_PORT="${DEFAULT_PORT:-8080}"
 DEFAULT_ROOT="${DEFAULT_ROOT:-/}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
-PASSWORD=${PASSWORD:-Admin}
+PASSWORD=${PASSWORD:-admin12345678}
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
@@ -139,11 +139,11 @@ start_service() {
   fi
 
   if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
-    echo "Initializing filebrowser database..."
-    "$PROG" config init --database "$db_path"
+    echo "Initializing filebrowser database"
+    "$PROG" config init --database "$db_path" >/dev/null 2>&1
 
-    "$PROG" config set --database "$db_path" --minimum-password-length 1 >/dev/null 2>&1
-    # "$PROG" config set --minimum-password-length 0 --database "$db_path"
+    # "$PROG" config set --database "$db_path" --minimum-password-length 1 >/dev/null 2>&1
+    "$PROG" config set --minimum-password-length 0 --database "$db_path"
     # "$PROG" config set --auth.method=noauth --database "$db_path"
     # "$PROG" config set --minimum-password-length 1 --minimum-password-score 0 --database "$db_path"
     
