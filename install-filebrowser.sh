@@ -92,10 +92,10 @@ install_filebrowser() {
 
 create_config() {
   mkdir -p "$CONFIG_DIR"
-  
+
   if ! uci -q get filebrowser.config.enabled >/dev/null 2>&1; then
-    NEW_SEC=$(uci -q add filebrowser filebrowser)
-    uci -q rename filebrowser."$NEW_SEC"=config
+    SEC=$(uci -q add filebrowser filebrowser)
+    uci -q rename filebrowser."$SEC"=config
   fi
 
   uci -q set filebrowser.config.enabled='1'
@@ -133,6 +133,7 @@ start_service() {
 
   if [ ! -f "$DB" ]; then
     mkdir -p "$(dirname "$DB")"
+    filebrowser config init --database "$DB"
     filebrowser users add "$USER" "$PASS" --database "$DB"
   fi
 
