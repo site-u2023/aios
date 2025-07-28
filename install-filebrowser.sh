@@ -14,7 +14,8 @@ ARCH=""
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
-    printf "\033[1;33mFilebrowser is already installed. Use 'remove' option to uninstall.\033[0m\n"
+    printf "\033[1;33mFilebrowser is already installed. Exiting.\033[0m\n"
+    remove_filebrowser
     exit 0
   fi
   
@@ -183,11 +184,26 @@ get_access_info() {
 }
 
 remove_filebrowser() {
+  local auto_confirm="$1"
+
   printf "\033[1;34mRemoving filebrowser\033[0m\n"
   
   if ! command -v filebrowser >/dev/null 2>&1; then
-    printf "\033[1;33mFilebrowser is not installed\033[0m\n"
-    return 0
+    printf "\033[1;31mFilebrowser not found\033[0m\n"
+    return 1
+  fi
+
+  printf "Found filebrowser installation\n"
+  
+  if [ "$auto_confirm" != "auto" ]; then
+    printf "Do you want to remove it? (y/N): "
+    read -r confirm
+    case "$confirm" in
+      [yY]*) ;;
+      *) printf "\033[1;33mCancelled\033[0m\n"; return 0 ;;
+    esac
+  else
+    printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
   fi
   
   # Stop and disable service
@@ -198,9 +214,22 @@ remove_filebrowser() {
   rm -f "$INSTALL_DIR/filebrowser"
   rm -f "/etc/init.d/$SERVICE_NAME"
   rm -f "/etc/config/$SERVICE_NAME"
-  rm -rf "$CONFIG_DIR"
+  
+  if [ -d "$CONFIG_DIR" ]; then
+    if [ "$auto_confirm" != "auto" ]; then
+      printf "Do you want to delete the filebrowser configuration directory? (y/N): "
+      read -r cfg
+      case "$cfg" in
+        [yY]*) rm -rf "$CONFIG_DIR" ;;
+      esac
+    else
+      rm -rf "$CONFIG_DIR"
+    fi
+  fi
   
   printf "\033[1;32mFilebrowser removed successfully\033[0m\n"
+  
+  exit 0
 }
 
 show_usage() {
@@ -257,6 +286,7 @@ filebrowser_main() {
         [yY]*)
           detect_architecture
           install_filebrowser
+          create_config
           create_init_script
           start_service
           get_access_info
