@@ -94,6 +94,11 @@ create_config() {
   UCI_FILE="/etc/config/${SERVICE_NAME}"
   [ ! -f "$UCI_FILE" ] && touch "$UCI_FILE"
 
+  if ! uci get filebrowser.config.enabled >/dev/null 2>&1; then
+    NEW_SEC=$(uci add filebrowser filebrowser)
+    uci rename filebrowser."$NEW_SEC"=config
+  fi
+
   uci -q set filebrowser.config.enabled='1'
   uci -q set filebrowser.config.port="$DEFAULT_PORT"
   uci -q set filebrowser.config.root="$DEFAULT_ROOT"
@@ -105,9 +110,10 @@ create_config() {
 
   uci commit filebrowser -q
 
-  printf "\033[1;32mUCI configuration created and committed\033[0m\n"
-  printf "→ 確認: uci get filebrowser.config.{port,username,password}\n"
+  printf "\033[1;32mUCI configuration written and committed\033[0m\n"
+  printf "→ 確認: cat /etc/config/filebrowser\n"
 }
+
 
 create_init_script() {
   printf "\033[1;34mCreating init script\033[0m\n"
