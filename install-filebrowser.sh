@@ -246,12 +246,22 @@ remove_filebrowser() {
   printf "Found filebrowser installation\n"
 
   if [ "$auto_confirm" != "auto" ]; then
-    printf "Do you want to remove Filebrowser binary and service? (y/N): "
-    read -r confirm
-    case "$confirm" in
-      [yY]*) ;;
-      *) printf "\033[1;33mCancelled\033[0m\n"; return 0 ;;
-    esac
+    while true; do
+      printf "Do you want to remove Filebrowser binary and service? (y/N): "
+      read -r confirm
+      case "$confirm" in
+        [yY]*)
+          break
+          ;;
+        [nN]*)
+          printf "\033[1;33mCancelled\033[0m\n"
+          return 0
+          ;;
+        *)
+          printf "\033[1;33mInvalid input. Please enter 'y' or 'N'.\033[0m\n"
+          ;;
+      esac
+    done
   else
     printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
   fi
@@ -266,25 +276,32 @@ remove_filebrowser() {
   printf "\033[1;32mFilebrowser binary and service removed.\033[0m\n"
 
   if [ "$auto_confirm" != "auto" ]; then
-    printf "Do you also want to delete configuration, database and log files? (y/N): "
-    read -r cfg_confirm
-    case "$cfg_confirm" in
-      [yY]*)
-        printf "\033[1;34mDeleting config files...\033[0m\n"
-        rm -rf "$CONFIG_DIR"                 \
-               /var/log/filebrowser.log      \
-               /root/.filebrowser.db          \
-               /root/.filebrowser.log
-        ;;
-      *) 
-        printf "\033[1;33mKept configuration and database files.\033[0m\n"
-        ;;
-    esac
+    while true; do
+      printf "Do you also want to delete configuration, database and log files? (y/N): "
+      read -r cfg_confirm
+      case "$cfg_confirm" in
+        [yY]*)
+          printf "\033[1;34mDeleting config files...\033[0m\n"
+          rm -rf "$CONFIG_DIR"            \
+                 /var/log/filebrowser.log     \
+                 /root/.filebrowser.db        \
+                 /root/.filebrowser.log
+          break
+          ;;
+        [nN]*)  
+          printf "\033[1;33mKept configuration and database files.\033[0m\n"
+          break
+          ;;
+        *)
+          printf "\033[1;33mInvalid input. Please enter 'y' or 'N'.\033[0m\n"
+          ;;
+      esac
+    done
   else
     printf "\033[1;33mAuto-deleting all data files\033[0m\n"
-    rm -rf "$CONFIG_DIR"                     \
-           /var/log/filebrowser.log          \
-           /root/.filebrowser.db              \
+    rm -rf "$CONFIG_DIR"             \
+           /var/log/filebrowser.log     \
+           /root/.filebrowser.db        \
            /root/.filebrowser.log
   fi
 
@@ -339,23 +356,30 @@ filebrowser_main() {
       check_system
       printf "\033[1;34mFilebrowser Auto Installer for OpenWrt\033[0m\n"
       printf "This will install filebrowser web interface.\n"
-      printf "Continue? (y/N): "
-      read -r confirm
-      case "$confirm" in
-        [yY]*)
-          detect_architecture
-          install_filebrowser
-          create_config
-          create_init_script
-          start_service
-          get_access_info
-          printf "\n\033[1;32mFilebrowser installation completed successfully!\033[0m\n"
-          ;;
-        *)
-          printf "\033[1;33mInstallation cancelled\033[0m\n"
-          exit 0
-          ;;
-      esac
+      
+      while true; do
+        printf "Continue? (y/N): "
+        read -r confirm
+        case "$confirm" in
+          [yY]*)
+            detect_architecture
+            install_filebrowser
+            create_config
+            create_init_script
+            start_service
+            get_access_info
+            printf "\n\033[1;32mFilebrowser installation completed successfully!\033[0m\n"
+            break
+            ;;
+          [nN]*)
+            printf "\033[1;33mInstallation cancelled\033[0m\n"
+            exit 0
+            ;;
+          *)
+            printf "\033[1;33mInvalid input. Please enter 'y' or 'N'.\033[0m\n"
+            ;;
+        esac
+      done
       ;;
     *)
       show_usage
