@@ -215,17 +215,7 @@ remove_filebrowser() {
   rm -f "/etc/init.d/$SERVICE_NAME"
   rm -f "/etc/config/$SERVICE_NAME"
   
-  if [ -d "$CONFIG_DIR" ]; then
-    if [ "$auto_confirm" != "auto" ]; then
-      printf "Do you want to delete the filebrowser configuration directory? (y/N): "
-      read -r cfg
-      case "$cfg" in
-        [yY]*) rm -rf "$CONFIG_DIR" ;;
-      esac
-    else
-      rm -rf "$CONFIG_DIR"
-    fi
-  fi
+  rm -rf "$CONFIG_DIR"
   
   printf "\033[1;32mFilebrowser removed successfully\033[0m\n"
   
