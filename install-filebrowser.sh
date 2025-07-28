@@ -9,7 +9,7 @@ DEFAULT_PORT="${DEFAULT_PORT:-8080}"
 DEFAULT_ROOT="${DEFAULT_ROOT:-/srv}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
-PASSWORD=${PASSWORD:-admin12345678}
+PASSWORD=${PASSWORD:-Admin12345678}
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
