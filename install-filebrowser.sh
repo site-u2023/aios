@@ -87,7 +87,7 @@ install_filebrowser() {
   trap - EXIT
   
   printf "\033[1;32mFilebrowser installed to %s/filebrowser\033[0m\n" "$INSTALL_DIR"
-  cd "$HOME"
+  cd "$ORIG_PWD"
 }
 
 create_config() {
