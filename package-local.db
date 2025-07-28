@@ -58,7 +58,7 @@ install_package luci-i18n-watchcat hidden
 
 [luci-app-filebrowser]
 install_package luci-i18n-filebrowser hidden
-wget -q -O $BASE_DIR/install-filebrowser.sh $BASE_URL/install-filebrowser.sh && sh $BASE_DIR/install-filebrowser.sh
+wget -q -O $BASE_DIR/install-filebrowser.sh $BASE_URL/install-filebrowser.sh && sh $BASE_DIR/install-filebrowser.sh >/dev/null 2>&1
 
 [internet-detector]
 install_package luci-compat hidden
