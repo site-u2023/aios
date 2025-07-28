@@ -142,7 +142,7 @@ start_service() {
     echo "Initializing filebrowser database..."
     "$PROG" config init --database "$db_path"
     
-    "$PROG" config set --minimum-password-length=1 --password-policy="" --database "$db_path"
+    "$PROG" config set --auth.method=json --auth.signup=false --minimum-password-length=1 --database "$db_path"
     
     if [ -n "$user" ] && [ -n "$pass" ]; then
       if "$PROG" users add "$user" "$pass" --database "$db_path"; then
