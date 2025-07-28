@@ -92,12 +92,10 @@ install_filebrowser() {
 
 create_config() {
   mkdir -p "$CONFIG_DIR"
-  UCI_FILE="/etc/config/${SERVICE_NAME}"
-  [ ! -f "$UCI_FILE" ] && touch "$UCI_FILE"
-
-  if ! uci get filebrowser.config.enabled >/dev/null 2>&1; then
-    NEW_SEC=$(uci add filebrowser filebrowser)
-    uci rename filebrowser."$NEW_SEC"=config
+  
+  if ! uci -q get filebrowser.config.enabled >/dev/null 2>&1; then
+    NEW_SEC=$(uci -q add filebrowser filebrowser)
+    uci -q rename filebrowser."$NEW_SEC"=config
   fi
 
   uci -q set filebrowser.config.enabled='1'
@@ -109,12 +107,11 @@ create_config() {
   uci -q set filebrowser.config.username="$USERNAME"
   uci -q set filebrowser.config.password="$PASSWORD"
 
-  uci commit filebrowser -q
+  uci -q commit filebrowser
 
   printf "\033[1;32mUCI configuration written and committed\033[0m\n"
   printf "→ 確認: cat /etc/config/filebrowser\n"
 }
-
 
 create_init_script() {
   printf "\033[1;34mCreating init script\033[0m\n"
