@@ -10,6 +10,7 @@ DEFAULT_ROOT="${DEFAULT_ROOT:-/}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
 PASSWORD=${PASSWORD:-admin12345678}
+DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-ja}"
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
@@ -108,6 +109,7 @@ create_config() {
   uci -q set filebrowser.config.log='/var/log/filebrowser.log'
   uci -q set filebrowser.config.username="$USERNAME"
   uci -q set filebrowser.config.password="$PASSWORD"
+  uci -q set filebrowser.config.language="$DEFAULT_LANGUAGE"
 
   if uci commit filebrowser; then
     printf "\033[1;32mUCI configuration written and committed\033[0m\n"
@@ -133,7 +135,8 @@ start_service() {
   local db_path=$(uci get filebrowser.config.database 2>/dev/null)
   local user=$(uci get filebrowser.config.username 2>/dev/null)
   local pass=$(uci get filebrowser.config.password 2>/dev/null)
-
+  local default_lang=$(uci get filebrowser.config.language 2>/dev/null)
+  
   if [ -n "$db_path" ]; then
     mkdir -p "$(dirname "$db_path")"
   fi
@@ -143,9 +146,10 @@ start_service() {
     "$PROG" config init --database "$db_path" >/dev/null 2>&1
 
     # "$PROG" config set --database "$db_path" --minimum-password-length 1 >/dev/null 2>&1
-    "$PROG" config set --minimum-password-length 0 --database "$db_path"
+    # "$PROG" config set --minimum-password-length 0 --database "$db_path"
     # "$PROG" config set --auth.method=noauth --database "$db_path"
     # "$PROG" config set --minimum-password-length 1 --minimum-password-score 0 --database "$db_path"
+    "$PROG" config set --database "$db_path" --minimum-password-length 0 --locale "$default_lang" >/dev/null 2>&1
     
     if [ -n "$user" ] && [ -n "$pass" ]; then
       if "$PROG" users add "$user" "$pass" --database "$db_path"; then
