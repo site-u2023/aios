@@ -206,16 +206,15 @@ remove_filebrowser() {
   local auto_confirm="$1"
 
   printf "\033[1;34mRemoving filebrowser\033[0m\n"
-  
+
   if ! command -v filebrowser >/dev/null 2>&1; then
     printf "\033[1;31mFilebrowser not found\033[0m\n"
     return 1
   fi
-
   printf "Found filebrowser installation\n"
-  
+
   if [ "$auto_confirm" != "auto" ]; then
-    printf "Do you want to remove it? (y/N): "
+    printf "Do you want to remove Filebrowser binary and service? (y/N): "
     read -r confirm
     case "$confirm" in
       [yY]*) ;;
@@ -224,19 +223,40 @@ remove_filebrowser() {
   else
     printf "\033[1;33mAuto-removing due to installation error\033[0m\n"
   fi
-  
-  "/etc/init.d/$SERVICE_NAME" stop 2>/dev/null || true
+
+  "/etc/init.d/$SERVICE_NAME" stop    2>/dev/null || true
   "/etc/init.d/$SERVICE_NAME" disable 2>/dev/null || true
-  
+
   rm -f "$INSTALL_DIR/filebrowser"
   rm -f "/etc/init.d/$SERVICE_NAME"
   rm -f "/etc/config/$SERVICE_NAME"
-  
-  rm -rf "$CONFIG_DIR"
-  
-  printf "\033[1;32mFilebrowser removed successfully\033[0m\n"
 
-  cd
+  printf "\033[1;32mFilebrowser binary and service removed.\033[0m\n"
+
+  if [ "$auto_confirm" != "auto" ]; then
+    printf "Do you also want to delete configuration, database and log files? (y/N): "
+    read -r cfg_confirm
+    case "$cfg_confirm" in
+      [yY]*)
+        printf "\033[1;34mDeleting config files...\033[0m\n"
+        rm -rf "$CONFIG_DIR"                 \
+               /var/log/filebrowser.log      \
+               /root/.filebrowser.db          \
+               /root/.filebrowser.log
+        ;;
+      *) 
+        printf "\033[1;33mKept configuration and database files.\033[0m\n"
+        ;;
+    esac
+  else
+    printf "\033[1;33mAuto-deleting all data files\033[0m\n"
+    rm -rf "$CONFIG_DIR"                     \
+           /var/log/filebrowser.log          \
+           /root/.filebrowser.db              \
+           /root/.filebrowser.log
+  fi
+
+  printf "\033[1;32mFilebrowser removal complete.\033[0m\n"
   exit 0
 }
 
