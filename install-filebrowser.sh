@@ -108,6 +108,8 @@ EOF
   printf "\033[1;32mUCI configuration created: /etc/config/%s\033[0m\n" "$SERVICE_NAME"
   printf "Edit with: uci set filebrowser.config.port=9090 && uci commit filebrowser\n"
 }
+
+create_init_script() {
   printf "\033[1;34mCreating init script\033[0m\n"
   
   cat > "/etc/init.d/$SERVICE_NAME" << 'EOF'
