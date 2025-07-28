@@ -129,6 +129,7 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
+  procd_open_instance
   procd_set_param command "$PROG" \
     -r "$(uci get filebrowser.config.root)" \
     -p "$(uci get filebrowser.config.port)" \
