@@ -129,13 +129,14 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
-  procd_open_instance
   procd_set_param command "$PROG" \
     -r "$(uci get filebrowser.config.root)" \
     -p "$(uci get filebrowser.config.port)" \
     -a "$(uci get filebrowser.config.address)" \
     -d "$(uci get filebrowser.config.database)" \
-    -l "$(uci get filebrowser.config.log)"
+    -l "$(uci get filebrowser.config.log)" \
+    --username "$(uci get filebrowser.config.username)" \
+    --password "$(uci get filebrowser.config.password)"
   procd_set_param respawn
   procd_close_instance
 }
