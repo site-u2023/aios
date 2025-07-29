@@ -10,6 +10,10 @@ May 15, 2025: version β
 
 ![aios](https://github.com/user-attachments/assets/5905387c-4117-48bd-afbf-eaacf70d1a1c)
 
+## Portal Site
+
+[Landing page](https://site-u2023.github.io/)
+
 ## Install
 Release Build (opkg)
 ```sh
