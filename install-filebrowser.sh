@@ -132,43 +132,38 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
-  local db_path=$(uci get filebrowser.config.database 2>/dev/null)
-  local user=$(uci get filebrowser.config.username 2>/dev/null)
-  local pass=$(uci get filebrowser.config.password 2>/dev/null)
-  local default_lang=$(uci get filebrowser.config.language 2>/dev/null)
-  
-  if [ -n "$db_path" ]; then
-    mkdir -p "$(dirname "$db_path")"
-  fi
+	procd_open_instance
 
-  if [ -n "$db_path" ] && [ ! -f "$db_path" ]; then
-    echo "Initializing filebrowser database"
-    "$PROG" config init --database "$db_path" >/dev/null 2>&1
+	USERNAME=$(uci get filebrowser.config.username)
+	PASSWORD=$(uci get filebrowser.config.password)
+	PORT=$(uci get filebrowser.config.port)
+	ROOT=$(uci get filebrowser.config.root)
+	ADDRESS=$(uci get filebrowser.config.address)
+	DB=$(uci get filebrowser.config.database)
 
-    "$PROG" config set --database "$db_path" --minimum-password-length 0 --locale "$default_lang" >/dev/null 2>&1
-    
-    if [ -n "$user" ] && [ -n "$pass" ]; then
-      if "$PROG" users add "$user" "$pass" --database "$db_path" >/dev/null 2>&1; then
-        echo "User $user added successfully"
-      else
-        echo "Failed to add user $user" >&2
-        return 1
-      fi
-    fi
-  fi
+	rm -f "$DB"
+	filebrowser config init --database "$DB"
+	filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB"
 
-  procd_open_instance
-  procd_set_param command "$PROG" \
-    -r "$(uci get filebrowser.config.root)" \
-    -p "$(uci get filebrowser.config.port)" \
-    -a "$(uci get filebrowser.config.address)" \
-    --database "$db_path"
-  procd_set_param respawn
-  procd_close_instance
+	procd_set_param command /usr/bin/filebrowser \
+		-r "$ROOT" \
+		-p "$PORT" \
+		-a "$ADDRESS" \
+		--database "$DB"
+	procd_set_param respawn
+	procd_close_instance
+}
+
+restart_service() {
+  stop_service
+  sleep 1
+  start_service
 }
 
 stop_service() {
     killall filebrowser 2>/dev/null
+    sleep 1
+    killall -9 filebrowser 2>/dev/null || true
 }
 EOF
 
@@ -347,6 +342,9 @@ filebrowser_main() {
       ;;
     status)
       show_status
+      ;;
+    restart)
+      restart_service
       ;;
     "")
       check_system
