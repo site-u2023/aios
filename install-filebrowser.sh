@@ -140,9 +140,20 @@ start_service() {
 	ROOT=$(uci get filebrowser.config.root)
 	ADDRESS=$(uci get filebrowser.config.address)
 	DB=$(uci get filebrowser.config.database)
+	LANG=$(uci get filebrowser.config.language)
+	LOG=$(uci get filebrowser.config.log)
 
 	rm -f "$DB"
 	filebrowser config init --database "$DB"
+
+	filebrowser config set \
+		--database "$DB" \
+		--root "$ROOT" \
+		--address "$ADDRESS" \
+		--port "$PORT" \
+		--language "$LANG" \
+		--log "$LOG"
+
 	filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB"
 
 	procd_set_param command /usr/bin/filebrowser \
