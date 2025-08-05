@@ -10,7 +10,7 @@ DEFAULT_ROOT="${DEFAULT_ROOT:-/}"
 ARCH=""
 USERNAME=${USERNAME:-admin}
 PASSWORD=${PASSWORD:-admin12345678}
-DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-ja}"
+DEFAULT_LANGUAGE="${DEFAULT_LANGUAGE:-en}"
 
 check_system() {
   if command -v filebrowser >/dev/null 2>&1; then
