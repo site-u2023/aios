@@ -109,7 +109,7 @@ create_config() {
   uci -q set filebrowser.config.log='/var/log/filebrowser.log'
   uci -q set filebrowser.config.username="$USERNAME"
   uci -q set filebrowser.config.password="$PASSWORD"
-  uci -q set filebrowser.config.language="$DEFAULT_LANGUAGE"
+  uci -q set filebrowser.config.locale="$DEFAULT_LANGUAGE"
 
   if uci commit filebrowser; then
     printf "\033[1;32mUCI configuration written and committed\033[0m\n"
@@ -151,7 +151,7 @@ start_service() {
 		--root "$ROOT" \
 		--address "$ADDRESS" \
 		--port "$PORT" \
-		--language "$LANG" \
+		--locale "$LANG" \
 		--log "$LOG"
 
 	filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB"
