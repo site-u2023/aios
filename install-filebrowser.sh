@@ -140,7 +140,7 @@ start_service() {
 	ROOT=$(uci get filebrowser.config.root)
 	ADDRESS=$(uci get filebrowser.config.address)
 	DB=$(uci get filebrowser.config.database)
-	LANG=$(uci get filebrowser.config.language)
+	LANG=$(uci get filebrowser.config.locale)
 	LOG=$(uci get filebrowser.config.log)
 
 	rm -f "$DB"
