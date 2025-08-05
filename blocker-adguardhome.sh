@@ -286,7 +286,7 @@ common_config() {
   if [ -z "$NET_ADDR6_LIST" ]; then
     printf "\033[1;33mRouter IPv6: none found\033[0m\n"
   else
-    printf "Router IPv6: %s\n" "$NET_ADDR6_LIST"
+    printf "Router IPv6: %s\n" "$(echo "$NET_ADDR6_LIST" | tr '\n' ' ')"
   fi
   
   printf "\033[1;32mSystem configuration completed\033[0m\n"
@@ -450,3 +450,5 @@ adguardhome_main() {
 }
 
 # adguardhome_main "$@"
+
+sh "$TMP"/standalone-blocker-adguardhome.sh
