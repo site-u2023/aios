@@ -132,30 +132,26 @@ USE_PROCD=1
 PROG=/usr/bin/filebrowser
 
 start_service() {
-	procd_open_instance
+  procd_open_instance
+  USERNAME=$(uci -q get filebrowser.config.username)
+  PASSWORD=$(uci -q get filebrowser.config.password)
+  PORT=$(uci -q get filebrowser.config.port)
+  ROOT=$(uci -q get filebrowser.config.root)
+  ADDRESS=$(uci -q get filebrowser.config.address)
+  DB=$(uci -q get filebrowser.config.database)
+  [ -z "$DB" ] && DB="/etc/filebrowser/filebrowser.db"
+  LANG=$(uci -q get filebrowser.config.locale)
+  LOGFILE=$(uci -q get filebrowser.config.log)
 
-	USERNAME=$(uci get filebrowser.config.username)
-	PASSWORD=$(uci get filebrowser.config.password)
-	PORT=$(uci get filebrowser.config.port)
-	ROOT=$(uci get filebrowser.config.root)
-	ADDRESS=$(uci get filebrowser.config.address)
-	DB=$(uci get filebrowser.config.database)
-	[ -z "$DB" ] && DB="/etc/filebrowser/filebrowser.db"
-	LANG=$(uci get filebrowser.config.locale)
-	LOG=$(uci get filebrowser.config.log)
+  mkdir -p /etc/filebrowser
+  rm -f "$DB"
+  /usr/bin/filebrowser config init --database "$DB" >/dev/null 2>&1
+  /usr/bin/filebrowser config set --database "$DB" --root "$ROOT" --address "$ADDRESS" --port "$PORT" --locale "$LANG" --log "$LOGFILE" >/dev/null 2>&1
+  /usr/bin/filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB" >/dev/null 2>&1
 
-	mkdir -p /etc/filebrowser
-
-	echo "DEBUG: DB=[$DB]" >> /tmp/filebrowser_debug.log
-	echo "DEBUG: ROOT=[$ROOT]" >> /tmp/filebrowser_debug.log
-
-	rm -f "$DB"
-	filebrowser config init --database "$DB" > /dev/null 2>&1
-	filebrowser config set --database "$DB" --root "$ROOT" --address "$ADDRESS" --port "$PORT" --locale "$LANG" --log "$LOG" > /dev/null 2>&1
-	filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB" > /dev/null 2>&1
-	procd_set_param command /usr/bin/filebrowser -r "$ROOT" -p "$PORT" -a "$ADDRESS" --database "$DB"
-	procd_set_param respawn
-	procd_close_instance
+  procd_set_param command /usr/bin/filebrowser -r "$ROOT" -p "$PORT" -a "$ADDRESS" --database "$DB"
+  procd_set_param respawn
+  procd_close_instance
 }
 filebrowser config init --database "$DB"
 
