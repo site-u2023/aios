@@ -144,26 +144,14 @@ start_service() {
 	LOG=$(uci get filebrowser.config.log)
 
 	rm -f "$DB"
-	filebrowser config init --database "$DB"
-
-	filebrowser config set \
-		--database "$DB" \
-		--root "$ROOT" \
-		--address "$ADDRESS" \
-		--port "$PORT" \
-		--locale "$LANG" \
-		--log "$LOG"
-
-	filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB"
-
-	procd_set_param command /usr/bin/filebrowser \
-		-r "$ROOT" \
-		-p "$PORT" \
-		-a "$ADDRESS" \
-		--database "$DB"
+	filebrowser config init --database "$DB" > /dev/null 2>&1
+	filebrowser config set --database "$DB" --root "$ROOT" --address "$ADDRESS" --port "$PORT" --locale "$LANG" --log "$LOG" > /dev/null 2>&1
+	filebrowser users add "$USERNAME" "$PASSWORD" --perm.admin --database "$DB" > /dev/null 2>&1
+	procd_set_param command /usr/bin/filebrowser -r "$ROOT" -p "$PORT" -a "$ADDRESS" --database "$DB"
 	procd_set_param respawn
 	procd_close_instance
 }
+filebrowser config init --database "$DB"
 
 restart_service() {
   stop_service
@@ -277,10 +265,7 @@ remove_filebrowser() {
       case "$cfg_confirm" in
         [yY]*)
           printf "\033[1;34mDeleting config files...\033[0m\n"
-          rm -rf "$CONFIG_DIR"            \
-                 /var/log/filebrowser.log     \
-                 /root/.filebrowser.db        \
-                 /root/.filebrowser.log
+          rm -rf "$CONFIG_DIR" /var/log/filebrowser.log /root/.filebrowser.db /root/.filebrowser.log
           break
           ;;
         [nN]*)  
@@ -294,10 +279,7 @@ remove_filebrowser() {
     done
   else
     printf "\033[1;33mAuto-deleting all data files\033[0m\n"
-    rm -rf "$CONFIG_DIR"             \
-           /var/log/filebrowser.log     \
-           /root/.filebrowser.db        \
-           /root/.filebrowser.log
+    rm -rf "$CONFIG_DIR" /var/log/filebrowser.log /root/.filebrowser.db /root/.filebrowser.log
   fi
 
   printf "\033[1;32mFilebrowser removal complete.\033[0m\n"
