@@ -146,6 +146,9 @@ start_service() {
 
 	mkdir -p /etc/filebrowser
 
+	echo "DEBUG: DB=[$DB]" >> /tmp/filebrowser_debug.log
+	echo "DEBUG: ROOT=[$ROOT]" >> /tmp/filebrowser_debug.log
+
 	rm -f "$DB"
 	filebrowser config init --database "$DB" > /dev/null 2>&1
 	filebrowser config set --database "$DB" --root "$ROOT" --address "$ADDRESS" --port "$PORT" --locale "$LANG" --log "$LOG" > /dev/null 2>&1
