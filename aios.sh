@@ -40,7 +40,7 @@ DEV_NULL="${DEV_NULL:-on}"       # サイレントモード制御（on=有効, u
 DEBUG_MODE="${DEBUG_MODE:-false}" # デバッグモード（true=有効, false=無効）
 
 # パス・ファイル関連（resolve_path対応版）
-INTERPRETER="${INTERPRETER:-ash}"  # デフォルトインタープリタ
+INTERPRETER="${INTERPRETER:-sh}"  # デフォルトインタープリタ
 BIN_DIR=""
 BIN_PATH=""
 BIN_FILE=""
