@@ -286,6 +286,7 @@ remove_filebrowser() {
   fi
 
   printf "\033[1;32mFilebrowser removal complete.\033[0m\n"
+  cd /root
   exit 0
 }
 
