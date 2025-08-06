@@ -89,7 +89,6 @@ install_filebrowser() {
   trap - EXIT
   
   printf "\033[1;32mFilebrowser installed to %s/filebrowser\033[0m\n" "$INSTALL_DIR"
-  cd /root
 }
 
 create_config() {
@@ -285,7 +284,6 @@ remove_filebrowser() {
   fi
 
   printf "\033[1;32mFilebrowser removal complete.\033[0m\n"
-  cd /root
   exit 0
 }
 
