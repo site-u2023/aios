@@ -339,7 +339,6 @@ show_status() {
 filebrowser_main() {
   case "$1" in
     install)
-      check_system
       detect_architecture
       install_filebrowser
       create_config
