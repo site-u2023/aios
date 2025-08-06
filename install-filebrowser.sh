@@ -206,16 +206,10 @@ start_service() {
 }
 
 get_access_info() {
-  LAN_IFACE=$(
-    ubus call network.interface.lan status 2>/dev/null \
-      | sed -n 's/.*"l3_device":"\([^"]*\)".*/\1/p'
-  )
+  LAN_IFACE=$(ubus call network.interface.lan status 2>/dev/null | sed -n 's/.*"l3_device":"\([^"]*\)".*/\1/p')
   [ -z "$LAN_IFACE" ] && LAN_IFACE="br-lan"
 
-  ROUTER_IP=$(
-    ip -4 addr show "$LAN_IFACE" 2>/dev/null \
-      | awk '/inet / { sub(/\/.*/, "", $2); print $2; exit }'
-  )
+  ROUTER_IP=$(ip -4 addr show "$LAN_IFACE" 2>/dev/null | awk '/inet / { sub(/\/.*/, "", $2); print $2; exit }')
 
   USER=$(uci get filebrowser.config.username 2>/dev/null || echo "${USERNAME}")
   PASS=$(uci get filebrowser.config.password 2>/dev/null || echo "${PASSWORD}")
@@ -223,8 +217,7 @@ get_access_info() {
 
   if [ -n "$ROUTER_IP" ]; then
     printf "\n\033[1;32m=== Filebrowser Access Information ===\033[0m\n"
-    printf "\033[1;32mWeb Interface: http://%s:%s/\033[0m\n" \
-      "$ROUTER_IP" "$DEFAULT_PORT"
+    printf "\033[1;32mWeb Interface: http://%s:%s/\033[0m\n" "$ROUTER_IP" "$DEFAULT_PORT"
     printf "\033[1;32mUsername: %s\033[0m\n" "$USER"
     printf "\033[1;32mPassword: %s\033[0m\n" "$PASS"
     printf "\033[1;33mIMPORTANT: Change default password after first login!\033[0m\n"
