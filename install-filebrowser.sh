@@ -140,8 +140,11 @@ start_service() {
 	ROOT=$(uci get filebrowser.config.root)
 	ADDRESS=$(uci get filebrowser.config.address)
 	DB=$(uci get filebrowser.config.database)
+	[ -z "$DB" ] && DB="/etc/filebrowser/filebrowser.db"
 	LANG=$(uci get filebrowser.config.locale)
 	LOG=$(uci get filebrowser.config.log)
+
+	mkdir -p /etc/filebrowser
 
 	rm -f "$DB"
 	filebrowser config init --database "$DB" > /dev/null 2>&1
