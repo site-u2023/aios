@@ -152,7 +152,6 @@ start_service() {
   procd_set_param respawn
   procd_close_instance
 }
-filebrowser config init --database "$DB"
 
 restart_service() {
   stop_service
@@ -161,9 +160,9 @@ restart_service() {
 }
 
 stop_service() {
-    killall filebrowser 2>/dev/null
-    sleep 1
-    killall -9 filebrowser 2>/dev/null || true
+  killall filebrowser 2>/dev/null
+  sleep 1
+  killall -9 filebrowser 2>/dev/null || true
 }
 EOF
 
