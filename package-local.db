@@ -58,6 +58,7 @@ install_package luci-i18n-watchcat hidden
 
 [luci-app-filebrowser]
 install_package luci-i18n-filebrowser hidden
+wget -q -O /tmp/aios/install-filebrowser.sh https://raw.githubusercontent.com/site-u2023/aios/main/install-filebrowser.sh && sh /tmp/aios/install-filebrowser.sh install
 
 [internet-detector]
 install_package luci-compat hidden
