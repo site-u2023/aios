@@ -3,10 +3,24 @@
 # uci-defaults MAP-E Auto Setup for OpenWrt (Modular Version)
 # Place this file in firmware at: /etc/uci-defaults/99-mape-setup
 
+# Beware! This script will be in /rom/etc/uci-defaults/ as part of the image.
+# Uncomment lines to apply:
+#
+# ROOT_PASSWORD="your_password"
+# LAN_IP_ADDRESS="192.168.1.1"
+# WLAN_NAME="MyOpenWrt"
+# WLAN_PASSWORD="12345678"
+
 API_URL="https://mape-auto.site-u.workers.dev/"
 WAN_DEF="wan"
 WAN6_NAME="wanmap6"
 WANMAP_NAME="wanmap"
+
+# Global variables for device configuration (uncomment to use)
+# ROOT_PASSWORD=""
+# LAN_IP_ADDRESS=""
+# WLAN_NAME=""
+# WLAN_PASSWORD=""
 
 # Global variables for API response data
 API_RESPONSE=""
@@ -211,7 +225,37 @@ set_mape_config() {
     return 0
 }
 
-# Function 6: メイン実行関数
+# Function 6: デバイス基本設定（パスワード、IP、Wi-Fi名）
+set_device_basic_config() {
+    logger -t mape-setup "Setting device basic configuration..."
+    
+    # ログ出力設定（公式フォーマットに準拠）
+    exec >/tmp/setup.log 2>&1
+    
+    # rootパスワード設定
+    if [ -n "$ROOT_PASSWORD" ]; then
+        logger -t mape-setup "Setting root password"
+        (echo "$ROOT_PASSWORD"; sleep 1; echo "$ROOT_PASSWORD") | passwd > /dev/null
+    fi
+    
+    # LAN IPアドレス設定
+    if [ -n "$LAN_IP_ADDRESS" ]; then
+        logger -t mape-setup "Setting LAN IP address to $LAN_IP_ADDRESS"
+        uci set network.lan.ipaddr="$LAN_IP_ADDRESS"
+    fi
+    
+    # WLAN設定（SSID & パスワード）
+    if [ -n "$WLAN_NAME" ] && [ -n "$WLAN_PASSWORD" ] && [ ${#WLAN_PASSWORD} -ge 8 ]; then
+        logger -t mape-setup "Setting WLAN: $WLAN_NAME"
+        uci set wireless.@wifi-device[0].disabled='0'
+        uci set wireless.@wifi-iface[0].disabled='0'
+        uci set wireless.@wifi-iface[0].encryption='psk2'
+        uci set wireless.@wifi-iface[0].ssid="$WLAN_NAME"
+        uci set wireless.@wifi-iface[0].key="$WLAN_PASSWORD"
+    fi
+    
+    return 0
+}
 openwrt_main() {
     logger -t mape-setup "Starting OpenWrt auto configuration..."
     
@@ -244,6 +288,7 @@ openwrt_main() {
     uci commit firewall
 
     logger -t mape-setup "OpenWrt auto configuration completed successfully (Country: $COUNTRY, Timezone: $TIMEZONE)"
+    echo "All done!"
     return 0
 }
 
