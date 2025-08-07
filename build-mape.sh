@@ -8,24 +8,41 @@ WAN_DEF="wan"
 WAN6_NAME="wanmap6"
 WANMAP_NAME="wanmap"
 
-# ネットワークが利用可能になるまで待機
-wait_for_network() {
+# OpenWrtネットワークAPIでIPv6アドレス取得を待機
+wait_for_ipv6() {
     local timeout=60
     local count=0
+    local ipv6_addr=""
+    
+    # ネットワーク関数をロード
+    . /lib/functions.sh
+    . /lib/functions/network.sh
     
     while [ $count -lt $timeout ]; do
-        if ping6 -c 1 -W 2 2001:4860:4860::8888 >/dev/null 2>&1; then
-            return 0
+        network_flush_cache
+        network_find_wan6 wan6_iface
+        
+        if [ -n "$wan6_iface" ]; then
+            # IPv6アドレスまたはプレフィックスを取得
+            if network_get_ipaddr6 ipv6_addr "$wan6_iface" && [ -n "$ipv6_addr" ]; then
+                logger -t mape-setup "IPv6 address obtained: $ipv6_addr"
+                return 0
+            elif network_get_prefix6 ipv6_addr "$wan6_iface" && [ -n "$ipv6_addr" ]; then
+                logger -t mape-setup "IPv6 prefix obtained: $ipv6_addr"
+                return 0
+            fi
         fi
+        
         sleep 2
         count=$((count + 2))
     done
+    
     return 1
 }
 
 # IPv6接続が利用可能になるまで待機
-if ! wait_for_network; then
-    logger -t mape-setup "IPv6 network not available, skipping MAP-E setup"
+if ! wait_for_ipv6; then
+    logger -t mape-setup "IPv6 address not available, skipping MAP-E setup"
     exit 0
 fi
 
@@ -53,6 +70,10 @@ IPV6_PREFIX=$(echo "$API_RESPONSE" | jsonfilter -e '@.rule.ipv6Prefix' 2>/dev/nu
 IPV6_PREFIXLEN=$(echo "$API_RESPONSE" | jsonfilter -e '@.rule.ipv6PrefixLength' 2>/dev/null)
 PSID_OFFSET=$(echo "$API_RESPONSE" | jsonfilter -e '@.rule.psIdOffset' 2>/dev/null)
 
+# 地域情報も取得
+COUNTRY=$(echo "$API_RESPONSE" | jsonfilter -e '@.country' 2>/dev/null)
+TIMEZONE=$(echo "$API_RESPONSE" | jsonfilter -e '@.timezone' 2>/dev/null)
+
 # 必須パラメータのチェック
 if [ -z "$BR" ] || [ -z "$EALEN" ] || [ -z "$IPV4_PREFIX" ] || [ -z "$IPV4_PREFIXLEN" ] || [ -z "$IPV6_PREFIX" ] || [ -z "$IPV6_PREFIXLEN" ] || [ -z "$PSID_OFFSET" ]; then
     logger -t mape-setup "Missing required MAP-E parameters"
@@ -65,7 +86,28 @@ if [ -f "/etc/openwrt_release" ]; then
     OS_VERSION=$(grep "DISTRIB_RELEASE" /etc/openwrt_release | cut -d"'" -f2 2>/dev/null)
 fi
 
-logger -t mape-setup "Configuring MAP-E (OpenWrt: $OS_VERSION, BR: $BR)"
+# 国コード設定関数
+set_country_code() {
+    local device="$1"
+    uci set wireless.${device}.country="$COUNTRY" >/dev/null 2>&1
+}
+
+logger -t mape-setup "Configuring MAP-E (OpenWrt: $OS_VERSION, BR: $BR, Country: $COUNTRY, TZ: $TIMEZONE)"
+
+# システム設定（タイムゾーン）
+if [ -n "$TIMEZONE" ]; then
+    uci set system.@system[0].timezone="$TIMEZONE" >/dev/null 2>&1
+    logger -t mape-setup "Set timezone to $TIMEZONE"
+fi
+
+# ワイヤレス設定（国コード）
+if [ -n "$COUNTRY" ]; then
+    # 全ての無線デバイスに国コードを設定
+    . /lib/functions.sh
+    config_load wireless
+    config_foreach set_country_code wifi-device
+    logger -t mape-setup "Set country code to $COUNTRY"
+fi
 
 # 既存のWAN/WAN6を無効化
 uci set network.wan.disabled='1' >/dev/null 2>&1
@@ -133,10 +175,12 @@ uci set firewall.@zone[1].masq='1' >/dev/null 2>&1
 uci set firewall.@zone[1].mtu_fix='1' >/dev/null 2>&1
 
 # 設定をコミット
+uci commit system >/dev/null 2>&1
+uci commit wireless >/dev/null 2>&1
 uci commit network
 uci commit dhcp  
 uci commit firewall
 
-logger -t mape-setup "MAP-E configuration completed successfully"
+logger -t mape-setup "MAP-E configuration completed successfully (Country: $COUNTRY, Timezone: $TIMEZONE)"
 
 exit 0
