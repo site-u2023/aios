@@ -10,6 +10,9 @@
 # LAN_IP_ADDRESS="192.168.1.1"
 # WLAN_NAME="MyOpenWrt"
 # WLAN_PASSWORD="12345678"
+#
+# PPPOE_USERNAME="your_isp_username"
+# PPPOE_PASSWORD="your_isp_password"
 
 API_URL="https://mape-auto.site-u.workers.dev/"
 WAN_DEF="wan"
@@ -21,6 +24,8 @@ WANMAP_NAME="wanmap"
 # LAN_IP_ADDRESS=""
 # WLAN_NAME=""
 # WLAN_PASSWORD=""
+# PPPOE_USERNAME=""
+# PPPOE_PASSWORD=""
 
 # Global variables for API response data
 API_RESPONSE=""
@@ -225,7 +230,35 @@ set_mape_config() {
     return 0
 }
 
-# Function 6: デバイス基本設定（パスワード、IP、Wi-Fi名）
+# Function 6: PPPoE設定
+set_pppoe_config() {
+    logger -t mape-setup "Setting PPPoE configuration..."
+    
+    # PPPoE設定（公式フォーマットに準拠）
+    if [ -n "$PPPOE_USERNAME" ] && [ -n "$PPPOE_PASSWORD" ]; then
+        logger -t mape-setup "Configuring PPPoE with username: $PPPOE_USERNAME"
+        uci set network.wan.proto='pppoe'
+        uci set network.wan.username="$PPPOE_USERNAME"
+        uci set network.wan.password="$PPPOE_PASSWORD"
+        
+        # WAN6も無効化（PPPoE使用時）
+        uci set network.wan6.disabled='1' >/dev/null 2>&1
+        uci set network.wan6.auto='0' >/dev/null 2>&1
+        
+        # MAP-E関連インターフェースを削除（競合回避）
+        uci delete network.${WAN6_NAME} >/dev/null 2>&1
+        uci delete network.${WANMAP_NAME} >/dev/null 2>&1
+        uci delete dhcp.${WAN6_NAME} >/dev/null 2>&1
+        
+        logger -t mape-setup "PPPoE configuration completed"
+    else
+        logger -t mape-setup "PPPoE username or password not set, skipping PPPoE configuration"
+    fi
+    
+    return 0
+}
+
+# Function 7: デバイス基本設定（パスワード、IP、Wi-Fi名）
 set_device_basic_config() {
     logger -t mape-setup "Setting device basic configuration..."
     
@@ -292,7 +325,35 @@ openwrt_main() {
     return 0
 }
 
-# Execute main function
+# Function 9: PPPoE専用メイン実行関数
+openwrt_pppoe_main() {
+    logger -t mape-setup "Starting OpenWrt PPPoE configuration..."
+    
+    # PPPoEの場合はIPv6待機不要、直接設定開始
+    
+    # 1. デバイス基本設定
+    set_device_basic_config
+    
+    # 2. PPPoE設定
+    set_pppoe_config
+    
+    # 3. 設定をコミット
+    uci commit system >/dev/null 2>&1
+    uci commit wireless >/dev/null 2>&1
+    uci commit network
+    uci commit dhcp  
+    uci commit firewall
+
+    logger -t mape-setup "OpenWrt PPPoE configuration completed successfully"
+    echo "All done!"
+    return 0
+}
+
+# Execute main function (choose one)
+# For MAP-E auto setup:
 openwrt_main
+
+# For PPPoE setup (uncomment this and comment out openwrt_main):
+# openwrt_pppoe_main
 
 exit 0
