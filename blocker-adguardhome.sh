@@ -5,7 +5,7 @@
 #            https://github.com/AdguardTeam/AdGuardHome
 # This script file can be used standalone.
 
-SCRIPT_VERSION="2025.07.21-00-00"
+SCRIPT_VERSION="2025.08.26-00-00"
 
 # set -ex
 
@@ -293,6 +293,9 @@ common_config() {
 }
 
 common_config_firewall() {
+  uci -q delete firewall.@include[0].reload
+  uci commit firewall
+  
   rule_name="adguardhome_dns_${DNS_PORT}"
   uci -q delete firewall."$rule_name" || true
   if [ -z "$FAMILY_TYPE" ]; then
