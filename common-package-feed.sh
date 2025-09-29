@@ -135,8 +135,16 @@ feed_package() {
     return 0
   fi
 
+  local PKG_INDEX
+  PKG_INDEX=$(echo "$JSON" | jsonfilter -e '@[*].name' | grep -n "^${PKG_FILE}$" | cut -d: -f1)
+
+  if [ -z "$PKG_INDEX" ]; then
+    printf "%s\n" "$(color yellow "Failed to retrieve download URL for package $PKG_PREFIX")"
+    return 0
+  fi
+
   local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | jsonfilter -e "@[*][?(@.name==\"${PKG_FILE}\")].download_url")
+  DOWNLOAD_URL=$(echo "$JSON" | jsonfilter -e "@[$((PKG_INDEX-1))].download_url")
 
   if [ -z "$DOWNLOAD_URL" ]; then
     printf "%s\n" "$(color yellow "Failed to retrieve download URL for package $PKG_PREFIX")"
@@ -255,10 +263,18 @@ feed_package1() {
     return 0
   fi
 
-  local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | jsonfilter -e "@[*].assets[*][?(@.name='${PKG_FILE}')].browser_download_url")
+  local PKG_INDEX
+  PKG_INDEX=$(echo "$JSON" | jsonfilter -e '@[*].assets[*].name' | grep -n "^${PKG_FILE}$" | cut -d: -f1)
 
-  if [ -z "$DOWNLOAD_URL" ];then
+  if [ -z "$PKG_INDEX" ]; then
+    printf "%s\n" "$(color yellow "Failed to retrieve package information.")"
+    return 0
+  fi
+
+  local DOWNLOAD_URL
+  DOWNLOAD_URL=$(echo "$JSON" | jsonfilter -e '@[*].assets[*].browser_download_url' | sed -n "${PKG_INDEX}p")
+
+  if [ -z "$DOWNLOAD_URL" ]; then
     printf "%s\n" "$(color yellow "Failed to retrieve package information.")"
     return 0
   fi
