@@ -136,7 +136,7 @@ feed_package() {
   fi
 
   local DOWNLOAD_URL
-  DOWNLOAD_URL=$(echo "$JSON" | jsonfilter -e "@[*][?(@.name='${PKG_FILE}')].download_url")
+  DOWNLOAD_URL=$(echo "$JSON" | jsonfilter -e "@[*][?(@.name==\"${PKG_FILE}\")].download_url")
 
   if [ -z "$DOWNLOAD_URL" ]; then
     printf "%s\n" "$(color yellow "Failed to retrieve download URL for package $PKG_PREFIX")"
