@@ -135,7 +135,7 @@ get_country_ipapi() {
         # wget コマンド実行 (不正なオプション --tries=1 と -L を削除)
         wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O "$tmp_file" \
              -U "$USER_AGENT" \
-             "$api_url"
+             "$api_url" 2>/dev/null
         wget_exit_code=$?
         debug_log "DEBUG" "get_country_ipapi: wget executed (code: $wget_exit_code)"
 
@@ -240,7 +240,7 @@ get_country_ipinfo() {
         # wget コマンド実行 (不正なオプション --tries=1 と -L を削除)
         wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O "$tmp_file" \
              -U "$USER_AGENT" \
-             "$api_url"
+             "$api_url" 2>/dev/null
         wget_exit_code=$?
         debug_log "DEBUG" "get_country_ipinfo: wget executed (code: $wget_exit_code)"
 
@@ -344,7 +344,7 @@ get_country_cloudflare() {
         # wget コマンド実行 (不正なオプション --tries=1 を削除, -L は元々なかった)
         wget --no-check-certificate $wget_options -T "$API_TIMEOUT" -q -O "$tmp_file" \
              -U "$USER_AGENT" \
-             "$api_url"
+             "$api_url" 2>/dev/null
         wget_exit_code=$?
         debug_log "DEBUG" "get_country_cloudflare: wget executed (code: $wget_exit_code)"
 
