@@ -134,10 +134,7 @@ determine_connection_auto() {
         if [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
             debug_log "DEBUG" "determine_connection_auto: Provider database initialized and content is present."
         else
-            debug_log "ERROR" "determine_connection_auto: Provider database initialized but content is EMPTY." # Changed to ERROR
-            # データベースが空の場合、これ以上進んでも意味がないため早期リターンも検討可
-            # echo "unknown|unknown|unknown|"
-            # return
+            debug_log "ERROR" "determine_connection_auto: Provider database initialized but content is EMPTY."
         fi
     else
         debug_log "DEBUG" "determine_connection_auto: Provider database already initialized."
@@ -146,14 +143,12 @@ determine_connection_auto() {
     local result=""
 
     # 判定の優先順位:
-    # 1. AFTR名が明確に一致するルール (DS-Liteなど、BIGLOBE DS-Liteもここで合致期待)
-    # 2. 【新規】BIGLOBE MAP-E の特別ルール (AS7413 かつ AFTR名が空の場合)
-    # 3. AS番号とPDプレフィックスが一致するルール (MAP-Eなど)
-    # 4. AS番号のみが一致するルール
-    # 5. PDプレフィックスのみが一致するルール
+    # 1. AFTR名が明確に一致するルール (DS-Liteなど)
+    # 2. AS番号とPDプレフィックスが一致するルール (MAP-Eなど、BIGLOBE MAP-Eもここで判定)
+    # 3. AS番号のみが一致するルール
+    # 4. PDプレフィックスのみが一致するルール
 
     # 1. AFTR name match
-    #    ルール: DBのAFTR名フィールド($3)が空でなく、入力AFTR名(aftr_val)と一致する。
     debug_log "DEBUG" "determine_connection_auto: Step 1: Attempting specific AFTR match with AFTR:[$input_aftr]"
     if [ -n "$input_aftr" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
         result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v aftr_val="$input_aftr" \
@@ -167,86 +162,63 @@ determine_connection_auto() {
         debug_log "DEBUG" "determine_connection_auto: Step 1: Skipping specific AFTR match (input_aftr or DB content empty)."
     fi
 
-    # 2. BIGLOBE MAP-E specific rule: AS=7413 AND input_aftr is empty
-    #    ルール: DBのASフィールド($1)が"7413"、PDフィールド($2)が空、AFTRフィールド($3)が空。
-    if [ -z "$result" ]; then # Only if previous step didn't find a match
-        debug_log "DEBUG" "determine_connection_auto: Step 2: Attempting BIGLOBE MAP-E rule with NumericASN:[$numeric_asn], AFTR:[$input_aftr]"
-        if [ "$numeric_asn" = "7413" ] && [ -z "$input_aftr" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
-            result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' \
-                '{if($1=="7413" && $2=="" && $3==""){print $6 "|" $4 "|" $5 "|" $7; exit}}')
-            if [ -n "$result" ]; then
-                debug_log "DEBUG" "determine_connection_auto: Step 2: BIGLOBE MAP-E (AS 7413, empty AFTR) match found: [$result]"
-            else
-                debug_log "DEBUG" "determine_connection_auto: Step 2: No BIGLOBE MAP-E rule match found (AS 7413, empty AFTR)."
-            fi
-        else
-             debug_log "DEBUG" "determine_connection_auto: Step 2: Skipping BIGLOBE MAP-E rule (conditions not met: ASN!=7413 or AFTR not empty or DB empty)."
-        fi
-    fi
-
-    # 3. AS+PD match
-    #    ルール: DBのASフィールド($1)が入力AS番号(asn_val)と一致し、
-    #            DBのPDフィールド($2)が空でなく、入力PDプレフィックス(pd_val)の先頭部分と一致する。
+    # 2. AS+PD match
     if [ -z "$result" ]; then
-        debug_log "DEBUG" "determine_connection_auto: Step 3: Attempting AS+PD match with NumericASN:[$numeric_asn], PD:[$input_pd]"
+        debug_log "DEBUG" "determine_connection_auto: Step 2: Attempting AS+PD match with NumericASN:[$numeric_asn], PD:[$input_pd]"
         if [ -n "$numeric_asn" ] && [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
             result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn_val="$numeric_asn" -v pd_val="$input_pd" \
                 '{if($1==asn_val && $2!="" && index(pd_val,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
             if [ -n "$result" ]; then
-                debug_log "DEBUG" "determine_connection_auto: Step 3: AS+PD match found: [$result]"
+                debug_log "DEBUG" "determine_connection_auto: Step 2: AS+PD match found: [$result]"
             else
-                debug_log "DEBUG" "determine_connection_auto: Step 3: No AS+PD match found for NumericASN:[$numeric_asn], PD:[$input_pd]"
+                debug_log "DEBUG" "determine_connection_auto: Step 2: No AS+PD match found for NumericASN:[$numeric_asn], PD:[$input_pd]"
             fi
         else
-            debug_log "DEBUG" "determine_connection_auto: Step 3: Skipping AS+PD match (NumericASN, PD or DB content empty)."
+            debug_log "DEBUG" "determine_connection_auto: Step 2: Skipping AS+PD match (NumericASN, PD or DB content empty)."
         fi
     fi
 
-    # 4. AS only match
-    #    ルール: DBのASフィールド($1)が入力AS番号(asn_val)と一致する。
+    # 3. AS only match
     if [ -z "$result" ]; then
-        debug_log "DEBUG" "determine_connection_auto: Step 4: Attempting AS only match with NumericASN:[$numeric_asn]"
+        debug_log "DEBUG" "determine_connection_auto: Step 3: Attempting AS only match with NumericASN:[$numeric_asn]"
         if [ -n "$numeric_asn" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
             result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v asn_val="$numeric_asn" \
                 '{if($1==asn_val){print $6 "|" $4 "|" $5 "|" $7; exit}}')
             if [ -n "$result" ]; then
-                debug_log "DEBUG" "determine_connection_auto: Step 4: AS only match found: [$result]"
+                debug_log "DEBUG" "determine_connection_auto: Step 3: AS only match found: [$result]"
             else
-                debug_log "DEBUG" "determine_connection_auto: Step 4: No AS only match found for NumericASN:[$numeric_asn]"
+                debug_log "DEBUG" "determine_connection_auto: Step 3: No AS only match found for NumericASN:[$numeric_asn]"
             fi
         else
-            debug_log "DEBUG" "determine_connection_auto: Step 4: Skipping AS only match (NumericASN or DB content empty)."
+            debug_log "DEBUG" "determine_connection_auto: Step 3: Skipping AS only match (NumericASN or DB content empty)."
         fi
     fi
 
-    # 5. PD only match
-    #    ルール: DBのPDフィールド($2)が空でなく、入力PDプレフィックス(pd_val)の先頭部分と一致する。
+    # 4. PD only match
     if [ -z "$result" ]; then
-        debug_log "DEBUG" "determine_connection_auto: Step 5: Attempting PD only match with PD:[$input_pd]"
+        debug_log "DEBUG" "determine_connection_auto: Step 4: Attempting PD only match with PD:[$input_pd]"
         if [ -n "$input_pd" ] && [ -n "$PROVIDER_DATABASE_CONTENT" ]; then
             result=$(echo "$PROVIDER_DATABASE_CONTENT" | awk -F'|' -v pd_val="$input_pd" \
                 '{if($2!="" && index(pd_val,$2)==1){print $6 "|" $4 "|" $5 "|" $7; exit}}')
             if [ -n "$result" ]; then
-                debug_log "DEBUG" "determine_connection_auto: Step 5: PD only match found: [$result]"
+                debug_log "DEBUG" "determine_connection_auto: Step 4: PD only match found: [$result]"
             else
-                # 元のコードではこのケースのログがなかったので、整合性のために追加
-                debug_log "DEBUG" "determine_connection_auto: Step 5: No PD only match found for PD:[$input_pd]"
+                debug_log "DEBUG" "determine_connection_auto: Step 4: No PD only match found for PD:[$input_pd]"
             fi
         else
-            debug_log "DEBUG" "determine_connection_auto: Step 5: Skipping PD only match (PD or DB content empty)."
+            debug_log "DEBUG" "determine_connection_auto: Step 4: Skipping PD only match (PD or DB content empty)."
         fi
     fi
 
-    # 6. Unknown
+    # 5. Unknown
     if [ -z "$result" ]; then
-        debug_log "DEBUG" "determine_connection_auto: Step 6: No specific match found. Setting result to unknown."
-        result="unknown|unknown|unknown|" # コマンドフィールドも空にするため、末尾の|を追加
+        debug_log "DEBUG" "determine_connection_auto: Step 5: No specific match found. Setting result to unknown."
+        result="unknown|unknown|unknown|"
     fi
 
     debug_log "DEBUG" "determine_connection_auto: Exit - Result:[$result]"
     echo "$result"
 }
-
 
 internet_auto_config_main() {
     local manual_menu_needed=0
