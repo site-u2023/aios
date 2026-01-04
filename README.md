@@ -1,3 +1,14 @@
+# ⚠️ Development Ended
+
+This project (`aios`) is no longer maintained.
+
+**New Project:**  
+https://github.com/site-u2023/site-u2023.github.io
+
+All future development and support will continue there.
+
+---
+
 # all in one scripts
 
 Supported since version 19.07~ (snapshot compatible)
